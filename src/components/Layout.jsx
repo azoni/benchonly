@@ -20,7 +20,9 @@ import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
 import AIChatPanel from './AIChatPanel';
 
-const navItems = [
+const ADMIN_EMAILS = ['charltonuw@gmail.com'];
+
+const baseNavItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/workouts', icon: Dumbbell, label: 'Workouts' },
   { path: '/calendar', icon: Calendar, label: 'Calendar' },
@@ -36,6 +38,13 @@ export default function Layout() {
   const { user, userProfile, signOut, isGuest } = useAuth();
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const isAdmin = user && ADMIN_EMAILS.includes(user.email);
+  
+  // Add admin nav item if user is admin
+  const navItems = isAdmin 
+    ? [...baseNavItems, { path: '/admin', icon: Settings, label: 'Admin', isAdmin: true }]
+    : baseNavItems;
 
   const handleSignOut = async () => {
     await signOut();

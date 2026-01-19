@@ -13,6 +13,7 @@ import GroupDetailPage from './pages/GroupDetailPage'
 import GoalsPage from './pages/GoalsPage'
 import UsagePage from './pages/UsagePage'
 import SettingsPage from './pages/SettingsPage'
+import AdminPage from './pages/AdminPage'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -111,6 +112,7 @@ export default function App() {
         <Route path="goals" element={<GoalsPage />} />
         <Route path="usage" element={<UsagePage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="admin" element={<AdminPage />} />
       </Route>
       
       <Route path="*" element={<Navigate to="/" replace />} />

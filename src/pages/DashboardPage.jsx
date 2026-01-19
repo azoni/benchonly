@@ -258,36 +258,36 @@ export default function DashboardPage() {
           transition={{ delay: 0.2 }}
           className="col-span-2 card-steel p-5 rounded-xl border-l-4 border-l-yellow-500"
         >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-yellow-500/10 rounded-plate flex items-center justify-center">
-              <Clock className="w-5 h-5 text-yellow-400" />
-            </div>
-            <div>
-              <p className="text-xs text-yellow-400 font-medium uppercase tracking-wider">Next Up</p>
-              {scheduledWorkouts.length > 0 ? (
-                <>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-yellow-500/10 rounded-plate flex items-center justify-center">
+                <Clock className="w-5 h-5 text-yellow-400" />
+              </div>
+              <div>
+                <p className="text-xs text-yellow-400 font-medium uppercase tracking-wider">Next Up</p>
+                {scheduledWorkouts.length > 0 ? (
                   <p className="font-display text-lg text-iron-100">{scheduledWorkouts[0].name}</p>
-                </>
-              ) : (
-                <p className="text-iron-400">No scheduled workouts</p>
-              )}
+                ) : (
+                  <p className="text-iron-400">No scheduled workouts</p>
+                )}
+              </div>
             </div>
+            {scheduledWorkouts.length > 0 ? (
+              <Link 
+                to={`/workouts/${scheduledWorkouts[0].id}`}
+                className="btn-primary"
+              >
+                Start Workout
+              </Link>
+            ) : (
+              <Link 
+                to="/workouts/new"
+                className="btn-secondary"
+              >
+                Schedule One
+              </Link>
+            )}
           </div>
-          {scheduledWorkouts.length > 0 ? (
-            <Link 
-              to={`/workouts/${scheduledWorkouts[0].id}`}
-              className="btn-primary w-full mt-3 text-center"
-            >
-              Start Workout
-            </Link>
-          ) : (
-            <Link 
-              to="/workouts/new"
-              className="btn-secondary w-full mt-3 text-center"
-            >
-              Schedule One
-            </Link>
-          )}
         </motion.div>
       </div>
 

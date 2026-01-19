@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { format, subDays } from 'date-fns'
+import { format, subDays, parseISO } from 'date-fns'
 import { 
   Zap, 
   TrendingUp, 
@@ -95,12 +95,18 @@ export default function UsagePage() {
   const groupByDate = (records) => {
     const grouped = {}
     records.forEach(record => {
-      const date = format(new Date(record.createdAt), 'yyyy-MM-dd')
-      if (!grouped[date]) {
-        grouped[date] = { records: [], totalTokens: 0 }
+      try {
+        const dateObj = record.createdAt?.toDate ? record.createdAt.toDate() : new Date(record.createdAt)
+        if (isNaN(dateObj.getTime())) return // Skip invalid dates
+        const date = format(dateObj, 'yyyy-MM-dd')
+        if (!grouped[date]) {
+          grouped[date] = { records: [], totalTokens: 0 }
+        }
+        grouped[date].records.push(record)
+        grouped[date].totalTokens += record.totalTokens || 0
+      } catch (e) {
+        // Skip records with invalid dates
       }
-      grouped[date].records.push(record)
-      grouped[date].totalTokens += record.totalTokens
     })
     return Object.entries(grouped)
       .sort(([a], [b]) => new Date(b) - new Date(a))
@@ -252,7 +258,7 @@ export default function UsagePage() {
             <div key={date}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-iron-400">
-                  {format(new Date(date), 'EEEE, MMMM d')}
+                  {format(parseISO(date), 'EEEE, MMMM d')}
                 </h3>
                 <span className="text-sm text-iron-500">
                   {formatNumber(totalTokens)} tokens
@@ -278,7 +284,12 @@ export default function UsagePage() {
                           {record.feature?.replace(/-/g, ' ') || 'AI Request'}
                         </p>
                         <p className="text-xs text-iron-500">
-                          {format(new Date(record.createdAt), 'h:mm a')}
+                          {(() => {
+                            try {
+                              const dateObj = record.createdAt?.toDate ? record.createdAt.toDate() : new Date(record.createdAt);
+                              return isNaN(dateObj.getTime()) ? '' : format(dateObj, 'h:mm a');
+                            } catch { return ''; }
+                          })()}
                           {record.userName && ` · ${record.userName}`}
                         </p>
                       </div>
