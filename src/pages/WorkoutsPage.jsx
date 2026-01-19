@@ -35,8 +35,8 @@ export default function WorkoutsPage() {
   const loadWorkouts = async () => {
     try {
       if (isGuest) {
-        const { SAMPLE_WORKOUTS } = await import('../context/AuthContext');
-        setWorkouts(SAMPLE_WORKOUTS);
+        const { getSampleWorkouts } = await import('../context/AuthContext');
+        setWorkouts(getSampleWorkouts());
         setLoading(false);
         return;
       }

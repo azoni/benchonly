@@ -30,7 +30,7 @@ import {
 } from 'date-fns';
 
 export default function CalendarPage() {
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [workouts, setWorkouts] = useState([]);
@@ -52,6 +52,16 @@ export default function CalendarPage() {
     const end = endOfMonth(currentMonth);
 
     try {
+      if (isGuest) {
+        const { getSampleWorkouts, SAMPLE_GOALS } = await import('../context/AuthContext');
+        setWorkouts(getSampleWorkouts());
+        setSchedules([]);
+        setAttendance([]);
+        setGoals(SAMPLE_GOALS.filter(g => g.status === 'active'));
+        setLoading(false);
+        return;
+      }
+
       const [workoutsData, schedulesData, attendanceData, goalsData] = await Promise.all([
         workoutService.getByDateRange(user.uid, start, end),
         scheduleService.getByUser(user.uid),

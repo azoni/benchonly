@@ -22,7 +22,7 @@ import { useAuth } from '../context/AuthContext'
 export default function WorkoutDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, isGuest } = useAuth()
   const [workout, setWorkout] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
@@ -35,7 +35,13 @@ export default function WorkoutDetailPage() {
     async function fetchWorkout() {
       if (!id || !user) return
       try {
-        const data = await workoutService.getById(id)
+        let data
+        if (isGuest) {
+          const { getSampleWorkouts } = await import('../context/AuthContext')
+          data = getSampleWorkouts().find(w => w.id === id)
+        } else {
+          data = await workoutService.getById(id)
+        }
         setWorkout(data)
         // Initialize exercises with current data for logging
         if (data?.exercises) {
@@ -51,12 +57,16 @@ export default function WorkoutDetailPage() {
       }
     }
     fetchWorkout()
-  }, [id, user])
+  }, [id, user, isGuest])
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this workout?')) return
     
     setDeleting(true)
+    if (isGuest) {
+      navigate('/workouts')
+      return
+    }
     try {
       await workoutService.delete(id)
       navigate('/workouts')

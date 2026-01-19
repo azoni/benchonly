@@ -34,7 +34,8 @@ const GUEST_PROFILE = {
   },
 };
 
-export const SAMPLE_WORKOUTS = [
+// Function to generate fresh sample data with current dates
+export const getSampleWorkouts = () => [
   {
     id: 'sample-1',
     userId: 'guest-user',
@@ -124,6 +125,9 @@ export const SAMPLE_WORKOUTS = [
     ]
   }
 ];
+
+// Keep static exports for backwards compatibility but they'll use the function
+export const SAMPLE_WORKOUTS = getSampleWorkouts();
 
 export const SAMPLE_GOALS = [
   {

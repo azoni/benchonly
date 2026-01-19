@@ -40,15 +40,16 @@ export default function DashboardPage() {
     try {
       // Use sample data for guests
       if (isGuest) {
-        const { SAMPLE_WORKOUTS, SAMPLE_GOALS } = await import('../context/AuthContext');
-        setRecentWorkouts(SAMPLE_WORKOUTS.slice(0, 5));
+        const { getSampleWorkouts, SAMPLE_GOALS } = await import('../context/AuthContext');
+        const sampleWorkouts = getSampleWorkouts();
+        setRecentWorkouts(sampleWorkouts.slice(0, 5));
         setGoals(SAMPLE_GOALS);
         
         const now = new Date();
         const weekStart = startOfWeek(now, { weekStartsOn: 1 });
         const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
         
-        const weekWorkouts = SAMPLE_WORKOUTS.filter((w) => {
+        const weekWorkouts = sampleWorkouts.filter((w) => {
           const date = w.date instanceof Date ? w.date : new Date(w.date);
           return date >= weekStart && date <= weekEnd;
         });
@@ -56,7 +57,7 @@ export default function DashboardPage() {
         setStats({
           workoutsThisWeek: weekWorkouts.length,
           currentStreak: 3,
-          totalWorkouts: SAMPLE_WORKOUTS.length,
+          totalWorkouts: sampleWorkouts.length,
           activeGoals: SAMPLE_GOALS.filter((g) => g.status === 'active').length,
         });
         setLoading(false);
