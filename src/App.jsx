@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
@@ -52,6 +53,30 @@ function PublicRoute({ children }) {
   return children
 }
 
+function GuestRoute() {
+  const { user, loading, signInAsGuest } = useAuth()
+  
+  useEffect(() => {
+    if (!loading && !user) {
+      signInAsGuest()
+    }
+  }, [loading, user, signInAsGuest])
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-iron-950 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-flame-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+  
+  if (user) {
+    return <Navigate to="/dashboard" replace />
+  }
+  
+  return null
+}
+
 export default function App() {
   return (
     <Routes>
@@ -64,6 +89,8 @@ export default function App() {
         } 
       />
       
+      <Route path="/guest" element={<GuestRoute />} />
+      
       <Route
         path="/"
         element={
@@ -73,6 +100,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="dashboard" element={<DashboardPage />} />
         <Route path="workouts" element={<WorkoutsPage />} />
         <Route path="workouts/new" element={<NewWorkoutPage />} />
         <Route path="workouts/:id" element={<WorkoutDetailPage />} />
