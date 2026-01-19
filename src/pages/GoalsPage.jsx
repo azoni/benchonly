@@ -87,13 +87,11 @@ export default function GoalsPage() {
     try {
       const currentWt = parseInt(formData.currentWeight) || 0
       const goalData = {
-        userId: user.uid,
         lift: formData.lift,
         currentWeight: currentWt,
-        startWeight: editingGoal?.startWeight || currentWt, // Keep original start weight on edit
+        startWeight: editingGoal?.startWeight || currentWt,
         targetWeight: parseInt(formData.targetWeight),
-        targetDate: formData.targetDate,
-        status: 'active'
+        targetDate: formData.targetDate
       }
       
       if (editingGoal) {
@@ -102,13 +100,14 @@ export default function GoalsPage() {
           g.id === editingGoal.id ? { ...g, ...goalData } : g
         ))
       } else {
-        const newGoal = await goalService.create(goalData)
-        setGoals(prev => [...prev, newGoal])
+        const newGoal = await goalService.create(user.uid, goalData)
+        setGoals(prev => [...prev, { ...newGoal, status: 'active', progress: 0 }])
       }
       
       setShowModal(false)
     } catch (error) {
       console.error('Error saving goal:', error)
+      alert('Failed to save goal. Please try again.')
     } finally {
       setSaving(false)
     }

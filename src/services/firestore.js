@@ -21,32 +21,70 @@ import { db } from './firebase';
 export const workoutService = {
   // Create a workout for yourself
   async create(userId, workoutData) {
+    // Determine if workout is complete (has actual values filled in)
+    const isComplete = this.checkIfComplete(workoutData.exercises);
+    
     const docRef = await addDoc(collection(db, 'workouts'), {
       ...workoutData,
       userId,
+      status: isComplete ? 'completed' : 'scheduled',
+      completedAt: isComplete ? serverTimestamp() : null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
     
     // Check if any goals should be updated based on this workout
+    if (isComplete) {
+      await this.checkAndUpdateGoals(userId, workoutData);
+    }
+    
+    return { id: docRef.id, ...workoutData, status: isComplete ? 'completed' : 'scheduled' };
+  },
+  
+  // Check if a workout has actual values filled in (meaning it's complete)
+  checkIfComplete(exercises) {
+    if (!exercises || exercises.length === 0) return false;
+    
+    // A workout is complete if at least one exercise has actual values
+    return exercises.some(exercise => 
+      exercise.sets?.some(set => 
+        set.actualWeight || set.actualReps
+      )
+    );
+  },
+  
+  // Complete a scheduled workout by adding actual values
+  async completeWorkout(workoutId, exercisesWithActuals, userId) {
+    const docRef = doc(db, 'workouts', workoutId);
+    
+    await updateDoc(docRef, {
+      exercises: exercisesWithActuals,
+      status: 'completed',
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    
+    // Check goals
+    const workoutData = { exercises: exercisesWithActuals };
     await this.checkAndUpdateGoals(userId, workoutData);
     
-    return { id: docRef.id, ...workoutData };
+    return { id: workoutId, status: 'completed' };
   },
   
   // Create a workout assigned to another user (for group admins)
   async createForUser(assignedUserId, workoutData, createdByUserId, groupId) {
     const docRef = await addDoc(collection(db, 'workouts'), {
       ...workoutData,
-      userId: assignedUserId,        // Who the workout is for
-      createdBy: createdByUserId,    // Who created it (admin)
-      groupId: groupId,              // Which group this belongs to
-      isAssigned: true,              // Flag that this was assigned
+      userId: assignedUserId,
+      createdBy: createdByUserId,
+      groupId: groupId,
+      status: 'scheduled',  // Always starts as scheduled when assigned
+      isAssigned: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
     
-    return { id: docRef.id, ...workoutData, userId: assignedUserId };
+    return { id: docRef.id, ...workoutData, userId: assignedUserId, status: 'scheduled' };
   },
   
   // Create the same workout for multiple users in a group
@@ -61,6 +99,7 @@ export const workoutService = {
         userId: memberId,
         createdBy: createdByUserId,
         groupId: groupId,
+        status: 'scheduled',  // Always starts as scheduled
         isAssigned: true,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),

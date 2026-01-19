@@ -194,14 +194,29 @@ export default function WorkoutsPage() {
                         to={`/workouts/${workout.id}`}
                         className="flex items-center gap-4 p-4"
                       >
-                        <div className="w-12 h-12 rounded-plate bg-flame-500/10 flex items-center justify-center">
-                          <Dumbbell className="w-6 h-6 text-flame-400" />
+                        <div className={`w-12 h-12 rounded-plate flex items-center justify-center ${
+                          workout.status === 'scheduled' 
+                            ? 'bg-yellow-500/10' 
+                            : 'bg-flame-500/10'
+                        }`}>
+                          <Dumbbell className={`w-6 h-6 ${
+                            workout.status === 'scheduled'
+                              ? 'text-yellow-400'
+                              : 'text-flame-400'
+                          }`} />
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-iron-100 truncate group-hover:text-flame-400 transition-colors">
-                            {workout.name || 'Untitled Workout'}
-                          </h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-iron-100 truncate group-hover:text-flame-400 transition-colors">
+                              {workout.name || 'Untitled Workout'}
+                            </h3>
+                            {workout.status === 'scheduled' && (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-yellow-500/20 text-yellow-400 rounded">
+                                Scheduled
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-4 mt-1">
                             <span className="text-sm text-iron-500 flex items-center gap-1">
                               <Dumbbell className="w-3.5 h-3.5" />
