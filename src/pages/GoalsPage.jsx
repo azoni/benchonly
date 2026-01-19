@@ -139,10 +139,22 @@ export default function GoalsPage() {
   }
 
   const calculateProgress = (goal) => {
-    if (!goal.currentWeight || goal.currentWeight >= goal.targetWeight) return 100
-    const total = goal.targetWeight - goal.currentWeight
-    const current = goal.currentWeight
-    return Math.min(100, Math.round((current / goal.targetWeight) * 100))
+    const startWeight = goal.startWeight || goal.currentWeight || 0
+    const currentWeight = goal.currentWeight || startWeight
+    const targetWeight = goal.targetWeight || 0
+    
+    // If already at or past target, return 100
+    if (currentWeight >= targetWeight) return 100
+    
+    // If no progress made yet (current equals start), return 0
+    if (currentWeight <= startWeight) return 0
+    
+    // Calculate progress as percentage of the journey from start to target
+    const totalGain = targetWeight - startWeight
+    const currentGain = currentWeight - startWeight
+    
+    if (totalGain <= 0) return 0
+    return Math.min(100, Math.round((currentGain / totalGain) * 100))
   }
 
   const getDaysRemaining = (date) => {

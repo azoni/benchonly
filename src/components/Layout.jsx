@@ -62,7 +62,7 @@ export default function Layout() {
                 animate={{ opacity: 1 }}
                 className="font-display text-xl text-iron-50 tracking-wide"
               >
-                BPO
+                BENCH ONLY
               </motion.span>
             )}
           </Link>
@@ -149,7 +149,7 @@ export default function Layout() {
           <div className="w-8 h-8 rounded-plate bg-flame-500 flex items-center justify-center">
             <Dumbbell className="w-4 h-4 text-white" />
           </div>
-          <span className="font-display text-lg text-iron-50">BPO</span>
+          <span className="font-display text-lg text-iron-50">BENCH ONLY</span>
         </Link>
         
         <div className="flex items-center gap-2">

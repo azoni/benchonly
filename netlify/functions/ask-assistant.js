@@ -12,7 +12,7 @@ export async function handler(event) {
   try {
     const { message, context, userId } = JSON.parse(event.body)
 
-    const systemPrompt = `You are a knowledgeable and supportive strength training assistant for the BenchPressOnly app. You help users with:
+    const systemPrompt = `You are a knowledgeable and supportive strength training assistant for the BENCH ONLY app. You help users with:
 
 - Understanding their workout programs and progress
 - Exercise form and technique questions
@@ -61,7 +61,7 @@ ${context?.stats ? `Stats: ${JSON.stringify(context.stats)}` : ''}`
         'Access-Control-Allow-Origin': '*'
       },
       body: JSON.stringify({
-        response: completion.choices[0].message.content,
+        message: completion.choices[0].message.content,
         usage: tokenLog
       })
     }
