@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { 
   User, 
   Bell, 
@@ -9,20 +9,72 @@ import {
   Check,
   Shield,
   Trash2,
-  ExternalLink
+  ExternalLink,
+  Camera,
+  Loader2
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { signOut } from 'firebase/auth'
-import { auth } from '../services/firebase'
+import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
+import { auth, storage } from '../services/firebase'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 export default function SettingsPage() {
   const { user, userProfile, updateProfile } = useAuth()
   const [saving, setSaving] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const fileInputRef = useRef(null)
   const [settings, setSettings] = useState({
     notifications: userProfile?.settings?.notifications ?? true,
     units: userProfile?.settings?.units || 'lbs',
     theme: userProfile?.settings?.theme || 'dark'
   })
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be less than 5MB')
+      return
+    }
+
+    setUploadingPhoto(true)
+    try {
+      // Create a reference to the file in Firebase Storage
+      const storageRef = ref(storage, `profile-photos/${user.uid}/${Date.now()}-${file.name}`)
+      
+      // Upload the file
+      await uploadBytes(storageRef, file)
+      
+      // Get the download URL
+      const downloadURL = await getDownloadURL(storageRef)
+      
+      // Update Firebase Auth profile
+      await updateAuthProfile(auth.currentUser, {
+        photoURL: downloadURL
+      })
+      
+      // Update Firestore profile
+      await updateProfile({
+        photoURL: downloadURL
+      })
+      
+      // Force reload to show new photo
+      window.location.reload()
+    } catch (error) {
+      console.error('Error uploading photo:', error)
+      alert('Failed to upload photo. Please try again.')
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
 
   const handleToggle = async (key) => {
     const newValue = !settings[key]
@@ -80,17 +132,40 @@ export default function SettingsPage() {
       {/* Profile Section */}
       <div className="card-steel p-5 mb-6">
         <div className="flex items-center gap-4">
-          {user?.photoURL ? (
-            <img 
-              src={user.photoURL} 
-              alt={user.displayName}
-              className="w-16 h-16 rounded-full object-cover"
+          <div className="relative">
+            {user?.photoURL ? (
+              <img 
+                src={user.photoURL} 
+                alt={user.displayName}
+                className="w-16 h-16 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-iron-700 flex items-center justify-center">
+                <User className="w-8 h-8 text-iron-500" />
+              </div>
+            )}
+            
+            {/* Upload button overlay */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              className="absolute inset-0 w-16 h-16 rounded-full bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
+            >
+              {uploadingPhoto ? (
+                <Loader2 className="w-5 h-5 text-white animate-spin" />
+              ) : (
+                <Camera className="w-5 h-5 text-white" />
+              )}
+            </button>
+            
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              className="hidden"
             />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-iron-700 flex items-center justify-center">
-              <User className="w-8 h-8 text-iron-500" />
-            </div>
-          )}
+          </div>
           
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-semibold text-iron-100 truncate">
@@ -99,6 +174,13 @@ export default function SettingsPage() {
             <p className="text-sm text-iron-500 truncate">
               {user?.email}
             </p>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              className="text-xs text-flame-400 hover:text-flame-300 mt-1"
+            >
+              {uploadingPhoto ? 'Uploading...' : 'Change photo'}
+            </button>
           </div>
         </div>
       </div>
