@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  body {
+    @apply bg-iron-950 text-iron-50 font-body;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  
+  ::selection {
+    @apply bg-flame-500 text-white;
+  }
+  
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-iron-900;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-iron-700 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-iron-600;
+  }
+}
+
+@layer components {
+  /* Steel plate card effect */
+  .card-steel {
+    @apply bg-gradient-to-b from-iron-800 via-iron-900 to-iron-950 
+           border border-iron-700/50 rounded-plate
+           shadow-inner-steel;
+  }
+  
+  /* Glowing accent border */
+  .border-glow {
+    @apply border border-flame-500/30;
+    box-shadow: 
+      inset 0 1px 0 rgba(255, 77, 0, 0.1),
+      0 0 20px rgba(255, 77, 0, 0.1);
+  }
+  
+  /* Primary button */
+  .btn-primary {
+    @apply px-6 py-3 bg-flame-500 text-white font-semibold rounded-plate
+           hover:bg-flame-400 active:bg-flame-600
+           transition-all duration-200
+           shadow-glow hover:shadow-glow-lg
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none;
+  }
+  
+  /* Secondary button */
+  .btn-secondary {
+    @apply px-6 py-3 bg-iron-800 text-iron-100 font-medium rounded-plate
+           border border-iron-600 hover:border-iron-500
+           hover:bg-iron-700 active:bg-iron-800
+           transition-all duration-200;
+  }
+  
+  /* Ghost button */
+  .btn-ghost {
+    @apply px-4 py-2 text-iron-300 font-medium rounded-plate
+           hover:text-iron-100 hover:bg-iron-800/50
+           transition-all duration-200;
+  }
+  
+  /* Input field */
+  .input-field {
+    @apply w-full px-4 py-3 bg-iron-900 text-iron-50 
+           border border-iron-700 rounded-plate
+           focus:outline-none focus:border-flame-500/50 focus:ring-1 focus:ring-flame-500/30
+           placeholder:text-iron-500
+           transition-all duration-200;
+  }
+  
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+           bg-iron-800 text-iron-300 border border-iron-700;
+  }
+  
+  .badge-flame {
+    @apply bg-flame-500/20 text-flame-400 border-flame-500/30;
+  }
+  
+  /* Section divider */
+  .divider {
+    @apply h-px bg-gradient-to-r from-transparent via-iron-700 to-transparent;
+  }
+  
+  /* Metric display */
+  .metric-value {
+    @apply font-display text-display-md text-iron-50;
+  }
+  
+  .metric-label {
+    @apply text-sm text-iron-400 uppercase tracking-wider;
+  }
+  
+  /* Navigation item */
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-3 text-iron-400 rounded-plate
+           hover:text-iron-100 hover:bg-iron-800/50
+           transition-all duration-200;
+  }
+  
+  .nav-item-active {
+    @apply text-flame-500 bg-flame-500/10 border-l-2 border-flame-500;
+  }
+  
+  /* Calendar day */
+  .calendar-day {
+    @apply aspect-square flex flex-col items-center justify-center
+           rounded-plate text-sm cursor-pointer
+           hover:bg-iron-800 transition-colors;
+  }
+  
+  .calendar-day-today {
+    @apply ring-2 ring-flame-500/50;
+  }
+  
+  .calendar-day-workout {
+    @apply bg-flame-500/20 text-flame-400;
+  }
+  
+  .calendar-day-missed {
+    @apply bg-red-500/20 text-red-400;
+  }
+  
+  .calendar-day-vacation {
+    @apply bg-blue-500/20 text-blue-400;
+  }
+}
+
+@layer utilities {
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-flame-400 to-flame-500;
+  }
+  
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Safe area padding for mobile */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+}
