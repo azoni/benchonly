@@ -166,28 +166,30 @@ export default function Layout() {
       </aside>
 
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 inset-x-0 h-14 bg-iron-900/90 backdrop-blur-sm
-        border-b border-iron-800 z-40 flex items-center justify-between px-3 safe-top">
-        <Link to="/dashboard" className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-plate bg-flame-500 flex items-center justify-center">
-            <Dumbbell className="w-5 h-5 text-white" />
+      <header className="lg:hidden fixed top-0 inset-x-0 bg-iron-900/95 backdrop-blur-sm
+        border-b border-iron-800 z-40 pt-[env(safe-area-inset-top,0px)]">
+        <div className="h-14 flex items-center justify-between px-4">
+          <Link to="/dashboard" className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-plate bg-flame-500 flex items-center justify-center flex-shrink-0">
+              <Dumbbell className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-display text-lg text-iron-50">BENCH ONLY</span>
+          </Link>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleChat}
+              className="w-11 h-11 flex items-center justify-center text-iron-400 hover:text-iron-100 active:bg-iron-800 rounded-lg transition-colors"
+            >
+              <MessageCircle className="w-6 h-6" />
+            </button>
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="w-11 h-11 flex items-center justify-center text-iron-400 hover:text-iron-100 active:bg-iron-800 rounded-lg transition-colors"
+            >
+              <Menu className="w-7 h-7" />
+            </button>
           </div>
-          <span className="font-display text-lg text-iron-50">BENCH ONLY</span>
-        </Link>
-        
-        <div className="flex items-center gap-1">
-          <button
-            onClick={toggleChat}
-            className="p-3 text-iron-400 hover:text-iron-100 active:bg-iron-800 rounded-lg transition-colors"
-          >
-            <MessageCircle className="w-6 h-6" />
-          </button>
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="p-3 text-iron-400 hover:text-iron-100 active:bg-iron-800 rounded-lg transition-colors"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
         </div>
       </header>
 
@@ -272,7 +274,7 @@ export default function Layout() {
       {/* Main Content */}
       <main className={`flex-1 transition-all duration-300
         ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}
-        ${isGuest ? 'pt-24 lg:pt-16' : 'pt-14 lg:pt-0'}`}
+        ${isGuest ? 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem+2.5rem)] lg:pt-16' : 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem)] lg:pt-0'}`}
       >
         <div className="min-h-screen p-4 lg:p-6">
           <Outlet />
