@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { format, subDays, startOfDay, endOfDay } from 'date-fns'
+import { format, subDays } from 'date-fns'
 import { 
   Zap, 
   TrendingUp, 
@@ -35,17 +35,41 @@ export default function UsagePage() {
   useEffect(() => {
     async function fetchUsage() {
       try {
+        const data = await getTokenUsage()
+        
+        // Filter by date range on client side
         const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90
         const startDate = subDays(new Date(), days)
         
-        const data = await getTokenUsage({
-          userId: selectedUser === 'all' ? undefined : selectedUser,
-          startDate: startOfDay(startDate).toISOString(),
-          endDate: endOfDay(new Date()).toISOString()
+        let filteredRecords = (data.records || []).filter(r => {
+          const recordDate = r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt)
+          return recordDate >= startDate
         })
         
-        setUsage(data.records || [])
-        setSummary(data.summary || null)
+        // Filter by user if selected
+        if (selectedUser !== 'all') {
+          filteredRecords = filteredRecords.filter(r => r.userId === selectedUser)
+        }
+        
+        // Recalculate summary for filtered records
+        const filteredSummary = {
+          totalTokens: filteredRecords.reduce((acc, r) => acc + (r.totalTokens || 0), 0),
+          totalRequests: filteredRecords.length,
+          byFeature: {}
+        }
+        
+        filteredRecords.forEach(r => {
+          if (r.feature) {
+            if (!filteredSummary.byFeature[r.feature]) {
+              filteredSummary.byFeature[r.feature] = { tokens: 0, requests: 0 }
+            }
+            filteredSummary.byFeature[r.feature].tokens += r.totalTokens || 0
+            filteredSummary.byFeature[r.feature].requests += 1
+          }
+        })
+        
+        setUsage(filteredRecords)
+        setSummary(filteredSummary)
         setUsers(data.users || [])
       } catch (error) {
         console.error('Error fetching usage:', error)

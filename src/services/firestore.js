@@ -527,3 +527,61 @@ export const attendanceService = {
     return allAttendance.flat();
   },
 };
+
+// ============ TOKEN USAGE ============
+export const tokenUsageService = {
+  async log(usageData) {
+    const docRef = await addDoc(collection(db, 'tokenUsage'), {
+      ...usageData,
+      createdAt: serverTimestamp(),
+    });
+    return { id: docRef.id, ...usageData };
+  },
+
+  async getRecent(limitCount = 100) {
+    const q = query(
+      collection(db, 'tokenUsage'),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  },
+
+  async getByUser(userId, limitCount = 50) {
+    const q = query(
+      collection(db, 'tokenUsage'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  },
+
+  async getSummary() {
+    const records = await this.getRecent(500);
+    
+    const summary = {
+      totalTokens: records.reduce((acc, r) => acc + (r.totalTokens || 0), 0),
+      totalRequests: records.length,
+      byFeature: {}
+    };
+
+    records.forEach(r => {
+      if (r.feature) {
+        if (!summary.byFeature[r.feature]) {
+          summary.byFeature[r.feature] = { tokens: 0, requests: 0 };
+        }
+        summary.byFeature[r.feature].tokens += r.totalTokens || 0;
+        summary.byFeature[r.feature].requests += 1;
+      }
+    });
+
+    const users = [...new Set(records.map(r => r.userId))]
+      .filter(Boolean)
+      .map(id => ({ id, displayName: id }));
+
+    return { records, summary, users };
+  }
+};
