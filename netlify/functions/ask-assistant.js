@@ -12,32 +12,25 @@ export async function handler(event) {
   try {
     const { message, context, userId } = JSON.parse(event.body)
 
-    const systemPrompt = `You are a knowledgeable and supportive strength training assistant for the BENCH ONLY app. You help users with:
+    const systemPrompt = `You are a strength training assistant for BENCH ONLY. Be brief and direct - 2-3 sentences max unless asked to elaborate.
 
-- Understanding their workout programs and progress
-- Exercise form and technique questions
-- Programming and periodization advice
-- Recovery and nutrition basics
-- Motivation and goal setting
-- Interpreting their training data
+You help with: workout programs, exercise form, programming, recovery, nutrition basics, and interpreting training data.
 
-You have access to the user's workout history and goals. Be concise, practical, and encouraging. Use specific numbers and data when available. If you're unsure about something, say so.
+Keep responses short and actionable. Skip fluff. Use numbers when relevant. Say "want me to expand?" if there's more to share.
 
-User Context:
-${context?.recentWorkouts ? `Recent workouts: ${JSON.stringify(context.recentWorkouts.slice(0, 5))}` : 'No recent workouts'}
-${context?.goals ? `Goals: ${JSON.stringify(context.goals)}` : 'No goals set'}
-${context?.stats ? `Stats: ${JSON.stringify(context.stats)}` : ''}`
+${context?.recentWorkouts?.length ? `Recent: ${context.recentWorkouts.slice(0, 3).map(w => w.name).join(', ')}` : ''}
+${context?.goals?.length ? `Goals: ${context.goals.map(g => `${g.lift} ${g.targetWeight || g.targetValue}`).join(', ')}` : ''}`
 
     const startTime = Date.now()
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: message }
       ],
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 300
     })
 
     const responseTime = Date.now() - startTime
@@ -46,7 +39,7 @@ ${context?.stats ? `Stats: ${JSON.stringify(context.stats)}` : ''}`
     const tokenLog = {
       userId,
       feature: 'ask-assistant',
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o-mini',
       promptTokens: usage.prompt_tokens,
       completionTokens: usage.completion_tokens,
       totalTokens: usage.total_tokens,

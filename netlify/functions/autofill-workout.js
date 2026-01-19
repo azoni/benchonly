@@ -49,14 +49,14 @@ Fill in missing weights and reps based on progression from recent workouts.`
     const startTime = Date.now()
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
       response_format: { type: 'json_object' },
       temperature: 0.5,
-      max_tokens: 1500
+      max_tokens: 1000
     })
 
     const responseTime = Date.now() - startTime
@@ -65,7 +65,7 @@ Fill in missing weights and reps based on progression from recent workouts.`
     const tokenLog = {
       userId,
       feature: 'autofill',
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o-mini',
       promptTokens: usage.prompt_tokens,
       completionTokens: usage.completion_tokens,
       totalTokens: usage.total_tokens,

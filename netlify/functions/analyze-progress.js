@@ -61,14 +61,14 @@ Provide detailed analysis and actionable recommendations.`
     const startTime = Date.now()
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
       response_format: { type: 'json_object' },
       temperature: 0.6,
-      max_tokens: 2000
+      max_tokens: 1500
     })
 
     const responseTime = Date.now() - startTime
@@ -77,7 +77,7 @@ Provide detailed analysis and actionable recommendations.`
     const tokenLog = {
       userId,
       feature: 'analyze',
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o-mini',
       promptTokens: usage.prompt_tokens,
       completionTokens: usage.completion_tokens,
       totalTokens: usage.total_tokens,
