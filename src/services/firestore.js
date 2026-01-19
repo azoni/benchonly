@@ -19,6 +19,7 @@ import { db } from './firebase';
 
 // ============ WORKOUTS ============
 export const workoutService = {
+  // Create a workout for yourself
   async create(userId, workoutData) {
     const docRef = await addDoc(collection(db, 'workouts'), {
       ...workoutData,
@@ -26,7 +27,117 @@ export const workoutService = {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    
+    // Check if any goals should be updated based on this workout
+    await this.checkAndUpdateGoals(userId, workoutData);
+    
     return { id: docRef.id, ...workoutData };
+  },
+  
+  // Create a workout assigned to another user (for group admins)
+  async createForUser(assignedUserId, workoutData, createdByUserId, groupId) {
+    const docRef = await addDoc(collection(db, 'workouts'), {
+      ...workoutData,
+      userId: assignedUserId,        // Who the workout is for
+      createdBy: createdByUserId,    // Who created it (admin)
+      groupId: groupId,              // Which group this belongs to
+      isAssigned: true,              // Flag that this was assigned
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    
+    return { id: docRef.id, ...workoutData, userId: assignedUserId };
+  },
+  
+  // Create the same workout for multiple users in a group
+  async createForGroup(groupId, workoutData, createdByUserId, memberIds) {
+    const batch = writeBatch(db);
+    const workoutIds = [];
+    
+    for (const memberId of memberIds) {
+      const docRef = doc(collection(db, 'workouts'));
+      batch.set(docRef, {
+        ...workoutData,
+        userId: memberId,
+        createdBy: createdByUserId,
+        groupId: groupId,
+        isAssigned: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      workoutIds.push({ id: docRef.id, memberId });
+    }
+    
+    await batch.commit();
+    return workoutIds;
+  },
+  
+  async checkAndUpdateGoals(userId, workoutData) {
+    try {
+      // Get user's active goals
+      const goalsQuery = query(
+        collection(db, 'goals'),
+        where('userId', '==', userId),
+        where('status', '==', 'active')
+      );
+      const goalsSnapshot = await getDocs(goalsQuery);
+      
+      if (goalsSnapshot.empty) return;
+      
+      // Process each exercise in the workout
+      for (const exercise of workoutData.exercises || []) {
+        const exerciseName = exercise.name?.toLowerCase().trim();
+        
+        for (const goalDoc of goalsSnapshot.docs) {
+          const goal = goalDoc.data();
+          const goalLift = goal.lift?.toLowerCase().trim();
+          
+          // Check if exercise matches goal lift
+          if (exerciseName && goalLift && exerciseName.includes(goalLift) || goalLift?.includes(exerciseName)) {
+            // Find the heaviest successful set
+            let maxWeight = 0;
+            for (const set of exercise.sets || []) {
+              const weight = parseFloat(set.actualWeight) || parseFloat(set.prescribedWeight) || 0;
+              if (weight > maxWeight) {
+                maxWeight = weight;
+              }
+            }
+            
+            if (maxWeight > 0) {
+              const targetWeight = parseFloat(goal.targetWeight) || 0;
+              const startWeight = parseFloat(goal.startWeight) || 0;
+              
+              // Calculate progress percentage
+              let progress = 0;
+              if (targetWeight > startWeight) {
+                progress = Math.min(100, Math.round(((maxWeight - startWeight) / (targetWeight - startWeight)) * 100));
+              }
+              
+              // Update goal with new progress and current weight
+              const updates = {
+                currentWeight: maxWeight,
+                progress: Math.max(goal.progress || 0, progress), // Only increase, never decrease
+                updatedAt: serverTimestamp(),
+              };
+              
+              // Mark as completed if target reached
+              if (maxWeight >= targetWeight) {
+                updates.status = 'completed';
+                updates.completedAt = serverTimestamp();
+              }
+              
+              // Only update if this is a new PR or first entry
+              if (maxWeight >= (goal.currentWeight || 0)) {
+                await updateDoc(doc(db, 'goals', goalDoc.id), updates);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking goals:', error);
+      // Don't throw - we don't want goal checking to break workout saving
+    }
   },
 
   async get(workoutId) {
@@ -35,6 +146,11 @@ export const workoutService = {
       return { id: docSnap.id, ...docSnap.data() };
     }
     return null;
+  },
+  
+  // Alias for get
+  async getById(workoutId) {
+    return this.get(workoutId);
   },
 
   async getByUser(userId, limitCount = 50) {
@@ -121,6 +237,26 @@ export const groupService = {
       return { id: docSnap.id, ...docSnap.data() };
     }
     return null;
+  },
+  
+  // Alias for get
+  async getById(groupId) {
+    return this.get(groupId);
+  },
+  
+  // Get detailed info for multiple members
+  async getMemberDetails(memberIds) {
+    const members = [];
+    for (const memberId of memberIds) {
+      const userSnap = await getDoc(doc(db, 'users', memberId));
+      if (userSnap.exists()) {
+        members.push({ uid: memberId, ...userSnap.data() });
+      } else {
+        // User doc might not exist yet, return basic info
+        members.push({ uid: memberId, displayName: 'Unknown User' });
+      }
+    }
+    return members;
   },
 
   async getByUser(userId) {
@@ -334,6 +470,11 @@ export const attendanceService = {
     );
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  },
+  
+  // Alias for getByUser
+  async getByDateRange(userId, startDate, endDate) {
+    return this.getByUser(userId, startDate, endDate);
   },
 
   async getByGroup(groupId, startDate, endDate) {

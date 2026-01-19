@@ -85,10 +85,12 @@ export default function GoalsPage() {
     
     setSaving(true)
     try {
+      const currentWt = parseInt(formData.currentWeight) || 0
       const goalData = {
         userId: user.uid,
         lift: formData.lift,
-        currentWeight: parseInt(formData.currentWeight) || 0,
+        currentWeight: currentWt,
+        startWeight: editingGoal?.startWeight || currentWt, // Keep original start weight on edit
         targetWeight: parseInt(formData.targetWeight),
         targetDate: formData.targetDate,
         status: 'active'

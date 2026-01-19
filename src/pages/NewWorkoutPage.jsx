@@ -311,8 +311,8 @@ export default function NewWorkoutPage() {
                       {/* Set Headers */}
                       <div className="grid grid-cols-12 gap-2 mb-2 text-xs text-iron-500 uppercase tracking-wider">
                         <div className="col-span-1">Set</div>
-                        <div className="col-span-2">Target</div>
-                        <div className="col-span-2">Actual</div>
+                        <div className="col-span-3">Target</div>
+                        <div className="col-span-3">Actual</div>
                         <div className="col-span-2">
                           <span className="flex items-center gap-1">
                             RPE
@@ -324,8 +324,8 @@ export default function NewWorkoutPage() {
                             </button>
                           </span>
                         </div>
-                        <div className="col-span-3">Pain</div>
-                        <div className="col-span-2"></div>
+                        <div className="col-span-2">Pain</div>
+                        <div className="col-span-1"></div>
                       </div>
 
                       {/* Set Rows */}
@@ -341,8 +341,8 @@ export default function NewWorkoutPage() {
                           </div>
 
                           {/* Target Weight x Reps */}
-                          <div className="col-span-2">
-                            <div className="flex gap-1">
+                          <div className="col-span-3">
+                            <div className="flex gap-1 items-center">
                               <input
                                 type="number"
                                 value={set.prescribedWeight}
@@ -352,9 +352,9 @@ export default function NewWorkoutPage() {
                                   })
                                 }
                                 placeholder="lbs"
-                                className="w-full input-field text-sm py-1.5 px-2"
+                                className="w-full input-field text-sm py-2 px-3"
                               />
-                              <span className="text-iron-600 self-center">×</span>
+                              <span className="text-iron-600">×</span>
                               <input
                                 type="number"
                                 value={set.prescribedReps}
@@ -364,14 +364,14 @@ export default function NewWorkoutPage() {
                                   })
                                 }
                                 placeholder="reps"
-                                className="w-full input-field text-sm py-1.5 px-2"
+                                className="w-full input-field text-sm py-2 px-3"
                               />
                             </div>
                           </div>
 
                           {/* Actual Weight x Reps */}
-                          <div className="col-span-2">
-                            <div className="flex gap-1">
+                          <div className="col-span-3">
+                            <div className="flex gap-1 items-center">
                               <input
                                 type="number"
                                 value={set.actualWeight}
@@ -381,9 +381,9 @@ export default function NewWorkoutPage() {
                                   })
                                 }
                                 placeholder="lbs"
-                                className="w-full input-field text-sm py-1.5 px-2 border-flame-500/30"
+                                className="w-full input-field text-sm py-2 px-3 border-flame-500/30"
                               />
-                              <span className="text-iron-600 self-center">×</span>
+                              <span className="text-iron-600">×</span>
                               <input
                                 type="number"
                                 value={set.actualReps}
@@ -393,7 +393,7 @@ export default function NewWorkoutPage() {
                                   })
                                 }
                                 placeholder="reps"
-                                className="w-full input-field text-sm py-1.5 px-2 border-flame-500/30"
+                                className="w-full input-field text-sm py-2 px-3 border-flame-500/30"
                               />
                             </div>
                           </div>
@@ -407,7 +407,7 @@ export default function NewWorkoutPage() {
                                   rpe: e.target.value,
                                 })
                               }
-                              className="input-field text-sm py-1.5 px-2"
+                              className="input-field text-sm py-2 px-3 w-full"
                             >
                               <option value="">—</option>
                               {[5, 6, 7, 8, 9, 10].map((val) => (
@@ -418,31 +418,37 @@ export default function NewWorkoutPage() {
                             </select>
                           </div>
 
-                          {/* Pain Level */}
-                          <div className="col-span-3">
-                            <div className="flex gap-0.5">
-                              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((level) => (
-                                <button
-                                  key={level}
-                                  onClick={() =>
-                                    updateSet(exercise.id, set.id, {
-                                      painLevel: level,
-                                    })
-                                  }
-                                  className={`w-5 h-5 rounded text-[10px] font-medium transition-all
-                                    ${set.painLevel === level
-                                      ? PAIN_LEVELS[level].color + ' text-white'
-                                      : 'bg-iron-800 text-iron-500 hover:bg-iron-700'
-                                    }`}
-                                >
-                                  {level}
-                                </button>
-                              ))}
-                            </div>
+                          {/* Pain Level - Now a dropdown */}
+                          <div className="col-span-2">
+                            <select
+                              value={set.painLevel}
+                              onChange={(e) =>
+                                updateSet(exercise.id, set.id, {
+                                  painLevel: parseInt(e.target.value),
+                                })
+                              }
+                              className={`input-field text-sm py-2 px-3 w-full ${
+                                set.painLevel >= 7 ? 'text-red-400 border-red-500/50' :
+                                set.painLevel >= 4 ? 'text-yellow-400 border-yellow-500/50' :
+                                'text-green-400'
+                              }`}
+                            >
+                              <option value="0">0 - None</option>
+                              <option value="1">1</option>
+                              <option value="2">2</option>
+                              <option value="3">3 - Mild</option>
+                              <option value="4">4</option>
+                              <option value="5">5 - Moderate</option>
+                              <option value="6">6</option>
+                              <option value="7">7 - High</option>
+                              <option value="8">8</option>
+                              <option value="9">9</option>
+                              <option value="10">10 - Severe</option>
+                            </select>
                           </div>
 
                           {/* Delete Set */}
-                          <div className="col-span-2 flex justify-end">
+                          <div className="col-span-1 flex justify-end">
                             {exercise.sets.length > 1 && (
                               <button
                                 onClick={() => removeSet(exercise.id, set.id)}

@@ -16,10 +16,29 @@ import {
   TrendingUp,
   Target,
   Flame,
-  Medal
+  Medal,
+  Plus,
+  Dumbbell,
+  X,
+  ChevronDown
 } from 'lucide-react'
 import { groupService, workoutService, attendanceService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
+
+const COMMON_EXERCISES = [
+  'Bench Press',
+  'Incline Bench Press',
+  'Close Grip Bench',
+  'Dumbbell Press',
+  'Overhead Press',
+  'Squat',
+  'Deadlift',
+  'Barbell Row',
+  'Pull-ups',
+  'Tricep Extension',
+  'Bicep Curl',
+  'Lateral Raise',
+]
 
 export default function GroupDetailPage() {
   const { id } = useParams()
@@ -28,10 +47,22 @@ export default function GroupDetailPage() {
   const [group, setGroup] = useState(null)
   const [members, setMembers] = useState([])
   const [attendance, setAttendance] = useState({})
+  const [groupWorkouts, setGroupWorkouts] = useState([])
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [activeTab, setActiveTab] = useState('members')
+  
+  // Workout creation state
+  const [showWorkoutModal, setShowWorkoutModal] = useState(false)
+  const [selectedMembers, setSelectedMembers] = useState([])
+  const [workoutForm, setWorkoutForm] = useState({
+    name: '',
+    date: new Date().toISOString().split('T')[0],
+    notes: '',
+    exercises: [{ name: '', sets: 3, reps: 10, weight: '' }]
+  })
+  const [creatingWorkout, setCreatingWorkout] = useState(false)
 
   const isAdmin = group?.admins?.includes(user?.uid)
 
@@ -58,6 +89,10 @@ export default function GroupDetailPage() {
           
           setMembers(memberData)
           setAttendance(attendanceData)
+          
+          // Fetch group workouts
+          const workouts = await workoutService.getByGroup(id, 20)
+          setGroupWorkouts(workouts)
         }
       } catch (error) {
         console.error('Error fetching group:', error)
@@ -94,6 +129,99 @@ export default function GroupDetailPage() {
       navigate('/groups')
     } catch (error) {
       console.error('Error deleting group:', error)
+    }
+  }
+
+  // Workout creation functions
+  const openWorkoutModal = () => {
+    setSelectedMembers(group?.members || [])
+    setWorkoutForm({
+      name: '',
+      date: new Date().toISOString().split('T')[0],
+      notes: '',
+      exercises: [{ id: Date.now(), name: '', sets: 3, reps: 10, weight: '' }]
+    })
+    setShowWorkoutModal(true)
+  }
+
+  const addExercise = () => {
+    setWorkoutForm(prev => ({
+      ...prev,
+      exercises: [...prev.exercises, { id: Date.now(), name: '', sets: 3, reps: 10, weight: '' }]
+    }))
+  }
+
+  const removeExercise = (exerciseId) => {
+    setWorkoutForm(prev => ({
+      ...prev,
+      exercises: prev.exercises.filter(e => e.id !== exerciseId)
+    }))
+  }
+
+  const updateExercise = (exerciseId, field, value) => {
+    setWorkoutForm(prev => ({
+      ...prev,
+      exercises: prev.exercises.map(e => 
+        e.id === exerciseId ? { ...e, [field]: value } : e
+      )
+    }))
+  }
+
+  const toggleMemberSelection = (memberId) => {
+    setSelectedMembers(prev => 
+      prev.includes(memberId)
+        ? prev.filter(id => id !== memberId)
+        : [...prev, memberId]
+    )
+  }
+
+  const handleCreateGroupWorkout = async () => {
+    if (!workoutForm.name.trim() || selectedMembers.length === 0) {
+      alert('Please enter a workout name and select at least one member')
+      return
+    }
+
+    setCreatingWorkout(true)
+    try {
+      // Format exercises for storage
+      const formattedExercises = workoutForm.exercises
+        .filter(e => e.name.trim())
+        .map(e => ({
+          id: e.id,
+          name: e.name,
+          sets: Array.from({ length: parseInt(e.sets) || 1 }, (_, i) => ({
+            id: Date.now() + i,
+            prescribedWeight: e.weight,
+            prescribedReps: e.reps.toString(),
+            actualWeight: '',
+            actualReps: '',
+            rpe: '',
+            painLevel: 0,
+            completed: false
+          })),
+          notes: ''
+        }))
+
+      const workoutData = {
+        name: workoutForm.name,
+        date: new Date(workoutForm.date),
+        notes: workoutForm.notes,
+        exercises: formattedExercises
+      }
+
+      await workoutService.createForGroup(id, workoutData, user.uid, selectedMembers)
+      
+      // Refresh workouts list
+      const workouts = await workoutService.getByGroup(id, 20)
+      setGroupWorkouts(workouts)
+      
+      setShowWorkoutModal(false)
+      alert(`Workout assigned to ${selectedMembers.length} member(s)!`)
+    } catch (error) {
+      console.error('Error creating group workout:', error)
+      alert('Failed to create workout')
+    } finally {
+      setCreatingWorkout(false)
     }
   }
 
@@ -254,7 +382,7 @@ export default function GroupDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 border-b border-iron-800 overflow-x-auto">
-        {['members', 'attendance', 'leaderboard'].map(tab => (
+        {['members', 'workouts', 'attendance', 'leaderboard'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -271,6 +399,75 @@ export default function GroupDetailPage() {
           </button>
         ))}
       </div>
+
+      {/* Workouts Tab */}
+      {activeTab === 'workouts' && (
+        <div className="space-y-4">
+          {isAdmin && (
+            <button
+              onClick={openWorkoutModal}
+              className="btn-primary w-full flex items-center justify-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Create Workout for Group
+            </button>
+          )}
+          
+          {groupWorkouts.length === 0 ? (
+            <div className="card-steel p-8 text-center">
+              <Dumbbell className="w-12 h-12 text-iron-600 mx-auto mb-3" />
+              <p className="text-iron-400">No group workouts yet</p>
+              {isAdmin && (
+                <p className="text-iron-500 text-sm mt-1">
+                  Create a workout to assign it to group members
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {groupWorkouts.map(workout => {
+                const assignedMember = members.find(m => m.uid === workout.userId)
+                return (
+                  <Link 
+                    key={workout.id} 
+                    to={`/workouts/${workout.id}`}
+                    className="card-steel p-4 block hover:border-iron-600 transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium text-iron-100">{workout.name}</h3>
+                      <span className="text-sm text-iron-500">
+                        {workout.date?.toDate ? format(workout.date.toDate(), 'MMM d') : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {assignedMember?.photoURL ? (
+                        <img 
+                          src={assignedMember.photoURL} 
+                          alt=""
+                          className="w-5 h-5 rounded-full"
+                        />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-iron-700 flex items-center justify-center">
+                          <span className="text-xs text-iron-400">
+                            {assignedMember?.displayName?.[0] || '?'}
+                          </span>
+                        </div>
+                      )}
+                      <span className="text-sm text-iron-400">
+                        {assignedMember?.displayName || 'Unknown'}
+                      </span>
+                      <span className="text-iron-600 mx-1">·</span>
+                      <span className="text-sm text-iron-500">
+                        {workout.exercises?.length || 0} exercises
+                      </span>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Members Tab */}
       {activeTab === 'members' && (
@@ -470,6 +667,216 @@ export default function GroupDetailPage() {
                 </div>
               </div>
             ))}
+        </div>
+      )}
+
+      {/* Workout Creation Modal */}
+      {showWorkoutModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-iron-900 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-iron-900 border-b border-iron-800 p-4 flex items-center justify-between">
+              <h2 className="text-xl font-display text-iron-100">Create Group Workout</h2>
+              <button
+                onClick={() => setShowWorkoutModal(false)}
+                className="p-2 text-iron-400 hover:text-iron-200 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-6">
+              {/* Workout Details */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-iron-300 mb-2">
+                    Workout Name
+                  </label>
+                  <input
+                    type="text"
+                    value={workoutForm.name}
+                    onChange={(e) => setWorkoutForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="e.g., Push Day, Bench Focus"
+                    className="input-field w-full"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-iron-300 mb-2">
+                      Date
+                    </label>
+                    <input
+                      type="date"
+                      value={workoutForm.date}
+                      onChange={(e) => setWorkoutForm(prev => ({ ...prev, date: e.target.value }))}
+                      className="input-field w-full"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-iron-300 mb-2">
+                    Notes (optional)
+                  </label>
+                  <textarea
+                    value={workoutForm.notes}
+                    onChange={(e) => setWorkoutForm(prev => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Instructions or focus areas..."
+                    rows={2}
+                    className="input-field w-full resize-none"
+                  />
+                </div>
+              </div>
+              
+              {/* Exercises */}
+              <div>
+                <label className="block text-sm font-medium text-iron-300 mb-3">
+                  Exercises
+                </label>
+                <div className="space-y-3">
+                  {workoutForm.exercises.map((exercise, index) => (
+                    <div key={exercise.id} className="bg-iron-800/50 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="w-6 h-6 rounded bg-flame-500/20 text-flame-400 flex items-center justify-center text-sm font-medium">
+                          {index + 1}
+                        </span>
+                        <input
+                          type="text"
+                          value={exercise.name}
+                          onChange={(e) => updateExercise(exercise.id, 'name', e.target.value)}
+                          placeholder="Exercise name"
+                          list="exercises-list"
+                          className="input-field flex-1"
+                        />
+                        {workoutForm.exercises.length > 1 && (
+                          <button
+                            onClick={() => removeExercise(exercise.id)}
+                            className="p-1 text-iron-500 hover:text-red-400 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs text-iron-500 mb-1">Sets</label>
+                          <input
+                            type="number"
+                            value={exercise.sets}
+                            onChange={(e) => updateExercise(exercise.id, 'sets', e.target.value)}
+                            className="input-field w-full text-sm"
+                            min="1"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-iron-500 mb-1">Reps</label>
+                          <input
+                            type="number"
+                            value={exercise.reps}
+                            onChange={(e) => updateExercise(exercise.id, 'reps', e.target.value)}
+                            className="input-field w-full text-sm"
+                            min="1"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-iron-500 mb-1">Weight (lbs)</label>
+                          <input
+                            type="number"
+                            value={exercise.weight}
+                            onChange={(e) => updateExercise(exercise.id, 'weight', e.target.value)}
+                            placeholder="—"
+                            className="input-field w-full text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  <datalist id="exercises-list">
+                    {COMMON_EXERCISES.map(ex => (
+                      <option key={ex} value={ex} />
+                    ))}
+                  </datalist>
+                  
+                  <button
+                    onClick={addExercise}
+                    className="w-full py-2 border border-dashed border-iron-700 rounded-lg text-iron-400 hover:text-iron-200 hover:border-iron-600 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Exercise
+                  </button>
+                </div>
+              </div>
+              
+              {/* Assign to Members */}
+              <div>
+                <label className="block text-sm font-medium text-iron-300 mb-3">
+                  Assign to Members
+                </label>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setSelectedMembers(
+                      selectedMembers.length === members.length ? [] : members.map(m => m.uid)
+                    )}
+                    className="text-sm text-flame-400 hover:text-flame-300 mb-2"
+                  >
+                    {selectedMembers.length === members.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    {members.map(member => (
+                      <button
+                        key={member.uid}
+                        onClick={() => toggleMemberSelection(member.uid)}
+                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                          selectedMembers.includes(member.uid)
+                            ? 'bg-flame-500/20 border border-flame-500/50'
+                            : 'bg-iron-800/50 border border-iron-700 hover:border-iron-600'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                          selectedMembers.includes(member.uid)
+                            ? 'bg-flame-500 border-flame-500'
+                            : 'border-iron-600'
+                        }`}>
+                          {selectedMembers.includes(member.uid) && (
+                            <Check className="w-3 h-3 text-white" />
+                          )}
+                        </div>
+                        {member.photoURL ? (
+                          <img src={member.photoURL} alt="" className="w-6 h-6 rounded-full" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-iron-700 flex items-center justify-center">
+                            <span className="text-xs text-iron-400">{member.displayName?.[0]}</span>
+                          </div>
+                        )}
+                        <span className="text-sm text-iron-200 truncate">
+                          {member.displayName}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="sticky bottom-0 bg-iron-900 border-t border-iron-800 p-4 flex gap-3">
+              <button
+                onClick={() => setShowWorkoutModal(false)}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateGroupWorkout}
+                disabled={creatingWorkout || !workoutForm.name.trim() || selectedMembers.length === 0}
+                className="btn-primary flex-1 disabled:opacity-50"
+              >
+                {creatingWorkout ? 'Creating...' : `Assign to ${selectedMembers.length} Member${selectedMembers.length !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
