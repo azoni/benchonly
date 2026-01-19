@@ -248,25 +248,35 @@ export default function DashboardPage() {
 
           <div className="p-4 space-y-4">
             {goals.length > 0 ? (
-              goals.map((goal) => (
-                <div key={goal.id} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-iron-100 font-medium">{goal.lift}</span>
-                    <span className="text-xs text-iron-500">
-                      {goal.currentWeight || 0} / {goal.targetWeight} lbs
-                    </span>
+              goals.map((goal) => {
+                const startWeight = goal.startWeight || goal.currentWeight || 0;
+                const currentWeight = goal.currentWeight || startWeight;
+                const targetWeight = goal.targetWeight || 0;
+                let progress = 0;
+                if (currentWeight > startWeight && targetWeight > startWeight) {
+                  progress = Math.min(100, Math.round(((currentWeight - startWeight) / (targetWeight - startWeight)) * 100));
+                }
+                
+                return (
+                  <div key={goal.id} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-iron-100 font-medium">{goal.lift}</span>
+                      <span className="text-xs text-iron-500">
+                        {currentWeight} / {targetWeight} lbs
+                      </span>
+                    </div>
+                    <div className="h-2 bg-iron-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-flame-500 to-flame-400 rounded-full transition-all duration-500"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-iron-500">
+                      Target: {format(goal.targetDate?.toDate ? goal.targetDate.toDate() : new Date(goal.targetDate), 'MMM d, yyyy')}
+                    </p>
                   </div>
-                  <div className="h-2 bg-iron-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-flame-500 to-flame-400 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min((goal.currentWeight / goal.targetWeight) * 100, 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-iron-500">
-                    Target: {format(goal.targetDate?.toDate ? goal.targetDate.toDate() : new Date(goal.targetDate), 'MMM d, yyyy')}
-                  </p>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="py-6 text-center">
                 <Target className="w-10 h-10 text-iron-700 mx-auto mb-2" />

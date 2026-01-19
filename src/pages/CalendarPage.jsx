@@ -10,9 +10,10 @@ import {
   Check,
   Calendar as CalendarIcon,
   Repeat,
+  Target,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { workoutService, scheduleService, attendanceService } from '../services/firestore';
+import { workoutService, scheduleService, attendanceService, goalService } from '../services/firestore';
 import {
   format,
   startOfMonth,
@@ -35,6 +36,7 @@ export default function CalendarPage() {
   const [workouts, setWorkouts] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [attendance, setAttendance] = useState([]);
+  const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState('workout'); // 'workout' | 'vacation' | 'schedule'
@@ -50,15 +52,17 @@ export default function CalendarPage() {
     const end = endOfMonth(currentMonth);
 
     try {
-      const [workoutsData, schedulesData, attendanceData] = await Promise.all([
+      const [workoutsData, schedulesData, attendanceData, goalsData] = await Promise.all([
         workoutService.getByDateRange(user.uid, start, end),
         scheduleService.getByUser(user.uid),
         attendanceService.getByUser(user.uid, start, end),
+        goalService.getByUser(user.uid),
       ]);
 
       setWorkouts(workoutsData);
       setSchedules(schedulesData);
       setAttendance(attendanceData);
+      setGoals(goalsData.filter(g => g.status === 'active'));
     } catch (error) {
       console.error('Error loading calendar data:', error);
     } finally {
@@ -70,6 +74,14 @@ export default function CalendarPage() {
     const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 1 });
     const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 1 });
     return eachDayOfInterval({ start, end });
+  };
+
+  const getGoalDeadline = (date) => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return goals.find((g) => {
+      const targetDate = g.targetDate?.toDate ? g.targetDate.toDate() : new Date(g.targetDate);
+      return format(targetDate, 'yyyy-MM-dd') === dateStr;
+    });
   };
 
   const getDateStatus = (date) => {
@@ -190,6 +202,7 @@ export default function CalendarPage() {
             <div className="grid grid-cols-7">
               {days.map((day, index) => {
                 const status = getDateStatus(day);
+                const goalDeadline = getGoalDeadline(day);
                 const isSelected = isSameDay(day, selectedDate);
                 const isCurrentMonth = isSameMonth(day, currentMonth);
 
@@ -200,7 +213,8 @@ export default function CalendarPage() {
                     className={`aspect-square p-1 border-b border-r border-iron-800/50
                       transition-colors relative group
                       ${!isCurrentMonth ? 'opacity-30' : ''}
-                      ${isSelected ? 'bg-flame-500/10' : 'hover:bg-iron-800/50'}`}
+                      ${isSelected ? 'bg-flame-500/10' : 'hover:bg-iron-800/50'}
+                      ${goalDeadline ? 'ring-1 ring-inset ring-purple-500/50' : ''}`}
                   >
                     <div
                       className={`w-full h-full rounded-plate flex flex-col items-center justify-center
@@ -209,7 +223,8 @@ export default function CalendarPage() {
                       <span
                         className={`text-sm font-medium
                           ${isSelected ? 'text-flame-400' : 'text-iron-300'}
-                          ${isToday(day) ? 'text-flame-400' : ''}`}
+                          ${isToday(day) ? 'text-flame-400' : ''}
+                          ${goalDeadline ? 'text-purple-400' : ''}`}
                       >
                         {format(day, 'd')}
                       </span>
@@ -227,6 +242,9 @@ export default function CalendarPage() {
                         )}
                         {status.isMissed && (
                           <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                        )}
+                        {goalDeadline && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-purple-500" title={`Goal: ${goalDeadline.lift}`} />
                         )}
                       </div>
                     </div>
@@ -252,6 +270,10 @@ export default function CalendarPage() {
               <div className="flex items-center gap-2 text-xs text-iron-400">
                 <div className="w-2 h-2 rounded-full bg-red-500" />
                 Missed
+              </div>
+              <div className="flex items-center gap-2 text-xs text-iron-400">
+                <div className="w-2 h-2 rounded-full bg-purple-500" />
+                Goal Deadline
               </div>
             </div>
           </div>

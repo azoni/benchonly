@@ -40,10 +40,31 @@ class APIService {
         throw new Error('Failed to get response');
       }
 
-      return await response.json();
+      const data = await response.json();
+      
+      // Log token usage
+      if (data.usage) {
+        this.logTokenUsage(data.usage).catch(console.error);
+      }
+
+      return data;
     } catch (error) {
       console.error('Ask assistant error:', error);
       throw error;
+    }
+  }
+
+  async logTokenUsage(usage) {
+    try {
+      await fetch(`${this.baseUrl}/token-usage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(usage),
+      });
+    } catch (error) {
+      console.error('Log token usage error:', error);
     }
   }
 

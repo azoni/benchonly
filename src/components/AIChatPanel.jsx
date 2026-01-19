@@ -4,6 +4,7 @@ import { X, Send, Loader2, Sparkles, Bot, User } from 'lucide-react';
 import { useUIStore } from '../store';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import { workoutService, goalService } from '../services/firestore';
 
 export default function AIChatPanel() {
   const { chatOpen, setChatOpen } = useUIStore();
@@ -16,6 +17,7 @@ export default function AIChatPanel() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [context, setContext] = useState({ recentWorkouts: [], goals: [] });
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -30,8 +32,42 @@ export default function AIChatPanel() {
   useEffect(() => {
     if (chatOpen) {
       inputRef.current?.focus();
+      // Load user context when chat opens
+      loadUserContext();
     }
   }, [chatOpen]);
+
+  const loadUserContext = async () => {
+    if (!user) return;
+    try {
+      const [workouts, goals] = await Promise.all([
+        workoutService.getByUser(user.uid, 10),
+        goalService.getByUser(user.uid),
+      ]);
+      setContext({
+        recentWorkouts: workouts.map(w => ({
+          name: w.name,
+          date: w.date?.toDate ? w.date.toDate().toISOString().split('T')[0] : w.date,
+          exercises: w.exercises?.map(e => ({
+            name: e.name,
+            sets: e.sets?.map(s => ({
+              weight: s.actualWeight || s.prescribedWeight,
+              reps: s.actualReps || s.prescribedReps,
+              rpe: s.rpe
+            }))
+          }))
+        })),
+        goals: goals.filter(g => g.status === 'active').map(g => ({
+          lift: g.lift,
+          currentWeight: g.currentWeight,
+          targetWeight: g.targetWeight,
+          targetDate: g.targetDate
+        }))
+      });
+    } catch (error) {
+      console.error('Error loading user context:', error);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,7 +81,8 @@ export default function AIChatPanel() {
     try {
       const response = await api.askAssistant(userMessage, {
         userId: user?.uid,
-        // Add more context as needed
+        recentWorkouts: context.recentWorkouts,
+        goals: context.goals,
       });
 
       setMessages((prev) => [
