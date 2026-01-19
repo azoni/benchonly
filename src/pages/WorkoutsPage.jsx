@@ -19,7 +19,7 @@ import { workoutService } from '../services/firestore';
 import { format, isToday, isYesterday, isThisWeek, parseISO } from 'date-fns';
 
 export default function WorkoutsPage() {
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const [workouts, setWorkouts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,6 +34,12 @@ export default function WorkoutsPage() {
 
   const loadWorkouts = async () => {
     try {
+      if (isGuest) {
+        const { SAMPLE_WORKOUTS } = await import('../context/AuthContext');
+        setWorkouts(SAMPLE_WORKOUTS);
+        setLoading(false);
+        return;
+      }
       const data = await workoutService.getByUser(user.uid, 100);
       setWorkouts(data);
     } catch (error) {
@@ -45,6 +51,11 @@ export default function WorkoutsPage() {
 
   const handleDelete = async (workoutId) => {
     if (window.confirm('Are you sure you want to delete this workout?')) {
+      if (isGuest) {
+        setWorkouts((prev) => prev.filter((w) => w.id !== workoutId));
+        setActiveMenu(null);
+        return;
+      }
       try {
         await workoutService.delete(workoutId);
         setWorkouts((prev) => prev.filter((w) => w.id !== workoutId));
@@ -56,7 +67,7 @@ export default function WorkoutsPage() {
   };
 
   const getDateLabel = (date) => {
-    const d = date?.toDate ? date.toDate() : new Date(date);
+    const d = date instanceof Date ? date : (date?.toDate ? date.toDate() : new Date(date));
     if (isToday(d)) return 'Today';
     if (isYesterday(d)) return 'Yesterday';
     if (isThisWeek(d, { weekStartsOn: 1 })) return format(d, 'EEEE');

@@ -30,7 +30,7 @@ const COMMON_LIFTS = [
 ]
 
 export default function GoalsPage() {
-  const { user } = useAuth()
+  const { user, isGuest } = useAuth()
   const [goals, setGoals] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -47,6 +47,12 @@ export default function GoalsPage() {
     async function fetchGoals() {
       if (!user) return
       try {
+        if (isGuest) {
+          const { SAMPLE_GOALS } = await import('../context/AuthContext')
+          setGoals(SAMPLE_GOALS)
+          setLoading(false)
+          return
+        }
         const data = await goalService.getByUser(user.uid)
         setGoals(data)
       } catch (error) {
@@ -56,7 +62,7 @@ export default function GoalsPage() {
       }
     }
     fetchGoals()
-  }, [user])
+  }, [user, isGuest])
 
   const openModal = (goal = null) => {
     if (goal) {
@@ -91,7 +97,22 @@ export default function GoalsPage() {
         currentWeight: currentWt,
         startWeight: editingGoal?.startWeight || currentWt,
         targetWeight: parseInt(formData.targetWeight),
-        targetDate: formData.targetDate
+        targetDate: formData.targetDate,
+        status: 'active'
+      }
+      
+      if (isGuest) {
+        // Guest mode - just update local state
+        if (editingGoal) {
+          setGoals(prev => prev.map(g => 
+            g.id === editingGoal.id ? { ...g, ...goalData } : g
+          ))
+        } else {
+          setGoals(prev => [...prev, { id: `guest-${Date.now()}`, ...goalData }])
+        }
+        setShowModal(false)
+        setSaving(false)
+        return
       }
       
       if (editingGoal) {
@@ -115,6 +136,11 @@ export default function GoalsPage() {
 
   const handleDelete = async (goalId) => {
     if (!confirm('Delete this goal?')) return
+    
+    if (isGuest) {
+      setGoals(prev => prev.filter(g => g.id !== goalId))
+      return
+    }
     
     try {
       await goalService.delete(goalId)

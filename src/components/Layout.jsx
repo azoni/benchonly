@@ -14,6 +14,7 @@ import {
   LogOut,
   Dumbbell,
   ChevronRight,
+  Eye,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
@@ -32,7 +33,7 @@ const navItems = [
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, userProfile, signOut } = useAuth();
+  const { user, userProfile, signOut, isGuest } = useAuth();
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -43,6 +44,16 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-iron-950 flex">
+      {/* Guest Mode Banner */}
+      {isGuest && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-flame-600 to-flame-500 text-white py-2 px-4 text-center text-sm">
+          <Eye className="w-4 h-4 inline mr-2" />
+          Guest Mode - Data won't be saved. 
+          <button onClick={handleSignOut} className="underline ml-2 font-semibold hover:no-underline">
+            Sign in to save your progress
+          </button>
+        </div>
+      )}
       {/* Desktop Sidebar */}
       <aside
         className={`hidden lg:flex flex-col fixed inset-y-0 left-0 z-30
@@ -249,7 +260,7 @@ export default function Layout() {
       {/* Main Content */}
       <main className={`flex-1 transition-all duration-300
         ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}
-        pt-14 lg:pt-0`}
+        ${isGuest ? 'pt-24 lg:pt-10' : 'pt-14 lg:pt-0'}`}
       >
         <div className="min-h-screen p-4 lg:p-6">
           <Outlet />
