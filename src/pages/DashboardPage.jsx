@@ -13,7 +13,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { workoutService, goalService, groupService } from '../services/firestore';
+import { workoutService, goalService, groupService, scheduleService } from '../services/firestore';
 import { format, startOfWeek, endOfWeek, isToday, parseISO } from 'date-fns';
 
 export default function DashboardPage() {
@@ -64,8 +64,11 @@ export default function DashboardPage() {
         return;
       }
 
-      // Load workouts
-      const workouts = await workoutService.getByUser(user.uid, 20);
+      // Load workouts and schedules
+      const [workouts, schedules] = await Promise.all([
+        workoutService.getByUser(user.uid, 60),
+        scheduleService.getByUser(user.uid)
+      ]);
       setRecentWorkouts(workouts.slice(0, 5));
 
       // Calculate stats
@@ -84,7 +87,7 @@ export default function DashboardPage() {
 
       setStats({
         workoutsThisWeek: weekWorkouts.length,
-        currentStreak: calculateStreak(workouts),
+        currentStreak: calculateStreak(workouts, schedules),
         totalWorkouts: workouts.length,
         activeGoals: userGoals.filter((g) => g.status === 'active').length,
       });
@@ -96,40 +99,87 @@ export default function DashboardPage() {
     }
   };
 
-  const calculateStreak = (workouts) => {
-    // Simple streak calculation - can be enhanced
+  const calculateStreak = (workouts, schedules = []) => {
+    // Streak = consecutive scheduled workout days where you completed a workout
+    // Rest days (unscheduled) don't break the streak
+    
     let streak = 0;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    
+    // Get recurring schedule days
+    const recurringDays = schedules
+      .filter(s => s.type === 'recurring' && s.days)
+      .flatMap(s => s.days);
+    
+    // Get one-time scheduled dates
+    const oneTimeDates = schedules
+      .filter(s => s.type !== 'recurring' && s.date)
+      .map(s => s.date);
+    
+    // Also count days that have scheduled workouts (status: 'scheduled' or 'completed')
+    const workoutDates = workouts.map(w => {
+      const d = w.date?.toDate ? w.date.toDate() : new Date(w.date);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    });
+    
+    // Check if a date was a scheduled workout day
+    const isScheduledDay = (date) => {
+      const dayName = dayNames[date.getDay()];
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Check recurring schedule
+      if (recurringDays.includes(dayName)) return true;
+      
+      // Check one-time schedules
+      if (oneTimeDates.includes(dateStr)) return true;
+      
+      // Check if there was a scheduled workout for this day
+      const hasScheduledWorkout = workouts.some(w => {
+        const wDate = w.date?.toDate ? w.date.toDate() : new Date(w.date);
+        wDate.setHours(0, 0, 0, 0);
+        return wDate.getTime() === date.getTime();
+      });
+      
+      return hasScheduledWorkout;
+    };
+    
+    // Check if a date has a completed workout
+    const hasCompletedWorkout = (date) => {
+      return workouts.some(w => {
+        if (w.status !== 'completed') return false;
+        const wDate = w.date?.toDate ? w.date.toDate() : new Date(w.date);
+        wDate.setHours(0, 0, 0, 0);
+        return wDate.getTime() === date.getTime();
+      });
+    };
 
-    for (let i = 0; i < 30; i++) {
+    // Go backwards from today
+    for (let i = 0; i < 60; i++) {
       const checkDate = new Date(today);
       checkDate.setDate(checkDate.getDate() - i);
       
-      const hasWorkout = workouts.some((w) => {
-        const workoutDate = w.date?.toDate ? w.date.toDate() : new Date(w.date);
-        workoutDate.setHours(0, 0, 0, 0);
-        return workoutDate.getTime() === checkDate.getTime();
-      });
-
-      if (hasWorkout) {
-        streak++;
-      } else if (i > 0) {
-        break;
+      const scheduled = isScheduledDay(checkDate);
+      const completed = hasCompletedWorkout(checkDate);
+      
+      if (scheduled) {
+        if (completed) {
+          streak++;
+        } else if (i > 0) {
+          // Missed a scheduled day - streak broken (allow today to be incomplete)
+          break;
+        }
       }
+      // If not scheduled, just skip (rest day doesn't break streak)
     }
 
     return streak;
   };
 
   const statCards = [
-    {
-      label: 'This Week',
-      value: stats.workoutsThisWeek,
-      icon: Calendar,
-      color: 'text-blue-400',
-      bgColor: 'bg-blue-500/10',
-    },
     {
       label: 'Current Streak',
       value: `${stats.currentStreak} days`,
@@ -144,14 +194,10 @@ export default function DashboardPage() {
       color: 'text-green-400',
       bgColor: 'bg-green-500/10',
     },
-    {
-      label: 'Active Goals',
-      value: stats.activeGoals,
-      icon: Target,
-      color: 'text-purple-400',
-      bgColor: 'bg-purple-500/10',
-    },
   ];
+
+  // Find upcoming/scheduled workouts from recent
+  const scheduledWorkouts = recentWorkouts.filter(w => w.status === 'scheduled');
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -187,7 +233,7 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats and Upcoming */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat, index) => (
           <motion.div
@@ -204,6 +250,45 @@ export default function DashboardPage() {
             <p className="metric-label mt-1">{stat.label}</p>
           </motion.div>
         ))}
+
+        {/* Upcoming Workout Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="col-span-2 card-steel p-5 rounded-xl border-l-4 border-l-yellow-500"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 bg-yellow-500/10 rounded-plate flex items-center justify-center">
+              <Clock className="w-5 h-5 text-yellow-400" />
+            </div>
+            <div>
+              <p className="text-xs text-yellow-400 font-medium uppercase tracking-wider">Next Up</p>
+              {scheduledWorkouts.length > 0 ? (
+                <>
+                  <p className="font-display text-lg text-iron-100">{scheduledWorkouts[0].name}</p>
+                </>
+              ) : (
+                <p className="text-iron-400">No scheduled workouts</p>
+              )}
+            </div>
+          </div>
+          {scheduledWorkouts.length > 0 ? (
+            <Link 
+              to={`/workouts/${scheduledWorkouts[0].id}`}
+              className="btn-primary w-full mt-3 text-center"
+            >
+              Start Workout
+            </Link>
+          ) : (
+            <Link 
+              to="/workouts/new"
+              className="btn-secondary w-full mt-3 text-center"
+            >
+              Schedule One
+            </Link>
+          )}
+        </motion.div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -325,10 +410,10 @@ export default function DashboardPage() {
         className="grid grid-cols-2 lg:grid-cols-4 gap-4"
       >
         {[
-          { label: 'Log Workout', icon: Dumbbell, path: '/workouts/new', color: 'flame' },
+          { label: 'New Workout', icon: Dumbbell, path: '/workouts/new', color: 'flame' },
           { label: 'View Calendar', icon: Calendar, path: '/calendar', color: 'blue' },
           { label: 'My Groups', icon: Users, path: '/groups', color: 'green' },
-          { label: 'Set Goal', icon: Target, path: '/goals/new', color: 'purple' },
+          { label: 'Set Goal', icon: Target, path: '/goals', color: 'purple' },
         ].map((action) => (
           <Link
             key={action.label}
