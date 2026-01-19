@@ -44,13 +44,15 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-iron-950 flex">
-      {/* Guest Mode Banner */}
+      {/* Guest Mode Banner - positioned below mobile header */}
       {isGuest && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-flame-600 to-flame-500 text-white py-2 px-4 text-center text-sm">
+        <div className="fixed left-0 right-0 z-30 bg-gradient-to-r from-flame-600 to-flame-500 text-white py-2 px-4 text-center text-sm
+          top-14 lg:top-0">
           <Eye className="w-4 h-4 inline mr-2" />
-          Guest Mode - Data won't be saved. 
-          <button onClick={handleSignOut} className="underline ml-2 font-semibold hover:no-underline">
-            Sign in to save your progress
+          <span className="hidden sm:inline">Guest Mode - Data won't be saved. </span>
+          <span className="sm:hidden">Guest Mode </span>
+          <button onClick={handleSignOut} className="underline ml-1 font-semibold hover:no-underline">
+            Sign in
           </button>
         </div>
       )}
@@ -58,6 +60,7 @@ export default function Layout() {
       <aside
         className={`hidden lg:flex flex-col fixed inset-y-0 left-0 z-30
           ${sidebarOpen ? 'w-64' : 'w-20'} 
+          ${isGuest ? 'top-10' : 'top-0'}
           bg-iron-900/80 backdrop-blur-sm border-r border-iron-800
           transition-all duration-300`}
       >
@@ -155,26 +158,26 @@ export default function Layout() {
 
       {/* Mobile Header */}
       <header className="lg:hidden fixed top-0 inset-x-0 h-14 bg-iron-900/90 backdrop-blur-sm
-        border-b border-iron-800 z-40 flex items-center justify-between px-4 safe-top">
+        border-b border-iron-800 z-40 flex items-center justify-between px-3 safe-top">
         <Link to="/dashboard" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-plate bg-flame-500 flex items-center justify-center">
-            <Dumbbell className="w-4 h-4 text-white" />
+          <div className="w-9 h-9 rounded-plate bg-flame-500 flex items-center justify-center">
+            <Dumbbell className="w-5 h-5 text-white" />
           </div>
           <span className="font-display text-lg text-iron-50">BENCH ONLY</span>
         </Link>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <button
             onClick={toggleChat}
-            className="p-2 text-iron-400 hover:text-iron-100 transition-colors"
+            className="p-3 text-iron-400 hover:text-iron-100 active:bg-iron-800 rounded-lg transition-colors"
           >
-            <MessageCircle className="w-5 h-5" />
+            <MessageCircle className="w-6 h-6" />
           </button>
           <button
             onClick={() => setMobileMenuOpen(true)}
-            className="p-2 text-iron-400 hover:text-iron-100 transition-colors"
+            className="p-3 text-iron-400 hover:text-iron-100 active:bg-iron-800 rounded-lg transition-colors"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-6 h-6" />
           </button>
         </div>
       </header>
@@ -216,15 +219,15 @@ export default function Layout() {
                       key={item.path}
                       to={item.path}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-plate
+                      className={`flex items-center gap-4 px-4 py-4 rounded-plate
                         transition-colors
                         ${isActive
                           ? 'bg-flame-500/10 text-flame-500'
                           : 'text-iron-400 hover:text-iron-100 hover:bg-iron-800/50'
                         }`}
                     >
-                      <item.icon className="w-5 h-5" />
-                      <span className="font-medium">{item.label}</span>
+                      <item.icon className="w-6 h-6" />
+                      <span className="font-medium text-lg">{item.label}</span>
                     </Link>
                   );
                 })}
@@ -260,7 +263,7 @@ export default function Layout() {
       {/* Main Content */}
       <main className={`flex-1 transition-all duration-300
         ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}
-        ${isGuest ? 'pt-24 lg:pt-10' : 'pt-14 lg:pt-0'}`}
+        ${isGuest ? 'pt-24 lg:pt-16' : 'pt-14 lg:pt-0'}`}
       >
         <div className="min-h-screen p-4 lg:p-6">
           <Outlet />
