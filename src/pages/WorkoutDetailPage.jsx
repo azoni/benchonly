@@ -157,7 +157,7 @@ export default function WorkoutDetailPage() {
         <div className="flex flex-wrap gap-4 text-sm">
           <div className="flex items-center gap-2 text-iron-400">
             <Calendar className="w-4 h-4" />
-            <span>{format(new Date(workout.date), 'EEEE, MMMM d, yyyy')}</span>
+            <span>{workout.date ? format(workout.date.toDate ? workout.date.toDate() : new Date(workout.date), 'EEEE, MMMM d, yyyy') : 'No date'}</span>
           </div>
           
           {workout.duration && (
