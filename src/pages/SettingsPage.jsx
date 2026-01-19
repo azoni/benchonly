@@ -15,19 +15,41 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
-import { auth, storage } from '../services/firebase'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { auth } from '../services/firebase'
 
 export default function SettingsPage() {
   const { user, userProfile, updateProfile } = useAuth()
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoURL, setPhotoURL] = useState(userProfile?.photoURL || user?.photoURL)
   const fileInputRef = useRef(null)
   const [settings, setSettings] = useState({
     notifications: userProfile?.settings?.notifications ?? true,
     units: userProfile?.settings?.units || 'lbs',
     theme: userProfile?.settings?.theme || 'dark'
   })
+
+  const compressImage = (file, maxWidth = 200, quality = 0.8) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          const ratio = Math.min(maxWidth / img.width, maxWidth / img.height)
+          canvas.width = img.width * ratio
+          canvas.height = img.height * ratio
+          
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+          
+          resolve(canvas.toDataURL('image/jpeg', quality))
+        }
+        img.src = e.target.result
+      }
+      reader.readAsDataURL(file)
+    })
+  }
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -39,7 +61,7 @@ export default function SettingsPage() {
       return
     }
 
-    // Validate file size (max 5MB)
+    // Validate file size (max 5MB before compression)
     if (file.size > 5 * 1024 * 1024) {
       alert('Image must be less than 5MB')
       return
@@ -47,27 +69,15 @@ export default function SettingsPage() {
 
     setUploadingPhoto(true)
     try {
-      // Create a reference to the file in Firebase Storage
-      const storageRef = ref(storage, `profile-photos/${user.uid}/${Date.now()}-${file.name}`)
+      // Compress image to small Base64
+      const base64Image = await compressImage(file, 200, 0.8)
       
-      // Upload the file
-      await uploadBytes(storageRef, file)
-      
-      // Get the download URL
-      const downloadURL = await getDownloadURL(storageRef)
-      
-      // Update Firebase Auth profile
-      await updateAuthProfile(auth.currentUser, {
-        photoURL: downloadURL
-      })
-      
-      // Update Firestore profile
+      // Update Firestore profile with Base64 image
       await updateProfile({
-        photoURL: downloadURL
+        photoURL: base64Image
       })
       
-      // Force reload to show new photo
-      window.location.reload()
+      setPhotoURL(base64Image)
     } catch (error) {
       console.error('Error uploading photo:', error)
       alert('Failed to upload photo. Please try again.')
@@ -133,10 +143,10 @@ export default function SettingsPage() {
       <div className="card-steel p-5 mb-6">
         <div className="flex items-center gap-4">
           <div className="relative">
-            {user?.photoURL ? (
+            {photoURL ? (
               <img 
-                src={user.photoURL} 
-                alt={user.displayName}
+                src={photoURL} 
+                alt={user?.displayName}
                 className="w-16 h-16 rounded-full object-cover"
               />
             ) : (
