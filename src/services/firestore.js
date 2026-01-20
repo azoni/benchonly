@@ -703,6 +703,55 @@ export const tokenUsageService = {
   }
 };
 
+// ============ HEALTH TRACKING ============
+export const healthService = {
+  async create(userId, entryData) {
+    const docRef = await addDoc(collection(db, 'health'), {
+      ...entryData,
+      userId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return { id: docRef.id, ...entryData, userId };
+  },
+
+  async update(entryId, updates) {
+    const docRef = doc(db, 'health', entryId);
+    await updateDoc(docRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+    return { id: entryId, ...updates };
+  },
+
+  async getByUser(userId, limitCount = 30) {
+    const q = query(
+      collection(db, 'health'),
+      where('userId', '==', userId),
+      orderBy('date', 'desc'),
+      limit(limitCount)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  },
+
+  async getByDateRange(userId, startDate, endDate) {
+    const q = query(
+      collection(db, 'health'),
+      where('userId', '==', userId),
+      where('date', '>=', startDate),
+      where('date', '<=', endDate),
+      orderBy('date', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  },
+
+  async delete(entryId) {
+    await deleteDoc(doc(db, 'health', entryId));
+  }
+};
+
 // ============ GROUP WORKOUTS ============
 export const groupWorkoutService = {
   // Create a workout assigned to a specific group member

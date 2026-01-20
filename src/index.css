@@ -89,6 +89,19 @@
            transition-all duration-200;
   }
   
+  /* Date input calendar icon */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+  }
+  
+  input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    filter: invert(0.9);
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  
   /* Badge */
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium

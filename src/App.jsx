@@ -13,6 +13,7 @@ import GroupsPage from './pages/GroupsPage'
 import GroupDetailPage from './pages/GroupDetailPage'
 import GoalsPage from './pages/GoalsPage'
 import ToolsPage from './pages/ToolsPage'
+import HealthPage from './pages/HealthPage'
 import UsagePage from './pages/UsagePage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
@@ -114,6 +115,7 @@ export default function App() {
         <Route path="groups/:id" element={<GroupDetailPage />} />
         <Route path="goals" element={<GoalsPage />} />
         <Route path="tools" element={<ToolsPage />} />
+        <Route path="health" element={<HealthPage />} />
         <Route path="usage" element={<UsagePage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="admin" element={<AdminPage />} />

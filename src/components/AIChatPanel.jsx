@@ -21,8 +21,12 @@ export default function AIChatPanel() {
   const [loading, setLoading] = useState(false);
   const [savingWorkout, setSavingWorkout] = useState(null);
   const [context, setContext] = useState({ recentWorkouts: [], goals: [] });
+  const [rateLimitInfo, setRateLimitInfo] = useState({ count: 0, resetTime: null });
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  const RATE_LIMIT = 20; // requests per hour
+  const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour in ms
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -72,17 +76,58 @@ export default function AIChatPanel() {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
+  const checkRateLimit = () => {
+    const now = Date.now();
+    const stored = localStorage.getItem('ai_rate_limit');
+    let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
+    
+    // Reset if window has passed
+    if (now > rateData.resetTime) {
+      rateData = { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
+    }
+    
+    setRateLimitInfo(rateData);
+    return rateData.count < RATE_LIMIT;
+  };
 
-    const userMessage = input.trim();
-    setInput('');
-    setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
+  const incrementRateLimit = () => {
+    const now = Date.now();
+    const stored = localStorage.getItem('ai_rate_limit');
+    let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
+    
+    if (now > rateData.resetTime) {
+      rateData = { count: 1, resetTime: now + RATE_LIMIT_WINDOW };
+    } else {
+      rateData.count += 1;
+    }
+    
+    localStorage.setItem('ai_rate_limit', JSON.stringify(rateData));
+    setRateLimitInfo(rateData);
+  };
+
+  const sendMessage = async (messageText) => {
+    if (!messageText.trim() || loading) return;
+    
+    // Check rate limit
+    if (!checkRateLimit()) {
+      const minutesLeft = Math.ceil((rateLimitInfo.resetTime - Date.now()) / 1000 / 60);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'user', content: messageText },
+        {
+          role: 'assistant',
+          content: `You've reached the limit of ${RATE_LIMIT} requests per hour. Please try again in ${minutesLeft} minutes.`,
+        },
+      ]);
+      return;
+    }
+
+    setMessages((prev) => [...prev, { role: 'user', content: messageText }]);
     setLoading(true);
 
     try {
-      const response = await api.askAssistant(userMessage, {
+      incrementRateLimit();
+      const response = await api.askAssistant(messageText, {
         userId: user?.uid,
         recentWorkouts: context.recentWorkouts,
         goals: context.goals,
@@ -93,7 +138,7 @@ export default function AIChatPanel() {
         { 
           role: 'assistant', 
           content: response.message,
-          workout: response.workout // Include workout data if present
+          workout: response.workout
         },
       ]);
     } catch (error) {
@@ -107,6 +152,18 @@ export default function AIChatPanel() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || loading) return;
+    const messageText = input.trim();
+    setInput('');
+    await sendMessage(messageText);
+  };
+
+  const handleQuickAction = async (action) => {
+    await sendMessage(action);
   };
 
   const handleSaveWorkout = async (workout, messageIndex) => {
@@ -322,18 +379,19 @@ export default function AIChatPanel() {
             </div>
 
             {/* Quick Actions */}
-            {messages.length <= 2 && (
+            {messages.length <= 2 && !loading && (
               <div className="px-4 pb-2">
                 <p className="text-xs text-iron-500 mb-2">Quick actions</p>
                 <div className="flex flex-wrap gap-2">
                   {quickActions.map((action, index) => (
                     <button
                       key={index}
-                      onClick={() => setInput(action)}
+                      onClick={() => handleQuickAction(action)}
+                      disabled={loading}
                       className="px-3 py-1.5 text-xs bg-iron-800 text-iron-300
                         border border-iron-700 rounded-full
                         hover:border-flame-500/50 hover:text-iron-100
-                        transition-colors"
+                        transition-colors disabled:opacity-50"
                     >
                       {action}
                     </button>
