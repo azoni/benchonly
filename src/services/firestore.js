@@ -17,6 +17,33 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 
+// ============ USERS ============
+export const userService = {
+  async get(userId) {
+    const docSnap = await getDoc(doc(db, 'users', userId));
+    if (docSnap.exists()) {
+      return { uid: docSnap.id, ...docSnap.data() };
+    }
+    return null;
+  },
+
+  async getAll() {
+    const snapshot = await getDocs(collection(db, 'users'));
+    return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+  },
+
+  async search(searchTerm) {
+    // Firestore doesn't support full-text search, so we fetch all and filter client-side
+    // For production, consider Algolia or similar
+    const users = await this.getAll();
+    const term = searchTerm.toLowerCase();
+    return users.filter(u => 
+      u.displayName?.toLowerCase().includes(term) ||
+      u.email?.toLowerCase().includes(term)
+    );
+  }
+};
+
 // ============ WORKOUTS ============
 export const workoutService = {
   // Create a workout for yourself
@@ -251,10 +278,22 @@ export const workoutService = {
 
 // ============ GROUPS ============
 export const groupService = {
+  // Generate a random invite code
+  generateInviteCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  },
+
   async create(creatorId, groupData) {
+    const inviteCode = this.generateInviteCode();
     const docRef = await addDoc(collection(db, 'groups'), {
       ...groupData,
       creatorId,
+      inviteCode,
       members: [creatorId],
       admins: [creatorId],
       createdAt: serverTimestamp(),
@@ -267,7 +306,7 @@ export const groupService = {
       groups: arrayUnion(docRef.id),
     });
     
-    return { id: docRef.id, ...groupData };
+    return { id: docRef.id, inviteCode, ...groupData };
   },
 
   async get(groupId) {
@@ -305,6 +344,29 @@ export const groupService = {
     );
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  },
+
+  async findByInviteCode(code) {
+    const q = query(
+      collection(db, 'groups'),
+      where('inviteCode', '==', code.toUpperCase())
+    );
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...doc.data() };
+  },
+
+  async joinByCode(code, userId) {
+    const group = await this.findByInviteCode(code);
+    if (!group) {
+      throw new Error('Invalid invite code');
+    }
+    if (group.members?.includes(userId)) {
+      throw new Error('Already a member of this group');
+    }
+    await this.addMember(group.id, userId);
+    return group;
   },
 
   async update(groupId, updates) {

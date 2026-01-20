@@ -22,9 +22,10 @@ import {
   X,
   ChevronDown,
   ChevronRight,
-  Edit2
+  Edit2,
+  Search
 } from 'lucide-react'
-import { groupService, workoutService, attendanceService, groupWorkoutService } from '../services/firestore'
+import { groupService, workoutService, attendanceService, groupWorkoutService, userService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
 
 // Helper to safely parse dates from Firestore
@@ -77,6 +78,14 @@ export default function GroupDetailPage() {
   const [showMenu, setShowMenu] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [activeTab, setActiveTab] = useState('members')
+  
+  // Invite modal state
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteTab, setInviteTab] = useState('code') // 'code' | 'search'
+  const [userSearch, setUserSearch] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [inviting, setInviting] = useState(null)
   
   // Workout creation state
   const [showWorkoutModal, setShowWorkoutModal] = useState(false)
@@ -132,6 +141,43 @@ export default function GroupDetailPage() {
     await navigator.clipboard.writeText(group.inviteCode)
     setCodeCopied(true)
     setTimeout(() => setCodeCopied(false), 2000)
+  }
+
+  const handleSearchUsers = async (term) => {
+    setUserSearch(term)
+    if (term.length < 2) {
+      setSearchResults([])
+      return
+    }
+    setSearching(true)
+    try {
+      const results = await userService.search(term)
+      // Filter out users already in the group
+      const filtered = results.filter(u => !group?.members?.includes(u.uid))
+      setSearchResults(filtered)
+    } catch (error) {
+      console.error('Error searching users:', error)
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  const handleInviteUser = async (userId) => {
+    setInviting(userId)
+    try {
+      await groupService.addMember(id, userId)
+      // Refresh member list
+      const memberData = await groupService.getMemberDetails([...group.members, userId])
+      setMembers(memberData)
+      setGroup(prev => ({ ...prev, members: [...prev.members, userId] }))
+      // Remove from search results
+      setSearchResults(prev => prev.filter(u => u.uid !== userId))
+    } catch (error) {
+      console.error('Error inviting user:', error)
+      alert('Failed to invite user')
+    } finally {
+      setInviting(null)
+    }
   }
 
   const handleLeaveGroup = async () => {
@@ -662,7 +708,7 @@ export default function GroupDetailPage() {
           
           {isAdmin && (
             <button
-              onClick={copyInviteCode}
+              onClick={() => setShowInviteModal(true)}
               className="w-full card-steel p-4 flex items-center justify-center gap-2 text-iron-400 hover:text-iron-200 hover:border-iron-600 transition-colors"
             >
               <UserPlus className="w-5 h-5" />
@@ -1041,6 +1087,149 @@ export default function GroupDetailPage() {
               >
                 {creatingWorkout ? 'Creating...' : `Assign to ${selectedMembers.length} Member${selectedMembers.length !== 1 ? 's' : ''}`}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Members Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-iron-900 rounded-xl w-full max-w-md max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-iron-800 flex items-center justify-between">
+              <h2 className="text-xl font-display text-iron-100">Invite Members</h2>
+              <button
+                onClick={() => {
+                  setShowInviteModal(false)
+                  setUserSearch('')
+                  setSearchResults([])
+                }}
+                className="p-2 text-iron-400 hover:text-iron-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-iron-800">
+              <button
+                onClick={() => setInviteTab('code')}
+                className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                  inviteTab === 'code'
+                    ? 'text-flame-400 border-b-2 border-flame-400'
+                    : 'text-iron-400 hover:text-iron-200'
+                }`}
+              >
+                Share Code
+              </button>
+              <button
+                onClick={() => setInviteTab('search')}
+                className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                  inviteTab === 'search'
+                    ? 'text-flame-400 border-b-2 border-flame-400'
+                    : 'text-iron-400 hover:text-iron-200'
+                }`}
+              >
+                Search Users
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {inviteTab === 'code' ? (
+                <div className="space-y-4">
+                  <p className="text-iron-400 text-sm">
+                    Share this code with people you want to invite to the group.
+                  </p>
+                  
+                  <div className="bg-iron-800/50 rounded-xl p-6 text-center">
+                    <p className="text-3xl font-mono font-bold text-iron-100 tracking-widest mb-4">
+                      {group?.inviteCode || 'No code'}
+                    </p>
+                    <button
+                      onClick={copyInviteCode}
+                      className="btn-secondary flex items-center gap-2 mx-auto"
+                    >
+                      {codeCopied ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copy Code
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <p className="text-iron-500 text-xs text-center">
+                    Members can join using this code in Groups → Join Group
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-iron-500" />
+                    <input
+                      type="text"
+                      value={userSearch}
+                      onChange={(e) => handleSearchUsers(e.target.value)}
+                      placeholder="Search by name or email..."
+                      className="input-field w-full pl-10 py-3"
+                      autoFocus
+                    />
+                  </div>
+
+                  {searching ? (
+                    <div className="py-8 text-center">
+                      <div className="w-6 h-6 border-2 border-flame-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                    </div>
+                  ) : searchResults.length > 0 ? (
+                    <div className="space-y-2">
+                      {searchResults.map(u => (
+                        <div
+                          key={u.uid}
+                          className="flex items-center justify-between p-3 bg-iron-800/50 rounded-lg"
+                        >
+                          <div className="flex items-center gap-3">
+                            {u.photoURL ? (
+                              <img src={u.photoURL} alt="" className="w-10 h-10 rounded-full" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-iron-700 flex items-center justify-center">
+                                <span className="text-iron-400 font-medium">
+                                  {u.displayName?.[0] || '?'}
+                                </span>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-iron-100 font-medium">{u.displayName}</p>
+                              <p className="text-iron-500 text-sm">{u.email}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleInviteUser(u.uid)}
+                            disabled={inviting === u.uid}
+                            className="btn-primary text-sm py-2 px-4 disabled:opacity-50"
+                          >
+                            {inviting === u.uid ? 'Adding...' : 'Add'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : userSearch.length >= 2 ? (
+                    <div className="py-8 text-center">
+                      <Users className="w-10 h-10 text-iron-700 mx-auto mb-2" />
+                      <p className="text-iron-500">No users found</p>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center">
+                      <Search className="w-10 h-10 text-iron-700 mx-auto mb-2" />
+                      <p className="text-iron-500">Type to search for users</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

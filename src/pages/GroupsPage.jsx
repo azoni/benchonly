@@ -74,6 +74,7 @@ export default function GroupsPage() {
       }
     } catch (error) {
       console.error('Error joining group:', error)
+      alert(error.message || 'Failed to join group')
     } finally {
       setJoining(false)
     }
