@@ -33,6 +33,12 @@ const ONBOARDING_STEPS = [
     color: 'purple'
   },
   {
+    icon: Sparkles,
+    title: 'AI Training Assistant',
+    description: 'Get personalized advice, have AI generate workouts based on your history, and add recommended workouts directly to your log.',
+    color: 'flame'
+  },
+  {
     icon: Users,
     title: 'Train with Groups',
     description: 'Coaches can create groups and prescribe personalized workouts for each member with specific weights and reps.',
@@ -48,7 +54,7 @@ const ONBOARDING_STEPS = [
     icon: Calculator,
     title: 'Training Tools',
     description: 'Calculate your 1RM, plan working weights, and optimize your training.',
-    color: 'flame'
+    color: 'green'
   }
 ]
 
