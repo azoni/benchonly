@@ -27,6 +27,29 @@ import {
 import { groupService, workoutService, attendanceService, groupWorkoutService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
 
+// Helper to safely parse dates from Firestore
+const safeFormatDate = (date, formatStr = 'MMM d, yyyy') => {
+  if (!date) return ''
+  try {
+    let dateObj
+    if (date?.toDate) {
+      dateObj = date.toDate()
+    } else if (date?.seconds) {
+      dateObj = new Date(date.seconds * 1000)
+    } else if (typeof date === 'string' || typeof date === 'number') {
+      dateObj = new Date(date)
+    } else if (date instanceof Date) {
+      dateObj = date
+    } else {
+      return ''
+    }
+    if (isNaN(dateObj.getTime())) return ''
+    return format(dateObj, formatStr)
+  } catch {
+    return ''
+  }
+}
+
 const COMMON_EXERCISES = [
   'Bench Press',
   'Incline Bench Press',
@@ -334,7 +357,14 @@ export default function GroupDetailPage() {
   const getMemberAttendance = (memberId) => {
     const records = attendance[memberId] || []
     return weekDays.map(day => {
-      const record = records.find(r => isSameDay(new Date(r.date), day))
+      const record = records.find(r => {
+        try {
+          const recordDate = r.date?.toDate ? r.date.toDate() : new Date(r.date)
+          return isSameDay(recordDate, day)
+        } catch {
+          return false
+        }
+      })
       return record?.status || null
     })
   }
@@ -353,7 +383,15 @@ export default function GroupDetailPage() {
     let streak = 0
     const sorted = records
       .filter(r => r.status === 'present')
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .sort((a, b) => {
+        try {
+          const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date)
+          const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date)
+          return dateB - dateA
+        } catch {
+          return 0
+        }
+      })
     
     // Simple streak count for demo
     return sorted.length
@@ -445,7 +483,7 @@ export default function GroupDetailPage() {
               {group.name}
             </h1>
             <p className="text-iron-500 text-sm">
-              {members.length} member{members.length !== 1 ? 's' : ''} · Created {format(new Date(group.createdAt), 'MMM d, yyyy')}
+              {members.length} member{members.length !== 1 ? 's' : ''} · Created {safeFormatDate(group.createdAt)}
             </p>
           </div>
         </div>
@@ -537,7 +575,7 @@ export default function GroupDetailPage() {
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="font-medium text-iron-100">{workout.name}</h3>
                       <span className="text-sm text-iron-500">
-                        {workout.date?.toDate ? format(workout.date.toDate(), 'MMM d') : ''}
+                        {safeFormatDate(workout.date, 'MMM d')}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">

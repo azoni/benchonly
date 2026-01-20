@@ -11,9 +11,10 @@ import {
   Calendar as CalendarIcon,
   Repeat,
   Target,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { workoutService, scheduleService, attendanceService, goalService } from '../services/firestore';
+import { workoutService, scheduleService, attendanceService, goalService, groupWorkoutService } from '../services/firestore';
 import {
   format,
   startOfMonth,
@@ -34,6 +35,7 @@ export default function CalendarPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [workouts, setWorkouts] = useState([]);
+  const [groupWorkouts, setGroupWorkouts] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [goals, setGoals] = useState([]);
@@ -55,6 +57,7 @@ export default function CalendarPage() {
       if (isGuest) {
         const { getSampleWorkouts, SAMPLE_GOALS } = await import('../context/AuthContext');
         setWorkouts(getSampleWorkouts());
+        setGroupWorkouts([]);
         setSchedules([]);
         setAttendance([]);
         setGoals(SAMPLE_GOALS.filter(g => g.status === 'active'));
@@ -62,14 +65,16 @@ export default function CalendarPage() {
         return;
       }
 
-      const [workoutsData, schedulesData, attendanceData, goalsData] = await Promise.all([
+      const [workoutsData, groupWorkoutsData, schedulesData, attendanceData, goalsData] = await Promise.all([
         workoutService.getByDateRange(user.uid, start, end),
+        groupWorkoutService.getByUser(user.uid),
         scheduleService.getByUser(user.uid),
         attendanceService.getByUser(user.uid, start, end),
         goalService.getByUser(user.uid),
       ]);
 
       setWorkouts(workoutsData);
+      setGroupWorkouts(groupWorkoutsData);
       setSchedules(schedulesData);
       setAttendance(attendanceData);
       setGoals(goalsData.filter(g => g.status === 'active'));
@@ -103,6 +108,16 @@ export default function CalendarPage() {
       return format(workoutDate, 'yyyy-MM-dd') === dateStr;
     });
 
+    // Check for group workout assigned to user
+    const hasGroupWorkout = groupWorkouts.some((w) => {
+      try {
+        const workoutDate = w.date?.toDate ? w.date.toDate() : new Date(w.date);
+        return format(workoutDate, 'yyyy-MM-dd') === dateStr;
+      } catch {
+        return false;
+      }
+    });
+
     // Check for vacation
     const isVacation = attendance.some(
       (a) => a.date === dateStr && a.status === 'vacation'
@@ -122,7 +137,7 @@ export default function CalendarPage() {
       return s.date === dateStr;
     });
 
-    return { hasWorkout, isVacation, isMissed, isScheduled };
+    return { hasWorkout, hasGroupWorkout, isVacation, isMissed, isScheduled };
   };
 
   const getSelectedDateWorkouts = () => {
@@ -130,6 +145,18 @@ export default function CalendarPage() {
     return workouts.filter((w) => {
       const workoutDate = w.date?.toDate ? w.date.toDate() : new Date(w.date);
       return format(workoutDate, 'yyyy-MM-dd') === dateStr;
+    });
+  };
+
+  const getSelectedDateGroupWorkouts = () => {
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    return groupWorkouts.filter((w) => {
+      try {
+        const workoutDate = w.date?.toDate ? w.date.toDate() : new Date(w.date);
+        return format(workoutDate, 'yyyy-MM-dd') === dateStr;
+      } catch {
+        return false;
+      }
     });
   };
 
@@ -167,6 +194,7 @@ export default function CalendarPage() {
 
   const days = getDaysInMonth();
   const selectedWorkouts = getSelectedDateWorkouts();
+  const selectedGroupWorkouts = getSelectedDateGroupWorkouts();
   const selectedSchedule = getSelectedDateSchedule();
 
   return (
@@ -244,6 +272,9 @@ export default function CalendarPage() {
                         {status.hasWorkout && (
                           <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
                         )}
+                        {status.hasGroupWorkout && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-cyan-500" title="Group Workout" />
+                        )}
                         {status.isScheduled && !status.hasWorkout && (
                           <div className="w-1.5 h-1.5 rounded-full bg-flame-500/50" />
                         )}
@@ -268,6 +299,10 @@ export default function CalendarPage() {
               <div className="flex items-center gap-2 text-xs text-iron-400">
                 <div className="w-2 h-2 rounded-full bg-green-500" />
                 Completed
+              </div>
+              <div className="flex items-center gap-2 text-xs text-iron-400">
+                <div className="w-2 h-2 rounded-full bg-cyan-500" />
+                Group
               </div>
               <div className="flex items-center gap-2 text-xs text-iron-400">
                 <div className="w-2 h-2 rounded-full bg-flame-500/50" />
@@ -340,6 +375,38 @@ export default function CalendarPage() {
               </div>
             )}
 
+            {/* Group Workouts */}
+            {selectedGroupWorkouts.length > 0 && (
+              <div>
+                <h4 className="text-xs text-iron-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Users className="w-3.5 h-3.5" />
+                  Group Workouts
+                </h4>
+                {selectedGroupWorkouts.map((workout) => (
+                  <a
+                    key={workout.id}
+                    href={`/workouts/group/${workout.id}`}
+                    className="flex items-center gap-3 p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-plate mb-2 hover:border-cyan-500/40 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-plate bg-cyan-500/20 flex items-center justify-center">
+                      <Users className="w-4 h-4 text-cyan-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-iron-100">
+                        {workout.name || 'Group Workout'}
+                      </p>
+                      <p className="text-xs text-iron-500">
+                        {workout.exercises?.length || 0} exercises · {workout.status === 'completed' ? 'Completed' : 'Assigned'}
+                      </p>
+                    </div>
+                    {workout.status === 'completed' && (
+                      <Check className="w-4 h-4 text-green-400" />
+                    )}
+                  </a>
+                ))}
+              </div>
+            )}
+
             {/* Completed Workouts */}
             {selectedWorkouts.length > 0 && (
               <div>
@@ -369,7 +436,7 @@ export default function CalendarPage() {
             )}
 
             {/* Empty State */}
-            {selectedSchedule.length === 0 && selectedWorkouts.length === 0 && (
+            {selectedSchedule.length === 0 && selectedWorkouts.length === 0 && selectedGroupWorkouts.length === 0 && (
               <div className="py-8 text-center">
                 <CalendarIcon className="w-10 h-10 text-iron-700 mx-auto mb-2" />
                 <p className="text-sm text-iron-500">Nothing scheduled</p>

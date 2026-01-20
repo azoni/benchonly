@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage'
 import WorkoutsPage from './pages/WorkoutsPage'
 import NewWorkoutPage from './pages/NewWorkoutPage'
 import WorkoutDetailPage from './pages/WorkoutDetailPage'
+import GroupWorkoutPage from './pages/GroupWorkoutPage'
 import CalendarPage from './pages/CalendarPage'
 import GroupsPage from './pages/GroupsPage'
 import GroupDetailPage from './pages/GroupDetailPage'
@@ -106,6 +107,7 @@ export default function App() {
         <Route path="workouts/new" element={<NewWorkoutPage />} />
         <Route path="workouts/:id" element={<WorkoutDetailPage />} />
         <Route path="workouts/:id/edit" element={<NewWorkoutPage />} />
+        <Route path="workouts/group/:id" element={<GroupWorkoutPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="groups" element={<GroupsPage />} />
         <Route path="groups/:id" element={<GroupDetailPage />} />
