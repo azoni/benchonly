@@ -37,11 +37,19 @@ export default function GoalsPage() {
   const [editingGoal, setEditingGoal] = useState(null)
   const [formData, setFormData] = useState({
     lift: '',
-    currentWeight: '',
-    targetWeight: '',
-    targetDate: ''
+    metricType: 'weight', // weight, reps, time
+    currentValue: '',
+    targetValue: '',
+    targetDate: '',
+    notes: ''
   })
   const [saving, setSaving] = useState(false)
+
+  const METRIC_LABELS = {
+    weight: { label: 'Weight', unit: 'lbs', placeholder: '225' },
+    reps: { label: 'Reps', unit: 'reps', placeholder: '10' },
+    time: { label: 'Time', unit: 'seconds', placeholder: '60' }
+  }
 
   useEffect(() => {
     async function fetchGoals() {
@@ -69,17 +77,21 @@ export default function GoalsPage() {
       setEditingGoal(goal)
       setFormData({
         lift: goal.lift,
-        currentWeight: goal.currentWeight.toString(),
-        targetWeight: goal.targetWeight.toString(),
-        targetDate: goal.targetDate
+        metricType: goal.metricType || 'weight',
+        currentValue: (goal.currentWeight || goal.currentValue || '').toString(),
+        targetValue: (goal.targetWeight || goal.targetValue || '').toString(),
+        targetDate: goal.targetDate,
+        notes: goal.notes || ''
       })
     } else {
       setEditingGoal(null)
       setFormData({
         lift: '',
-        currentWeight: '',
-        targetWeight: '',
-        targetDate: ''
+        metricType: 'weight',
+        currentValue: '',
+        targetValue: '',
+        targetDate: '',
+        notes: ''
       })
     }
     setShowModal(true)
@@ -87,17 +99,24 @@ export default function GoalsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!formData.lift || !formData.targetWeight || !formData.targetDate) return
+    if (!formData.lift || !formData.targetValue || !formData.targetDate) return
     
     setSaving(true)
     try {
-      const currentWt = parseInt(formData.currentWeight) || 0
+      const currentVal = parseInt(formData.currentValue) || 0
+      const targetVal = parseInt(formData.targetValue)
       const goalData = {
         lift: formData.lift,
-        currentWeight: currentWt,
-        startWeight: editingGoal?.startWeight || currentWt,
-        targetWeight: parseInt(formData.targetWeight),
+        metricType: formData.metricType,
+        currentValue: currentVal,
+        startValue: editingGoal?.startValue || currentVal,
+        targetValue: targetVal,
+        // Keep legacy fields for backwards compatibility
+        currentWeight: formData.metricType === 'weight' ? currentVal : undefined,
+        startWeight: formData.metricType === 'weight' ? (editingGoal?.startWeight || currentVal) : undefined,
+        targetWeight: formData.metricType === 'weight' ? targetVal : undefined,
         targetDate: formData.targetDate,
+        notes: formData.notes || '',
         status: 'active'
       }
       
@@ -151,6 +170,12 @@ export default function GoalsPage() {
   }
 
   const markComplete = async (goal) => {
+    if (isGuest) {
+      setGoals(prev => prev.map(g => 
+        g.id === goal.id ? { ...g, status: 'completed' } : g
+      ))
+      return
+    }
     try {
       await goalService.update(goal.id, { 
         status: 'completed',
@@ -164,20 +189,28 @@ export default function GoalsPage() {
     }
   }
 
+  const getGoalValues = (goal) => {
+    // Support both old (weight-only) and new (metric types) formats
+    const metricType = goal.metricType || 'weight'
+    const startVal = goal.startValue ?? goal.startWeight ?? goal.currentValue ?? goal.currentWeight ?? 0
+    const currentVal = goal.currentValue ?? goal.currentWeight ?? startVal
+    const targetVal = goal.targetValue ?? goal.targetWeight ?? 0
+    const unit = METRIC_LABELS[metricType]?.unit || 'lbs'
+    return { metricType, startVal, currentVal, targetVal, unit }
+  }
+
   const calculateProgress = (goal) => {
-    const startWeight = goal.startWeight || goal.currentWeight || 0
-    const currentWeight = goal.currentWeight || startWeight
-    const targetWeight = goal.targetWeight || 0
+    const { startVal, currentVal, targetVal } = getGoalValues(goal)
     
     // If already at or past target, return 100
-    if (currentWeight >= targetWeight) return 100
+    if (currentVal >= targetVal) return 100
     
     // If no progress made yet (current equals start), return 0
-    if (currentWeight <= startWeight) return 0
+    if (currentVal <= startVal) return 0
     
     // Calculate progress as percentage of the journey from start to target
-    const totalGain = targetWeight - startWeight
-    const currentGain = currentWeight - startWeight
+    const totalGain = targetVal - startVal
+    const currentGain = currentVal - startVal
     
     if (totalGain <= 0) return 0
     return Math.min(100, Math.round((currentGain / totalGain) * 100))
@@ -282,6 +315,9 @@ export default function GoalsPage() {
                             ({getDaysRemaining(goal.targetDate)})
                           </span>
                         </p>
+                        {goal.notes && (
+                          <p className="text-xs text-iron-500 mt-1 italic">{goal.notes}</p>
+                        )}
                       </div>
                       
                       <div className="flex items-center gap-2">
@@ -309,27 +345,39 @@ export default function GoalsPage() {
                     
                     {/* Progress */}
                     <div className="mb-4">
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-iron-400">
-                          Current: <span className="text-iron-200 font-medium">{goal.currentWeight || 0} lbs</span>
-                        </span>
-                        <span className="text-iron-400">
-                          Target: <span className="text-flame-400 font-medium">{goal.targetWeight} lbs</span>
-                        </span>
-                      </div>
-                      <div className="h-3 bg-iron-800 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-flame-600 to-flame-500 rounded-full transition-all duration-500"
-                          style={{ width: `${calculateProgress(goal)}%` }}
-                        />
-                      </div>
+                      {(() => {
+                        const { currentVal, targetVal, unit } = getGoalValues(goal)
+                        return (
+                          <>
+                            <div className="flex justify-between text-sm mb-2">
+                              <span className="text-iron-400">
+                                Current: <span className="text-iron-200 font-medium">{currentVal} {unit}</span>
+                              </span>
+                              <span className="text-iron-400">
+                                Target: <span className="text-flame-400 font-medium">{targetVal} {unit}</span>
+                              </span>
+                            </div>
+                            <div className="h-3 bg-iron-800 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-gradient-to-r from-flame-600 to-flame-500 rounded-full transition-all duration-500"
+                                style={{ width: `${calculateProgress(goal)}%` }}
+                              />
+                            </div>
+                          </>
+                        )
+                      })()}
                     </div>
                     
-                    {/* Weight to gain */}
+                    {/* Value to gain */}
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-iron-500">
-                        {goal.targetWeight - (goal.currentWeight || 0)} lbs to go
-                      </span>
+                      {(() => {
+                        const { currentVal, targetVal, unit } = getGoalValues(goal)
+                        return (
+                          <span className="text-iron-500">
+                            {targetVal - currentVal} {unit} to go
+                          </span>
+                        )
+                      })()}
                       <span className="flex items-center gap-1 text-iron-400">
                         <TrendingUp className="w-4 h-4" />
                         {calculateProgress(goal)}% there
@@ -349,27 +397,30 @@ export default function GoalsPage() {
                 Completed
               </h2>
               <div className="space-y-3">
-                {completedGoals.map(goal => (
-                  <div key={goal.id} className="card-steel p-4 flex items-center gap-4 opacity-75">
-                    <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                      <Check className="w-5 h-5 text-green-400" />
+                {completedGoals.map(goal => {
+                  const { targetVal, unit } = getGoalValues(goal)
+                  return (
+                    <div key={goal.id} className="card-steel p-4 flex items-center gap-4 opacity-75">
+                      <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                        <Check className="w-5 h-5 text-green-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-iron-200">
+                          {goal.lift}
+                        </h3>
+                        <p className="text-sm text-iron-500">
+                          {targetVal} {unit} achieved
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDelete(goal.id)}
+                        className="p-2 text-iron-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-iron-200">
-                        {goal.lift}
-                      </h3>
-                      <p className="text-sm text-iron-500">
-                        {goal.targetWeight} lbs achieved
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleDelete(goal.id)}
-                      className="p-2 text-iron-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -383,7 +434,7 @@ export default function GoalsPage() {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setShowModal(false)}
           />
-          <div className="relative bg-iron-900 border border-iron-700 rounded-2xl p-6 w-full max-w-md animate-scale-in">
+          <div className="relative bg-iron-900 border border-iron-700 rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto animate-scale-in">
             <button
               onClick={() => setShowModal(false)}
               className="absolute top-4 right-4 text-iron-500 hover:text-iron-300"
@@ -396,47 +447,71 @@ export default function GoalsPage() {
             </h2>
             
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Lift Selection */}
+              {/* Exercise/Lift Selection */}
               <div>
                 <label className="block text-sm font-medium text-iron-400 mb-2">
-                  Lift
+                  Exercise *
                 </label>
                 <select
                   value={formData.lift}
                   onChange={(e) => setFormData(prev => ({ ...prev, lift: e.target.value }))}
                   className="input-field w-full"
+                  required
                 >
-                  <option value="">Select a lift</option>
+                  <option value="">Select an exercise</option>
                   {COMMON_LIFTS.map(lift => (
                     <option key={lift} value={lift}>{lift}</option>
                   ))}
                 </select>
               </div>
-              
-              {/* Current Weight */}
+
+              {/* Metric Type */}
               <div>
                 <label className="block text-sm font-medium text-iron-400 mb-2">
-                  Current Weight (lbs)
+                  Goal Type
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {Object.entries(METRIC_LABELS).map(([key, { label }]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, metricType: key }))}
+                      className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        formData.metricType === key
+                          ? 'bg-flame-500 text-white'
+                          : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Current Value */}
+              <div>
+                <label className="block text-sm font-medium text-iron-400 mb-2">
+                  Current {METRIC_LABELS[formData.metricType].label} ({METRIC_LABELS[formData.metricType].unit})
                 </label>
                 <input
                   type="number"
-                  value={formData.currentWeight}
-                  onChange={(e) => setFormData(prev => ({ ...prev, currentWeight: e.target.value }))}
-                  placeholder="e.g., 185"
+                  value={formData.currentValue}
+                  onChange={(e) => setFormData(prev => ({ ...prev, currentValue: e.target.value }))}
+                  placeholder={`e.g., ${METRIC_LABELS[formData.metricType].placeholder}`}
                   className="input-field w-full"
                 />
               </div>
               
-              {/* Target Weight */}
+              {/* Target Value */}
               <div>
                 <label className="block text-sm font-medium text-iron-400 mb-2">
-                  Target Weight (lbs) *
+                  Target {METRIC_LABELS[formData.metricType].label} ({METRIC_LABELS[formData.metricType].unit}) *
                 </label>
                 <input
                   type="number"
-                  value={formData.targetWeight}
-                  onChange={(e) => setFormData(prev => ({ ...prev, targetWeight: e.target.value }))}
-                  placeholder="e.g., 225"
+                  value={formData.targetValue}
+                  onChange={(e) => setFormData(prev => ({ ...prev, targetValue: e.target.value }))}
+                  placeholder={`e.g., ${parseInt(METRIC_LABELS[formData.metricType].placeholder) + 20}`}
                   className="input-field w-full"
                   required
                 />
@@ -456,6 +531,20 @@ export default function GoalsPage() {
                   required
                 />
               </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-iron-400 mb-2">
+                  Notes (optional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.notes}
+                  onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g., with pause, 20lb vest, strict form"
+                  className="input-field w-full"
+                />
+              </div>
               
               <div className="flex gap-3 pt-4">
                 <button
@@ -467,7 +556,7 @@ export default function GoalsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || !formData.lift || !formData.targetWeight || !formData.targetDate}
+                  disabled={saving || !formData.lift || !formData.targetValue || !formData.targetDate}
                   className="btn-primary flex-1"
                 >
                   {saving ? 'Saving...' : editingGoal ? 'Update Goal' : 'Create Goal'}

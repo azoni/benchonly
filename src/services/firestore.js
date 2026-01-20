@@ -585,3 +585,117 @@ export const tokenUsageService = {
     return { records, summary, users };
   }
 };
+
+// ============ GROUP WORKOUTS ============
+export const groupWorkoutService = {
+  // Create a workout assigned to a specific group member
+  async create(groupId, groupAdmins, assignedTo, workoutData) {
+    const docRef = await addDoc(collection(db, 'groupWorkouts'), {
+      ...workoutData,
+      groupId,
+      groupAdmins,
+      assignedTo,
+      status: 'scheduled', // scheduled, completed
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return { id: docRef.id, ...workoutData, groupId, assignedTo, status: 'scheduled' };
+  },
+
+  // Get all group workouts for a specific group
+  async getByGroup(groupId) {
+    const q = query(
+      collection(db, 'groupWorkouts'),
+      where('groupId', '==', groupId),
+      orderBy('date', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  },
+
+  // Get group workouts assigned to a specific user
+  async getByUser(userId) {
+    const q = query(
+      collection(db, 'groupWorkouts'),
+      where('assignedTo', '==', userId),
+      orderBy('date', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  },
+
+  // Get group workouts for a user within a date range
+  async getByUserAndDateRange(userId, startDate, endDate) {
+    const q = query(
+      collection(db, 'groupWorkouts'),
+      where('assignedTo', '==', userId),
+      where('date', '>=', startDate),
+      where('date', '<=', endDate)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  },
+
+  // Get a single group workout
+  async get(workoutId) {
+    const docSnap = await getDoc(doc(db, 'groupWorkouts', workoutId));
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() };
+    }
+    return null;
+  },
+
+  // Update a group workout (member logging their actuals, or admin editing)
+  async update(workoutId, updates) {
+    const docRef = doc(db, 'groupWorkouts', workoutId);
+    await updateDoc(docRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+    return { id: workoutId, ...updates };
+  },
+
+  // Mark workout as completed with actual values
+  async complete(workoutId, actualData) {
+    const docRef = doc(db, 'groupWorkouts', workoutId);
+    await updateDoc(docRef, {
+      ...actualData,
+      status: 'completed',
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return { id: workoutId, status: 'completed', ...actualData };
+  },
+
+  // Delete a group workout
+  async delete(workoutId) {
+    await deleteDoc(doc(db, 'groupWorkouts', workoutId));
+    return workoutId;
+  },
+
+  // Batch create workouts for multiple members (same date, different prescriptions)
+  async createBatch(groupId, groupAdmins, date, memberWorkouts) {
+    const batch = writeBatch(db);
+    const results = [];
+
+    for (const { assignedTo, name, exercises } of memberWorkouts) {
+      const docRef = doc(collection(db, 'groupWorkouts'));
+      const workoutData = {
+        groupId,
+        groupAdmins,
+        assignedTo,
+        name,
+        date,
+        exercises,
+        status: 'scheduled',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      batch.set(docRef, workoutData);
+      results.push({ id: docRef.id, ...workoutData });
+    }
+
+    await batch.commit();
+    return results;
+  }
+};

@@ -20,9 +20,11 @@ import {
   Plus,
   Dumbbell,
   X,
-  ChevronDown
+  ChevronDown,
+  ChevronRight,
+  Edit2
 } from 'lucide-react'
-import { groupService, workoutService, attendanceService } from '../services/firestore'
+import { groupService, workoutService, attendanceService, groupWorkoutService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
 
 const COMMON_EXERCISES = [
@@ -56,12 +58,11 @@ export default function GroupDetailPage() {
   // Workout creation state
   const [showWorkoutModal, setShowWorkoutModal] = useState(false)
   const [selectedMembers, setSelectedMembers] = useState([])
-  const [workoutForm, setWorkoutForm] = useState({
-    name: '',
-    date: new Date().toISOString().split('T')[0],
-    notes: '',
-    exercises: [{ name: '', sets: 3, reps: 10, weight: '' }]
-  })
+  const [workoutDate, setWorkoutDate] = useState(new Date().toISOString().split('T')[0])
+  const [workoutName, setWorkoutName] = useState('')
+  // Per-member workout prescriptions: { oduserId: { exercises: [...] } }
+  const [memberPrescriptions, setMemberPrescriptions] = useState({})
+  const [activeMemberTab, setActiveMemberTab] = useState(null)
   const [creatingWorkout, setCreatingWorkout] = useState(false)
 
   const isAdmin = group?.admins?.includes(user?.uid)
@@ -91,7 +92,7 @@ export default function GroupDetailPage() {
           setAttendance(attendanceData)
           
           // Fetch group workouts
-          const workouts = await workoutService.getByGroup(id, 20)
+          const workouts = await groupWorkoutService.getByGroup(id)
           setGroupWorkouts(workouts)
         }
       } catch (error) {
@@ -134,87 +135,187 @@ export default function GroupDetailPage() {
 
   // Workout creation functions
   const openWorkoutModal = () => {
-    setSelectedMembers(group?.members || [])
-    setWorkoutForm({
-      name: '',
-      date: new Date().toISOString().split('T')[0],
-      notes: '',
-      exercises: [{ id: Date.now(), name: '', sets: 3, reps: 10, weight: '' }]
+    const allMembers = group?.members || []
+    setSelectedMembers(allMembers)
+    setWorkoutDate(new Date().toISOString().split('T')[0])
+    setWorkoutName('')
+    // Initialize prescriptions for each member
+    const initialPrescriptions = {}
+    allMembers.forEach(memberId => {
+      initialPrescriptions[memberId] = {
+        exercises: [{ id: Date.now() + Math.random(), name: '', sets: [{ weight: '', reps: '' }] }]
+      }
     })
+    setMemberPrescriptions(initialPrescriptions)
+    setActiveMemberTab(allMembers[0] || null)
     setShowWorkoutModal(true)
   }
 
-  const addExercise = () => {
-    setWorkoutForm(prev => ({
+  const addExerciseForMember = (memberId) => {
+    setMemberPrescriptions(prev => ({
       ...prev,
-      exercises: [...prev.exercises, { id: Date.now(), name: '', sets: 3, reps: 10, weight: '' }]
+      [memberId]: {
+        ...prev[memberId],
+        exercises: [
+          ...(prev[memberId]?.exercises || []),
+          { id: Date.now() + Math.random(), name: '', sets: [{ weight: '', reps: '' }] }
+        ]
+      }
     }))
   }
 
-  const removeExercise = (exerciseId) => {
-    setWorkoutForm(prev => ({
+  const removeExerciseForMember = (memberId, exerciseId) => {
+    setMemberPrescriptions(prev => ({
       ...prev,
-      exercises: prev.exercises.filter(e => e.id !== exerciseId)
+      [memberId]: {
+        ...prev[memberId],
+        exercises: prev[memberId].exercises.filter(e => e.id !== exerciseId)
+      }
     }))
   }
 
-  const updateExercise = (exerciseId, field, value) => {
-    setWorkoutForm(prev => ({
+  const updateExerciseForMember = (memberId, exerciseId, field, value) => {
+    setMemberPrescriptions(prev => ({
       ...prev,
-      exercises: prev.exercises.map(e => 
-        e.id === exerciseId ? { ...e, [field]: value } : e
-      )
+      [memberId]: {
+        ...prev[memberId],
+        exercises: prev[memberId].exercises.map(e =>
+          e.id === exerciseId ? { ...e, [field]: value } : e
+        )
+      }
     }))
+  }
+
+  const addSetForExercise = (memberId, exerciseId) => {
+    setMemberPrescriptions(prev => ({
+      ...prev,
+      [memberId]: {
+        ...prev[memberId],
+        exercises: prev[memberId].exercises.map(e =>
+          e.id === exerciseId
+            ? { ...e, sets: [...e.sets, { weight: '', reps: '' }] }
+            : e
+        )
+      }
+    }))
+  }
+
+  const updateSetForExercise = (memberId, exerciseId, setIndex, field, value) => {
+    setMemberPrescriptions(prev => ({
+      ...prev,
+      [memberId]: {
+        ...prev[memberId],
+        exercises: prev[memberId].exercises.map(e =>
+          e.id === exerciseId
+            ? {
+                ...e,
+                sets: e.sets.map((s, i) => i === setIndex ? { ...s, [field]: value } : s)
+              }
+            : e
+        )
+      }
+    }))
+  }
+
+  const removeSetForExercise = (memberId, exerciseId, setIndex) => {
+    setMemberPrescriptions(prev => ({
+      ...prev,
+      [memberId]: {
+        ...prev[memberId],
+        exercises: prev[memberId].exercises.map(e =>
+          e.id === exerciseId
+            ? { ...e, sets: e.sets.filter((_, i) => i !== setIndex) }
+            : e
+        )
+      }
+    }))
+  }
+
+  const copyPrescriptionToAll = (sourceMemberId) => {
+    const sourceExercises = memberPrescriptions[sourceMemberId]?.exercises || []
+    const copied = JSON.parse(JSON.stringify(sourceExercises))
+    
+    setMemberPrescriptions(prev => {
+      const updated = { ...prev }
+      selectedMembers.forEach(memberId => {
+        if (memberId !== sourceMemberId) {
+          // Deep copy with new IDs
+          updated[memberId] = {
+            exercises: copied.map(e => ({
+              ...e,
+              id: Date.now() + Math.random(),
+              sets: e.sets.map(s => ({ ...s }))
+            }))
+          }
+        }
+      })
+      return updated
+    })
   }
 
   const toggleMemberSelection = (memberId) => {
-    setSelectedMembers(prev => 
-      prev.includes(memberId)
+    setSelectedMembers(prev => {
+      const updated = prev.includes(memberId)
         ? prev.filter(id => id !== memberId)
         : [...prev, memberId]
-    )
+      
+      // Initialize prescription if adding
+      if (!prev.includes(memberId)) {
+        setMemberPrescriptions(p => ({
+          ...p,
+          [memberId]: {
+            exercises: [{ id: Date.now(), name: '', sets: [{ weight: '', reps: '' }] }]
+          }
+        }))
+      }
+      
+      return updated
+    })
   }
 
   const handleCreateGroupWorkout = async () => {
-    if (!workoutForm.name.trim() || selectedMembers.length === 0) {
+    if (!workoutName.trim() || selectedMembers.length === 0) {
       alert('Please enter a workout name and select at least one member')
       return
     }
 
     setCreatingWorkout(true)
     try {
-      // Format exercises for storage
-      const formattedExercises = workoutForm.exercises
-        .filter(e => e.name.trim())
-        .map(e => ({
-          id: e.id,
-          name: e.name,
-          sets: Array.from({ length: parseInt(e.sets) || 1 }, (_, i) => ({
-            id: Date.now() + i,
-            prescribedWeight: e.weight,
-            prescribedReps: e.reps.toString(),
-            actualWeight: '',
-            actualReps: '',
-            rpe: '',
-            painLevel: 0,
-            completed: false
-          })),
-          notes: ''
-        }))
+      const memberWorkouts = selectedMembers.map(memberId => {
+        const prescription = memberPrescriptions[memberId]
+        const formattedExercises = (prescription?.exercises || [])
+          .filter(e => e.name.trim())
+          .map(e => ({
+            name: e.name,
+            sets: e.sets.map((s, i) => ({
+              id: Date.now() + i,
+              prescribedWeight: s.weight,
+              prescribedReps: s.reps,
+              actualWeight: '',
+              actualReps: '',
+              rpe: '',
+              painLevel: 0
+            }))
+          }))
 
-      const workoutData = {
-        name: workoutForm.name,
-        date: new Date(workoutForm.date),
-        notes: workoutForm.notes,
-        exercises: formattedExercises
-      }
+        return {
+          assignedTo: memberId,
+          name: workoutName,
+          exercises: formattedExercises
+        }
+      })
 
-      await workoutService.createForGroup(id, workoutData, user.uid, selectedMembers)
-      
+      await groupWorkoutService.createBatch(
+        id,
+        group.admins,
+        new Date(workoutDate),
+        memberWorkouts
+      )
+
       // Refresh workouts list
-      const workouts = await workoutService.getByGroup(id, 20)
+      const workouts = await groupWorkoutService.getByGroup(id)
       setGroupWorkouts(workouts)
-      
+
       setShowWorkoutModal(false)
       alert(`Workout assigned to ${selectedMembers.length} member(s)!`)
     } catch (error) {
@@ -673,9 +774,9 @@ export default function GroupDetailPage() {
       {/* Workout Creation Modal */}
       {showWorkoutModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-iron-900 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-iron-900 border-b border-iron-800 p-4 flex items-center justify-between">
-              <h2 className="text-xl font-display text-iron-100">Create Group Workout</h2>
+          <div className="bg-iron-900 rounded-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="bg-iron-900 border-b border-iron-800 p-4 flex items-center justify-between flex-shrink-0">
+              <h2 className="text-xl font-display text-iron-100">Assign Group Workout</h2>
               <button
                 onClick={() => setShowWorkoutModal(false)}
                 className="p-2 text-iron-400 hover:text-iron-200 transition-colors"
@@ -684,184 +785,211 @@ export default function GroupDetailPage() {
               </button>
             </div>
             
-            <div className="p-4 space-y-6">
-              {/* Workout Details */}
-              <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-iron-300 mb-2">
-                    Workout Name
+                    Workout Name *
                   </label>
                   <input
                     type="text"
-                    value={workoutForm.name}
-                    onChange={(e) => setWorkoutForm(prev => ({ ...prev, name: e.target.value }))}
+                    value={workoutName}
+                    onChange={(e) => setWorkoutName(e.target.value)}
                     placeholder="e.g., Push Day, Bench Focus"
-                    className="input-field w-full"
+                    className="input-field w-full text-base py-3"
                   />
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-iron-300 mb-2">
-                      Date
-                    </label>
-                    <input
-                      type="date"
-                      value={workoutForm.date}
-                      onChange={(e) => setWorkoutForm(prev => ({ ...prev, date: e.target.value }))}
-                      className="input-field w-full"
-                    />
-                  </div>
-                </div>
-                
                 <div>
                   <label className="block text-sm font-medium text-iron-300 mb-2">
-                    Notes (optional)
+                    Date *
                   </label>
-                  <textarea
-                    value={workoutForm.notes}
-                    onChange={(e) => setWorkoutForm(prev => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Instructions or focus areas..."
-                    rows={2}
-                    className="input-field w-full resize-none"
+                  <input
+                    type="date"
+                    value={workoutDate}
+                    onChange={(e) => setWorkoutDate(e.target.value)}
+                    className="input-field w-full text-base py-3"
                   />
                 </div>
               </div>
-              
-              {/* Exercises */}
-              <div>
-                <label className="block text-sm font-medium text-iron-300 mb-3">
-                  Exercises
-                </label>
-                <div className="space-y-3">
-                  {workoutForm.exercises.map((exercise, index) => (
-                    <div key={exercise.id} className="bg-iron-800/50 rounded-lg p-3">
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="w-6 h-6 rounded bg-flame-500/20 text-flame-400 flex items-center justify-center text-sm font-medium">
-                          {index + 1}
-                        </span>
-                        <input
-                          type="text"
-                          value={exercise.name}
-                          onChange={(e) => updateExercise(exercise.id, 'name', e.target.value)}
-                          placeholder="Exercise name"
-                          list="exercises-list"
-                          className="input-field flex-1"
-                        />
-                        {workoutForm.exercises.length > 1 && (
-                          <button
-                            onClick={() => removeExercise(exercise.id)}
-                            className="p-1 text-iron-500 hover:text-red-400 transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="block text-xs text-iron-500 mb-1">Sets</label>
-                          <input
-                            type="number"
-                            value={exercise.sets}
-                            onChange={(e) => updateExercise(exercise.id, 'sets', e.target.value)}
-                            className="input-field w-full text-sm"
-                            min="1"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-iron-500 mb-1">Reps</label>
-                          <input
-                            type="number"
-                            value={exercise.reps}
-                            onChange={(e) => updateExercise(exercise.id, 'reps', e.target.value)}
-                            className="input-field w-full text-sm"
-                            min="1"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-iron-500 mb-1">Weight (lbs)</label>
-                          <input
-                            type="number"
-                            value={exercise.weight}
-                            onChange={(e) => updateExercise(exercise.id, 'weight', e.target.value)}
-                            placeholder="—"
-                            className="input-field w-full text-sm"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  <datalist id="exercises-list">
-                    {COMMON_EXERCISES.map(ex => (
-                      <option key={ex} value={ex} />
-                    ))}
-                  </datalist>
-                  
-                  <button
-                    onClick={addExercise}
-                    className="w-full py-2 border border-dashed border-iron-700 rounded-lg text-iron-400 hover:text-iron-200 hover:border-iron-600 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Exercise
-                  </button>
-                </div>
-              </div>
-              
-              {/* Assign to Members */}
+
+              {/* Member Selection */}
               <div>
                 <label className="block text-sm font-medium text-iron-300 mb-3">
                   Assign to Members
                 </label>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => setSelectedMembers(
-                      selectedMembers.length === members.length ? [] : members.map(m => m.uid)
-                    )}
-                    className="text-sm text-flame-400 hover:text-flame-300 mb-2"
-                  >
-                    {selectedMembers.length === members.length ? 'Deselect All' : 'Select All'}
-                  </button>
-                  
-                  <div className="grid grid-cols-2 gap-2">
-                    {members.map(member => (
-                      <button
-                        key={member.uid}
-                        onClick={() => toggleMemberSelection(member.uid)}
-                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                          selectedMembers.includes(member.uid)
-                            ? 'bg-flame-500/20 border border-flame-500/50'
-                            : 'bg-iron-800/50 border border-iron-700 hover:border-iron-600'
-                        }`}
-                      >
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                          selectedMembers.includes(member.uid)
-                            ? 'bg-flame-500 border-flame-500'
-                            : 'border-iron-600'
-                        }`}>
-                          {selectedMembers.includes(member.uid) && (
-                            <Check className="w-3 h-3 text-white" />
-                          )}
+                <div className="flex flex-wrap gap-2">
+                  {members.map(member => (
+                    <button
+                      key={member.uid}
+                      onClick={() => toggleMemberSelection(member.uid)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                        selectedMembers.includes(member.uid)
+                          ? 'bg-flame-500/20 border border-flame-500/50 text-flame-200'
+                          : 'bg-iron-800/50 border border-iron-700 text-iron-400 hover:border-iron-600'
+                      }`}
+                    >
+                      {member.photoURL ? (
+                        <img src={member.photoURL} alt="" className="w-5 h-5 rounded-full" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-iron-700 flex items-center justify-center text-xs">
+                          {member.displayName?.[0]}
                         </div>
-                        {member.photoURL ? (
-                          <img src={member.photoURL} alt="" className="w-6 h-6 rounded-full" />
-                        ) : (
-                          <div className="w-6 h-6 rounded-full bg-iron-700 flex items-center justify-center">
-                            <span className="text-xs text-iron-400">{member.displayName?.[0]}</span>
-                          </div>
-                        )}
-                        <span className="text-sm text-iron-200 truncate">
-                          {member.displayName}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                      )}
+                      <span className="text-sm">{member.displayName?.split(' ')[0]}</span>
+                      {selectedMembers.includes(member.uid) && (
+                        <Check className="w-4 h-4" />
+                      )}
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              {/* Per-Member Prescriptions */}
+              {selectedMembers.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-sm font-medium text-iron-300">
+                      Prescriptions by Member
+                    </label>
+                    {activeMemberTab && selectedMembers.length > 1 && (
+                      <button
+                        onClick={() => copyPrescriptionToAll(activeMemberTab)}
+                        className="text-xs text-flame-400 hover:text-flame-300 flex items-center gap-1"
+                      >
+                        <Copy className="w-3 h-3" />
+                        Copy to all members
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Member Tabs */}
+                  <div className="flex gap-1 mb-4 overflow-x-auto pb-2">
+                    {selectedMembers.map(memberId => {
+                      const member = members.find(m => m.uid === memberId)
+                      return (
+                        <button
+                          key={memberId}
+                          onClick={() => setActiveMemberTab(memberId)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg whitespace-nowrap transition-colors ${
+                            activeMemberTab === memberId
+                              ? 'bg-flame-500 text-white'
+                              : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                          }`}
+                        >
+                          {member?.photoURL ? (
+                            <img src={member.photoURL} alt="" className="w-5 h-5 rounded-full" />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-iron-600 flex items-center justify-center text-xs">
+                              {member?.displayName?.[0]}
+                            </div>
+                          )}
+                          <span className="text-sm">{member?.displayName?.split(' ')[0]}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Active Member's Exercises */}
+                  {activeMemberTab && memberPrescriptions[activeMemberTab] && (
+                    <div className="space-y-4">
+                      {memberPrescriptions[activeMemberTab].exercises.map((exercise, exIndex) => (
+                        <div key={exercise.id} className="bg-iron-800/50 rounded-lg p-4">
+                          <div className="flex items-center gap-2 mb-4">
+                            <span className="w-7 h-7 rounded-lg bg-flame-500/20 text-flame-400 flex items-center justify-center text-sm font-medium">
+                              {exIndex + 1}
+                            </span>
+                            <select
+                              value={exercise.name}
+                              onChange={(e) => updateExerciseForMember(activeMemberTab, exercise.id, 'name', e.target.value)}
+                              className="input-field flex-1 text-base py-2"
+                            >
+                              <option value="">Select exercise</option>
+                              {COMMON_EXERCISES.map(ex => (
+                                <option key={ex} value={ex}>{ex}</option>
+                              ))}
+                            </select>
+                            {memberPrescriptions[activeMemberTab].exercises.length > 1 && (
+                              <button
+                                onClick={() => removeExerciseForMember(activeMemberTab, exercise.id)}
+                                className="p-2 text-iron-500 hover:text-red-400 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Sets */}
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-12 gap-2 text-xs text-iron-500 px-1">
+                              <div className="col-span-2">Set</div>
+                              <div className="col-span-4">Weight (lbs)</div>
+                              <div className="col-span-4">Reps</div>
+                              <div className="col-span-2"></div>
+                            </div>
+                            {exercise.sets.map((set, setIndex) => (
+                              <div key={setIndex} className="grid grid-cols-12 gap-2 items-center">
+                                <div className="col-span-2">
+                                  <span className="text-iron-400 text-sm font-medium pl-1">{setIndex + 1}</span>
+                                </div>
+                                <div className="col-span-4">
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    value={set.weight}
+                                    onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'weight', e.target.value)}
+                                    placeholder="135"
+                                    className="input-field w-full text-base py-2 px-3"
+                                  />
+                                </div>
+                                <div className="col-span-4">
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={set.reps}
+                                    onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'reps', e.target.value)}
+                                    placeholder="8"
+                                    className="input-field w-full text-base py-2 px-3"
+                                  />
+                                </div>
+                                <div className="col-span-2 flex justify-end">
+                                  {exercise.sets.length > 1 && (
+                                    <button
+                                      onClick={() => removeSetForExercise(activeMemberTab, exercise.id, setIndex)}
+                                      className="p-1 text-iron-600 hover:text-red-400 transition-colors"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                            <button
+                              onClick={() => addSetForExercise(activeMemberTab, exercise.id)}
+                              className="w-full py-2 text-xs text-iron-500 hover:text-iron-300 flex items-center justify-center gap-1"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Add Set
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      <button
+                        onClick={() => addExerciseForMember(activeMemberTab)}
+                        className="w-full py-3 border border-dashed border-iron-700 rounded-lg text-iron-400 hover:text-iron-200 hover:border-iron-600 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Exercise
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             
             {/* Modal Footer */}
-            <div className="sticky bottom-0 bg-iron-900 border-t border-iron-800 p-4 flex gap-3">
+            <div className="bg-iron-900 border-t border-iron-800 p-4 flex gap-3 flex-shrink-0">
               <button
                 onClick={() => setShowWorkoutModal(false)}
                 className="btn-secondary flex-1"
@@ -870,7 +998,7 @@ export default function GroupDetailPage() {
               </button>
               <button
                 onClick={handleCreateGroupWorkout}
-                disabled={creatingWorkout || !workoutForm.name.trim() || selectedMembers.length === 0}
+                disabled={creatingWorkout || !workoutName.trim() || selectedMembers.length === 0}
                 className="btn-primary flex-1 disabled:opacity-50"
               >
                 {creatingWorkout ? 'Creating...' : `Assign to ${selectedMembers.length} Member${selectedMembers.length !== 1 ? 's' : ''}`}

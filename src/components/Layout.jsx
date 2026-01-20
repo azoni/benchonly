@@ -166,32 +166,35 @@ export default function Layout() {
       </aside>
 
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 inset-x-0 bg-iron-900/95 backdrop-blur-sm
-        border-b border-iron-800 z-40 pt-[env(safe-area-inset-top,0px)]">
+      <header className="lg:hidden fixed top-0 inset-x-0 bg-iron-900 border-b border-iron-800 z-40"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <div className="h-14 flex items-center justify-between px-4">
-          <Link to="/dashboard" className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-plate bg-flame-500 flex items-center justify-center flex-shrink-0">
+          <Link to="/dashboard" className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-flame-500 flex items-center justify-center flex-shrink-0">
               <Dumbbell className="w-5 h-5 text-white" />
             </div>
-            <span className="font-display text-lg text-iron-50">BENCH ONLY</span>
+            <span className="font-display text-xl text-iron-50 tracking-wide">BENCH ONLY</span>
           </Link>
           
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggleChat}
-              className="w-11 h-11 flex items-center justify-center text-iron-400 hover:text-iron-100 active:bg-iron-800 rounded-lg transition-colors"
-            >
-              <MessageCircle className="w-6 h-6" />
-            </button>
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="w-11 h-11 flex items-center justify-center text-iron-400 hover:text-iron-100 active:bg-iron-800 rounded-lg transition-colors"
-            >
-              <Menu className="w-7 h-7" />
-            </button>
-          </div>
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="w-12 h-12 flex items-center justify-center text-iron-300 active:bg-iron-800 rounded-xl transition-colors"
+          >
+            <Menu className="w-7 h-7" />
+          </button>
         </div>
       </header>
+
+      {/* Mobile Floating Chat Button */}
+      <button
+        onClick={toggleChat}
+        className="lg:hidden fixed bottom-6 right-4 z-30 w-14 h-14 bg-flame-500 hover:bg-flame-600 
+          active:bg-flame-700 rounded-full shadow-lg shadow-flame-500/30 
+          flex items-center justify-center transition-all"
+        style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <MessageCircle className="w-6 h-6 text-white" />
+      </button>
 
       {/* Mobile Menu Overlay */}
       <AnimatePresence>
