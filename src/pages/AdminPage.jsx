@@ -11,7 +11,9 @@ import {
   X,
   Check,
   Eye,
-  UserCog
+  UserCog,
+  Edit2,
+  Trash2
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { collection, getDocs, query, orderBy } from 'firebase/firestore'
@@ -33,6 +35,7 @@ export default function AdminPage() {
   const [userGoals, setUserGoals] = useState([])
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [showWorkoutModal, setShowWorkoutModal] = useState(false)
+  const [editingGoal, setEditingGoal] = useState(null)
   const [goalForm, setGoalForm] = useState({
     lift: '',
     metricType: 'weight',
@@ -115,9 +118,15 @@ export default function AdminPage() {
         status: 'active'
       }
 
-      const newGoal = await goalService.create(impersonating.uid, goalData)
-      setUserGoals(prev => [...prev, { ...newGoal, ...goalData }])
+      if (editingGoal) {
+        await goalService.update(editingGoal.id, goalData)
+        setUserGoals(prev => prev.map(g => g.id === editingGoal.id ? { ...g, ...goalData } : g))
+      } else {
+        const newGoal = await goalService.create(impersonating.uid, goalData)
+        setUserGoals(prev => [...prev, { ...newGoal, ...goalData }])
+      }
       setShowGoalModal(false)
+      setEditingGoal(null)
       setGoalForm({
         lift: '',
         metricType: 'weight',
@@ -127,9 +136,33 @@ export default function AdminPage() {
         notes: ''
       })
     } catch (error) {
-      console.error('Error creating goal:', error)
-      alert('Failed to create goal')
+      console.error('Error saving goal:', error)
+      alert('Failed to save goal')
     }
+  }
+
+  const handleDeleteGoal = async (goalId) => {
+    if (!confirm('Delete this goal?')) return
+    try {
+      await goalService.delete(goalId)
+      setUserGoals(prev => prev.filter(g => g.id !== goalId))
+    } catch (error) {
+      console.error('Error deleting goal:', error)
+      alert('Failed to delete goal')
+    }
+  }
+
+  const handleEditGoal = (goal) => {
+    setEditingGoal(goal)
+    setGoalForm({
+      lift: goal.lift,
+      metricType: goal.metricType || 'weight',
+      currentValue: (goal.currentValue ?? goal.currentWeight ?? '').toString(),
+      targetValue: (goal.targetValue ?? goal.targetWeight ?? '').toString(),
+      targetDate: goal.targetDate || '',
+      notes: goal.notes || ''
+    })
+    setShowGoalModal(true)
   }
 
   const filteredUsers = users.filter(u => 
@@ -302,13 +335,27 @@ export default function AdminPage() {
                           <div key={goal.id} className="p-3 bg-iron-800/50 rounded-lg">
                             <div className="flex items-center justify-between mb-2">
                               <span className="font-medium text-iron-100">{goal.lift}</span>
-                              <span className={`text-xs px-2 py-1 rounded-full ${
-                                goal.status === 'active' 
-                                  ? 'bg-green-500/20 text-green-400' 
-                                  : 'bg-iron-700 text-iron-400'
-                              }`}>
-                                {goal.status}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                  goal.status === 'active' 
+                                    ? 'bg-green-500/20 text-green-400' 
+                                    : 'bg-iron-700 text-iron-400'
+                                }`}>
+                                  {goal.status}
+                                </span>
+                                <button
+                                  onClick={() => handleEditGoal(goal)}
+                                  className="p-1 text-iron-400 hover:text-iron-200 hover:bg-iron-700 rounded"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteGoal(goal.id)}
+                                  className="p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
                             <p className="text-sm text-iron-400">
                               {current} → {target} {unit}
@@ -397,10 +444,10 @@ export default function AdminPage() {
             </button>
             
             <h2 className="text-xl font-display text-iron-100 mb-2">
-              Create Goal for {impersonating?.displayName}
+              {editingGoal ? 'Edit' : 'Create'} Goal for {impersonating?.displayName}
             </h2>
             <p className="text-sm text-iron-500 mb-6">
-              This goal will be added to the user's account
+              {editingGoal ? 'Update this goal' : 'This goal will be added to the user\'s account'}
             </p>
             
             <form onSubmit={handleCreateGoal} className="space-y-4">

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
@@ -60,9 +60,15 @@ const COMMON_EXERCISES = [
 
 export default function NewWorkoutPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
   const [rpeModalOpen, setRpeModalOpen] = useState(false);
+  
+  // Support admin creating workout for another user
+  const targetUserId = searchParams.get('userId') || user?.uid;
+  const isAdminCreating = searchParams.get('userId') && searchParams.get('userId') !== user?.uid;
+  
   const [workout, setWorkout] = useState({
     name: '',
     date: new Date().toISOString().split('T')[0],
@@ -162,11 +168,11 @@ export default function NewWorkoutPage() {
 
     setSaving(true);
     try {
-      await workoutService.create(user.uid, {
+      await workoutService.create(targetUserId, {
         ...workout,
         date: new Date(workout.date),
       });
-      navigate('/workouts');
+      navigate(isAdminCreating ? '/admin' : '/workouts');
     } catch (error) {
       console.error('Error saving workout:', error);
       alert('Failed to save workout');
@@ -308,8 +314,8 @@ export default function NewWorkoutPage() {
                     className="overflow-hidden"
                   >
                     <div className="p-4">
-                      {/* Set Headers */}
-                      <div className="grid grid-cols-12 gap-2 mb-2 text-xs text-iron-500 uppercase tracking-wider">
+                      {/* Set Headers - Desktop */}
+                      <div className="hidden md:grid grid-cols-12 gap-2 mb-2 text-xs text-iron-500 uppercase tracking-wider">
                         <div className="col-span-1">Set</div>
                         <div className="col-span-3">Target</div>
                         <div className="col-span-3">Actual</div>
@@ -332,31 +338,153 @@ export default function NewWorkoutPage() {
                       {exercise.sets.map((set, setIndex) => (
                         <div
                           key={set.id}
-                          className="grid grid-cols-12 gap-2 mb-2 items-center"
+                          className="mb-4 md:mb-2"
                         >
-                          <div className="col-span-1">
-                            <span className="text-iron-400 text-sm font-medium">
-                              {setIndex + 1}
-                            </span>
+                          {/* Mobile Layout */}
+                          <div className="md:hidden space-y-3 p-3 bg-iron-800/30 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <span className="text-iron-300 font-medium">Set {setIndex + 1}</span>
+                              <button
+                                onClick={() => removeSet(exercise.id, set.id)}
+                                className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs text-iron-500 mb-1">Target Weight</label>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  value={set.prescribedWeight}
+                                  onChange={(e) =>
+                                    updateSet(exercise.id, set.id, {
+                                      prescribedWeight: e.target.value,
+                                    })
+                                  }
+                                  placeholder="lbs"
+                                  className="w-full input-field text-base py-3 px-4"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-iron-500 mb-1">Target Reps</label>
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  value={set.prescribedReps}
+                                  onChange={(e) =>
+                                    updateSet(exercise.id, set.id, {
+                                      prescribedReps: e.target.value,
+                                    })
+                                  }
+                                  placeholder="reps"
+                                  className="w-full input-field text-base py-3 px-4"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-flame-400 mb-1">Actual Weight</label>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  value={set.actualWeight}
+                                  onChange={(e) =>
+                                    updateSet(exercise.id, set.id, {
+                                      actualWeight: e.target.value,
+                                    })
+                                  }
+                                  placeholder="lbs"
+                                  className="w-full input-field text-base py-3 px-4 border-flame-500/30"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-flame-400 mb-1">Actual Reps</label>
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  value={set.actualReps}
+                                  onChange={(e) =>
+                                    updateSet(exercise.id, set.id, {
+                                      actualReps: e.target.value,
+                                    })
+                                  }
+                                  placeholder="reps"
+                                  className="w-full input-field text-base py-3 px-4 border-flame-500/30"
+                                />
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs text-iron-500 mb-1 flex items-center gap-1">
+                                  RPE
+                                  <button
+                                    onClick={() => setRpeModalOpen(true)}
+                                    className="text-flame-400"
+                                  >
+                                    <Info className="w-3 h-3" />
+                                  </button>
+                                </label>
+                                <select
+                                  value={set.rpe}
+                                  onChange={(e) =>
+                                    updateSet(exercise.id, set.id, {
+                                      rpe: e.target.value,
+                                    })
+                                  }
+                                  className="input-field text-base py-3 px-4 w-full"
+                                >
+                                  <option value="">—</option>
+                                  {[5, 6, 7, 8, 9, 10].map((val) => (
+                                    <option key={val} value={val}>{val}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs text-iron-500 mb-1">Pain Level</label>
+                                <select
+                                  value={set.painLevel}
+                                  onChange={(e) =>
+                                    updateSet(exercise.id, set.id, {
+                                      painLevel: parseInt(e.target.value),
+                                    })
+                                  }
+                                  className="input-field text-base py-3 px-4 w-full"
+                                >
+                                  {PAIN_LEVELS.map(({ value, label }) => (
+                                    <option key={value} value={value}>{label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Target Weight x Reps */}
-                          <div className="col-span-3">
-                            <div className="flex gap-1 items-center">
-                              <input
-                                type="number"
-                                value={set.prescribedWeight}
-                                onChange={(e) =>
-                                  updateSet(exercise.id, set.id, {
-                                    prescribedWeight: e.target.value,
-                                  })
-                                }
-                                placeholder="lbs"
-                                className="w-full input-field text-sm py-2 px-3"
-                              />
-                              <span className="text-iron-600">×</span>
-                              <input
-                                type="number"
+                          {/* Desktop Layout */}
+                          <div className="hidden md:grid grid-cols-12 gap-2 items-center">
+                            <div className="col-span-1">
+                              <span className="text-iron-400 text-sm font-medium">
+                                {setIndex + 1}
+                              </span>
+                            </div>
+
+                            {/* Target Weight x Reps */}
+                            <div className="col-span-3">
+                              <div className="flex gap-1 items-center">
+                                <input
+                                  type="number"
+                                  value={set.prescribedWeight}
+                                  onChange={(e) =>
+                                    updateSet(exercise.id, set.id, {
+                                      prescribedWeight: e.target.value,
+                                    })
+                                  }
+                                  placeholder="lbs"
+                                  className="w-full input-field text-sm py-2 px-3"
+                                />
+                                <span className="text-iron-600">×</span>
+                                <input
+                                  type="number"
                                 value={set.prescribedReps}
                                 onChange={(e) =>
                                   updateSet(exercise.id, set.id, {
@@ -458,6 +586,7 @@ export default function NewWorkoutPage() {
                               </button>
                             )}
                           </div>
+                          </div>
                         </div>
                       ))}
 
@@ -530,10 +659,10 @@ export default function NewWorkoutPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-lg mx-auto
-                bg-iron-900 border border-iron-700 rounded-2xl z-50 overflow-hidden"
+              className="fixed inset-4 max-w-lg mx-auto my-auto max-h-[90vh] overflow-y-auto
+                bg-iron-900 border border-iron-700 rounded-2xl z-50"
             >
-              <div className="flex items-center justify-between p-5 border-b border-iron-800">
+              <div className="sticky top-0 flex items-center justify-between p-5 border-b border-iron-800 bg-iron-900">
                 <h3 className="font-display text-xl text-iron-100">{RPE_INFO.title}</h3>
                 <button
                   onClick={() => setRpeModalOpen(false)}

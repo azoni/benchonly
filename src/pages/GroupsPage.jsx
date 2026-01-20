@@ -47,11 +47,8 @@ export default function GroupsPage() {
     
     setCreating(true)
     try {
-      const newGroup = await groupService.create({
-        name: newGroupName.trim(),
-        creatorId: user.uid,
-        members: [user.uid],
-        admins: [user.uid]
+      const newGroup = await groupService.create(user.uid, {
+        name: newGroupName.trim()
       })
       setGroups(prev => [...prev, newGroup])
       setNewGroupName('')
