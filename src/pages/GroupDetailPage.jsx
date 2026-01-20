@@ -13,10 +13,7 @@ import {
   LogOut,
   MoreVertical,
   Calendar,
-  TrendingUp,
   Target,
-  Flame,
-  Medal,
   Plus,
   Dumbbell,
   X,
@@ -25,7 +22,7 @@ import {
   Edit2,
   Search
 } from 'lucide-react'
-import { groupService, workoutService, attendanceService, groupWorkoutService, userService } from '../services/firestore'
+import { groupService, workoutService, attendanceService, groupWorkoutService, userService, goalService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
 
 // Helper to safely parse dates from Firestore
@@ -72,6 +69,7 @@ export default function GroupDetailPage() {
   const { user } = useAuth()
   const [group, setGroup] = useState(null)
   const [members, setMembers] = useState([])
+  const [memberGoals, setMemberGoals] = useState({})
   const [attendance, setAttendance] = useState({})
   const [groupWorkouts, setGroupWorkouts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -115,13 +113,19 @@ export default function GroupDetailPage() {
           const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 })
           
           const attendanceData = {}
+          const goalsData = {}
           for (const memberId of groupData.members) {
             const records = await attendanceService.getByDateRange(memberId, weekStart, weekEnd)
             attendanceData[memberId] = records
+            
+            // Fetch active goals for each member
+            const goals = await goalService.getByUser(memberId)
+            goalsData[memberId] = goals.filter(g => g.status === 'active')
           }
           
           setMembers(memberData)
           setAttendance(attendanceData)
+          setMemberGoals(goalsData)
           
           // Fetch group workouts
           const workouts = await groupWorkoutService.getByGroup(id)
@@ -424,25 +428,6 @@ export default function GroupDetailPage() {
     }
   }
 
-  const calculateStreak = (memberId) => {
-    const records = attendance[memberId] || []
-    let streak = 0
-    const sorted = records
-      .filter(r => r.status === 'present')
-      .sort((a, b) => {
-        try {
-          const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date)
-          const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date)
-          return dateB - dateA
-        } catch {
-          return 0
-        }
-      })
-    
-    // Simple streak count for demo
-    return sorted.length
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -567,7 +552,7 @@ export default function GroupDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 border-b border-iron-800 overflow-x-auto">
-        {['members', 'workouts', 'attendance', 'leaderboard'].map(tab => (
+        {['members', 'workouts', 'goals', 'attendance'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -685,12 +670,6 @@ export default function GroupDetailPage() {
                     <span className="text-xs text-iron-500">(you)</span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 mt-1">
-                  <span className="flex items-center gap-1 text-sm text-iron-500">
-                    <Flame className="w-3 h-3 text-flame-500" />
-                    {calculateStreak(member.uid)} day streak
-                  </span>
-                </div>
               </div>
               
               {/* Mini attendance dots */}
@@ -794,33 +773,12 @@ export default function GroupDetailPage() {
         </div>
       )}
 
-      {/* Leaderboard Tab */}
-      {activeTab === 'leaderboard' && (
-        <div className="space-y-3">
-          {members
-            .sort((a, b) => calculateStreak(b.uid) - calculateStreak(a.uid))
-            .map((member, index) => (
-              <div 
-                key={member.uid} 
-                className={`card-steel p-4 flex items-center gap-4 ${
-                  index === 0 ? 'border-yellow-500/30 bg-yellow-500/5' :
-                  index === 1 ? 'border-iron-400/30 bg-iron-400/5' :
-                  index === 2 ? 'border-orange-600/30 bg-orange-600/5' : ''
-                }`}
-              >
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-display text-xl ${
-                  index === 0 ? 'bg-yellow-500/20 text-yellow-400' :
-                  index === 1 ? 'bg-iron-400/20 text-iron-300' :
-                  index === 2 ? 'bg-orange-600/20 text-orange-400' :
-                  'bg-iron-800 text-iron-500'
-                }`}>
-                  {index < 3 ? (
-                    <Medal className="w-5 h-5" />
-                  ) : (
-                    index + 1
-                  )}
-                </div>
-                
+      {/* Goals Tab */}
+      {activeTab === 'goals' && (
+        <div className="space-y-4">
+          {members.map(member => (
+            <div key={member.uid} className="card-steel rounded-xl overflow-hidden">
+              <div className="p-4 border-b border-iron-800 flex items-center gap-3">
                 {member.photoURL ? (
                   <img 
                     src={member.photoURL} 
@@ -834,24 +792,48 @@ export default function GroupDetailPage() {
                     </span>
                   </div>
                 )}
-                
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-iron-100 truncate">
+                <div>
+                  <h3 className="font-medium text-iron-100">
                     {member.displayName}
                     {member.uid === user.uid && (
                       <span className="text-xs text-iron-500 ml-2">(you)</span>
                     )}
                   </h3>
                 </div>
-                
-                <div className="text-right">
-                  <p className="text-xl font-display text-flame-400">
-                    {calculateStreak(member.uid)}
-                  </p>
-                  <p className="text-xs text-iron-500">day streak</p>
-                </div>
               </div>
-            ))}
+              <div className="p-4">
+                {memberGoals[member.uid]?.length > 0 ? (
+                  <div className="space-y-3">
+                    {memberGoals[member.uid].map(goal => {
+                      const current = goal.currentValue ?? goal.currentWeight ?? 0
+                      const target = goal.targetValue ?? goal.targetWeight ?? 0
+                      const progress = target > 0 ? Math.min(100, (current / target) * 100) : 0
+                      const unit = goal.metricType === 'time' ? 'sec' : goal.metricType === 'reps' ? 'reps' : 'lbs'
+                      
+                      return (
+                        <div key={goal.id} className="bg-iron-800/50 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-iron-200">{goal.lift}</span>
+                            <span className="text-sm text-iron-400">
+                              {current} / {target} {unit}
+                            </span>
+                          </div>
+                          <div className="h-2 bg-iron-700 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-flame-500 rounded-full transition-all"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-iron-500 text-sm text-center py-2">No active goals</p>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

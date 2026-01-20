@@ -19,6 +19,14 @@ import {
 import { workoutService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
 
+// Calculate estimated 1RM using Epley formula
+const calculateE1RM = (weight, reps) => {
+  if (!weight || !reps || reps < 1) return null
+  if (reps === 1) return weight
+  if (reps > 30) return null
+  return Math.round(weight * (1 + reps / 30))
+}
+
 export default function WorkoutDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -339,11 +347,18 @@ export default function WorkoutDetailPage() {
                           <>
                             <td className="py-3 pr-4">
                               {set.actualWeight || set.actualReps ? (
-                                <span className="text-flame-400 font-medium">
-                                  {set.actualWeight && `${set.actualWeight} lbs`}
-                                  {set.actualWeight && set.actualReps && ' × '}
-                                  {set.actualReps && `${set.actualReps} reps`}
-                                </span>
+                                <div>
+                                  <span className="text-flame-400 font-medium">
+                                    {set.actualWeight && `${set.actualWeight} lbs`}
+                                    {set.actualWeight && set.actualReps && ' × '}
+                                    {set.actualReps && `${set.actualReps} reps`}
+                                  </span>
+                                  {set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1 && (
+                                    <span className="ml-2 text-xs text-iron-500">
+                                      e1RM: {calculateE1RM(parseFloat(set.actualWeight), parseInt(set.actualReps))}
+                                    </span>
+                                  )}
+                                </div>
                               ) : (
                                 <span className="text-iron-600">—</span>
                               )}
