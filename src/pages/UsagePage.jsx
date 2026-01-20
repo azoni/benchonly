@@ -269,6 +269,7 @@ export default function UsagePage() {
                 {records.map((record, index) => {
                   const config = FEATURE_COLORS[record.feature] || { bg: 'bg-iron-700', text: 'text-iron-400', icon: Zap }
                   const Icon = config.icon
+                  const isGrouped = record.requestCount > 1
                   
                   return (
                     <div 
@@ -282,6 +283,11 @@ export default function UsagePage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-iron-200 capitalize">
                           {record.feature?.replace(/-/g, ' ') || 'AI Request'}
+                          {isGrouped && (
+                            <span className="ml-2 text-xs text-iron-500">
+                              ({record.requestCount} requests)
+                            </span>
+                          )}
                         </p>
                         <p className="text-xs text-iron-500">
                           {(() => {

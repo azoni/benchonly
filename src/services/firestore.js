@@ -640,11 +640,66 @@ export const tokenUsageService = {
       }
     });
 
-    const users = [...new Set(records.map(r => r.userId))]
-      .filter(Boolean)
-      .map(id => ({ id, displayName: id }));
+    // Get unique user IDs and fetch their details
+    const userIds = [...new Set(records.map(r => r.userId))].filter(Boolean);
+    const users = [];
+    
+    for (const uid of userIds) {
+      try {
+        const userSnap = await getDoc(doc(db, 'users', uid));
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          users.push({ 
+            id: uid, 
+            displayName: userData.displayName || userData.email || uid,
+            email: userData.email 
+          });
+        } else {
+          users.push({ id: uid, displayName: uid });
+        }
+      } catch {
+        users.push({ id: uid, displayName: uid });
+      }
+    }
 
-    return { records, summary, users };
+    // Add user names to records for display
+    const userMap = Object.fromEntries(users.map(u => [u.id, u.displayName]));
+    const enrichedRecords = records.map(r => ({
+      ...r,
+      userName: userMap[r.userId] || r.userId
+    }));
+
+    // Group consecutive same-feature requests from same user within 5 min
+    const groupedRecords = [];
+    let currentGroup = null;
+
+    enrichedRecords.forEach(record => {
+      const recordTime = record.createdAt?.toDate ? record.createdAt.toDate() : new Date(record.createdAt);
+      
+      if (currentGroup && 
+          currentGroup.feature === record.feature && 
+          currentGroup.userId === record.userId) {
+        const groupTime = currentGroup.createdAt?.toDate ? currentGroup.createdAt.toDate() : new Date(currentGroup.createdAt);
+        const timeDiff = Math.abs(groupTime - recordTime) / 1000 / 60; // minutes
+        
+        if (timeDiff <= 5) {
+          // Add to current group
+          currentGroup.totalTokens += record.totalTokens || 0;
+          currentGroup.promptTokens += record.promptTokens || 0;
+          currentGroup.completionTokens += record.completionTokens || 0;
+          currentGroup.requestCount = (currentGroup.requestCount || 1) + 1;
+          return;
+        }
+      }
+      
+      // Start new group
+      if (currentGroup) groupedRecords.push(currentGroup);
+      currentGroup = { ...record, requestCount: 1 };
+    });
+    
+    if (currentGroup) groupedRecords.push(currentGroup);
+
+    return { records: groupedRecords, summary, users };
   }
 };
 

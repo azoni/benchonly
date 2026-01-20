@@ -111,13 +111,16 @@ export default function GoalsPage() {
         currentValue: currentVal,
         startValue: editingGoal?.startValue || currentVal,
         targetValue: targetVal,
-        // Keep legacy fields for backwards compatibility
-        currentWeight: formData.metricType === 'weight' ? currentVal : undefined,
-        startWeight: formData.metricType === 'weight' ? (editingGoal?.startWeight || currentVal) : undefined,
-        targetWeight: formData.metricType === 'weight' ? targetVal : undefined,
         targetDate: formData.targetDate,
         notes: formData.notes || '',
         status: 'active'
+      }
+      
+      // Add legacy weight fields only for weight-type goals
+      if (formData.metricType === 'weight') {
+        goalData.currentWeight = currentVal
+        goalData.startWeight = editingGoal?.startWeight || currentVal
+        goalData.targetWeight = targetVal
       }
       
       if (isGuest) {
