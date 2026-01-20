@@ -15,6 +15,7 @@ import {
   Dumbbell,
   ChevronRight,
   Eye,
+  Calculator,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
@@ -28,6 +29,7 @@ const baseNavItems = [
   { path: '/calendar', icon: Calendar, label: 'Calendar' },
   { path: '/groups', icon: Users, label: 'Groups' },
   { path: '/goals', icon: Target, label: 'Goals' },
+  { path: '/tools', icon: Calculator, label: 'Tools' },
   { path: '/usage', icon: BarChart3, label: 'Usage' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
