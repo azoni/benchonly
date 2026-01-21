@@ -11,7 +11,8 @@ import {
   ChevronRight,
   X,
   Check,
-  Loader2
+  Loader2,
+  Settings
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { healthService } from '../services/firestore'
@@ -26,7 +27,13 @@ import {
   Legend
 } from 'recharts'
 
-const METRICS = {
+const DEFAULT_GOALS = {
+  sleep: 8,
+  water: 64,
+  protein: 150
+}
+
+const METRIC_CONFIG = {
   sleep: {
     label: 'Sleep',
     unit: 'hours',
@@ -34,8 +41,10 @@ const METRICS = {
     color: '#818cf8', // indigo
     bgColor: 'bg-indigo-500/20',
     textColor: 'text-indigo-400',
-    target: 8,
-    placeholder: '7.5'
+    placeholder: '7.5',
+    step: '0.5',
+    min: 4,
+    max: 12
   },
   water: {
     label: 'Water',
@@ -44,8 +53,10 @@ const METRICS = {
     color: '#22d3ee', // cyan
     bgColor: 'bg-cyan-500/20',
     textColor: 'text-cyan-400',
-    target: 64,
-    placeholder: '64'
+    placeholder: '64',
+    step: '8',
+    min: 32,
+    max: 200
   },
   protein: {
     label: 'Protein',
@@ -54,8 +65,10 @@ const METRICS = {
     color: '#f97316', // orange
     bgColor: 'bg-orange-500/20',
     textColor: 'text-orange-400',
-    target: 150,
-    placeholder: '150'
+    placeholder: '150',
+    step: '10',
+    min: 50,
+    max: 300
   }
 }
 
@@ -64,6 +77,7 @@ export default function HealthPage() {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showGoalsModal, setShowGoalsModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [chartRange, setChartRange] = useState(7) // days
@@ -72,10 +86,19 @@ export default function HealthPage() {
     water: '',
     protein: ''
   })
+  const [goals, setGoals] = useState(() => {
+    const saved = localStorage.getItem('health_goals')
+    return saved ? JSON.parse(saved) : DEFAULT_GOALS
+  })
+  const [goalsFormData, setGoalsFormData] = useState(goals)
 
   useEffect(() => {
     loadEntries()
   }, [user])
+
+  useEffect(() => {
+    localStorage.setItem('health_goals', JSON.stringify(goals))
+  }, [goals])
 
   const loadEntries = async () => {
     if (!user) return
@@ -216,21 +239,34 @@ export default function HealthPage() {
             Track sleep, hydration & nutrition
           </p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Log Today
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setGoalsFormData(goals)
+              setShowGoalsModal(true)
+            }}
+            className="p-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-lg transition-colors"
+            title="Adjust Goals"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => handleOpenModal()}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Log Today
+          </button>
+        </div>
       </div>
 
       {/* Today's Summary */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        {Object.entries(METRICS).map(([key, metric]) => {
+        {Object.entries(METRIC_CONFIG).map(([key, metric]) => {
           const Icon = metric.icon
           const value = todayEntry?.[key]
-          const percentage = value ? Math.min(100, (value / metric.target) * 100) : 0
+          const target = goals[key]
+          const percentage = value ? Math.min(100, (value / target) * 100) : 0
           
           return (
             <div 
@@ -262,7 +298,7 @@ export default function HealthPage() {
                 />
               </div>
               <p className="text-xs text-iron-600 mt-1">
-                Goal: {metric.target} {metric.unit}
+                Goal: {target} {metric.unit}
               </p>
             </div>
           )
@@ -276,7 +312,7 @@ export default function HealthPage() {
           {chartRange}-Day Averages
         </h3>
         <div className="grid grid-cols-3 gap-4">
-          {Object.entries(METRICS).map(([key, metric]) => (
+          {Object.entries(METRIC_CONFIG).map(([key, metric]) => (
             <div key={key} className="text-center">
               <p className={`text-xl font-display ${metric.textColor}`}>
                 {averages[key]} <span className="text-sm text-iron-500">{metric.unit}</span>
@@ -346,9 +382,9 @@ export default function HealthPage() {
                 yAxisId="left"
                 type="monotone" 
                 dataKey="sleep" 
-                stroke={METRICS.sleep.color}
+                stroke={METRIC_CONFIG.sleep.color}
                 strokeWidth={2}
-                dot={{ fill: METRICS.sleep.color, strokeWidth: 0, r: 3 }}
+                dot={{ fill: METRIC_CONFIG.sleep.color, strokeWidth: 0, r: 3 }}
                 connectNulls
                 name="Sleep (hrs)"
               />
@@ -356,9 +392,9 @@ export default function HealthPage() {
                 yAxisId="right"
                 type="monotone" 
                 dataKey="water" 
-                stroke={METRICS.water.color}
+                stroke={METRIC_CONFIG.water.color}
                 strokeWidth={2}
-                dot={{ fill: METRICS.water.color, strokeWidth: 0, r: 3 }}
+                dot={{ fill: METRIC_CONFIG.water.color, strokeWidth: 0, r: 3 }}
                 connectNulls
                 name="Water (oz)"
               />
@@ -366,9 +402,9 @@ export default function HealthPage() {
                 yAxisId="right"
                 type="monotone" 
                 dataKey="protein" 
-                stroke={METRICS.protein.color}
+                stroke={METRIC_CONFIG.protein.color}
                 strokeWidth={2}
-                dot={{ fill: METRICS.protein.color, strokeWidth: 0, r: 3 }}
+                dot={{ fill: METRIC_CONFIG.protein.color, strokeWidth: 0, r: 3 }}
                 connectNulls
                 name="Protein (g)"
               />
@@ -403,17 +439,17 @@ export default function HealthPage() {
                 {hasData ? (
                   <div className="flex items-center gap-4 text-sm">
                     {day.sleep && (
-                      <span className={METRICS.sleep.textColor}>
+                      <span className={METRIC_CONFIG.sleep.textColor}>
                         {day.sleep.toFixed(1)}h
                       </span>
                     )}
                     {day.water && (
-                      <span className={METRICS.water.textColor}>
+                      <span className={METRIC_CONFIG.water.textColor}>
                         {Math.round(day.water)}oz
                       </span>
                     )}
                     {day.protein && (
-                      <span className={METRICS.protein.textColor}>
+                      <span className={METRIC_CONFIG.protein.textColor}>
                         {Math.round(day.protein)}g
                       </span>
                     )}
@@ -444,7 +480,7 @@ export default function HealthPage() {
             </div>
             
             <div className="p-4 space-y-4">
-              {Object.entries(METRICS).map(([key, metric]) => {
+              {Object.entries(METRIC_CONFIG).map(([key, metric]) => {
                 const Icon = metric.icon
                 return (
                   <div key={key}>
@@ -488,6 +524,72 @@ export default function HealthPage() {
                     Save
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Goals Modal */}
+      {showGoalsModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-iron-900 rounded-xl w-full max-w-md">
+            <div className="p-4 border-b border-iron-800 flex items-center justify-between">
+              <h2 className="text-lg font-display text-iron-100">
+                Daily Goals
+              </h2>
+              <button
+                onClick={() => setShowGoalsModal(false)}
+                className="p-2 text-iron-400 hover:text-iron-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              {Object.entries(METRIC_CONFIG).map(([key, metric]) => {
+                const Icon = metric.icon
+                return (
+                  <div key={key}>
+                    <label className="flex items-center gap-2 text-sm font-medium text-iron-300 mb-2">
+                      <Icon className={`w-4 h-4 ${metric.textColor}`} />
+                      {metric.label} Goal ({metric.unit})
+                    </label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step={metric.step}
+                      min={metric.min}
+                      max={metric.max}
+                      value={goalsFormData[key]}
+                      onChange={(e) => setGoalsFormData(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
+                      placeholder={metric.placeholder}
+                      className="input-field w-full text-base py-3"
+                    />
+                    <p className="text-xs text-iron-500 mt-1">
+                      Recommended: {DEFAULT_GOALS[key]} {metric.unit}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+            
+            <div className="p-4 border-t border-iron-800 flex gap-3">
+              <button
+                onClick={() => setShowGoalsModal(false)}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setGoals(goalsFormData)
+                  setShowGoalsModal(false)
+                }}
+                className="btn-primary flex-1 flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Save Goals
               </button>
             </div>
           </div>
