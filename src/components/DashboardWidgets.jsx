@@ -13,7 +13,8 @@ import {
   TrendingUp,
   Clock,
   Users,
-  Heart
+  Heart,
+  Plus
 } from 'lucide-react'
 import { format, subDays } from 'date-fns'
 import {
@@ -228,8 +229,8 @@ export function HealthChartWidget({ healthData }) {
     chartData.push({
       date: format(subDays(new Date(), i), 'EEE'),
       sleep: entry?.sleep || null,
-      water: entry?.water || null,
-      protein: entry?.protein || null
+      water: entry?.water ? entry.water / 10 : null, // Scale down for chart
+      protein: entry?.protein ? entry.protein / 20 : null // Scale down for chart
     })
   }
 
@@ -259,11 +260,24 @@ export function HealthChartWidget({ healthData }) {
                 borderRadius: '8px',
                 fontSize: '12px'
               }}
+              formatter={(value, name) => {
+                if (name === 'water') return [`${Math.round(value * 10)} oz`, 'Water']
+                if (name === 'protein') return [`${Math.round(value * 20)} g`, 'Protein']
+                return [`${value?.toFixed(1)} hrs`, 'Sleep']
+              }}
             />
             <Line 
               type="monotone" 
               dataKey="sleep" 
               stroke="#818cf8"
+              strokeWidth={2}
+              dot={false}
+              connectNulls
+            />
+            <Line 
+              type="monotone" 
+              dataKey="water" 
+              stroke="#22d3ee"
               strokeWidth={2}
               dot={false}
               connectNulls
@@ -282,6 +296,9 @@ export function HealthChartWidget({ healthData }) {
       <div className="flex justify-center gap-4 mt-2">
         <span className="flex items-center gap-1 text-xs text-iron-400">
           <span className="w-2 h-2 rounded-full bg-indigo-400"></span> Sleep
+        </span>
+        <span className="flex items-center gap-1 text-xs text-iron-400">
+          <span className="w-2 h-2 rounded-full bg-cyan-400"></span> Water
         </span>
         <span className="flex items-center gap-1 text-xs text-iron-400">
           <span className="w-2 h-2 rounded-full bg-orange-400"></span> Protein
@@ -431,9 +448,42 @@ export const WIDGET_REGISTRY = {
     label: 'Quick Access',
     icon: ChevronRight,
     component: QuickLinksWidget,
-    defaultEnabled: false,
+    defaultEnabled: true,
     size: 'full'
+  },
+  addWidget: {
+    id: 'addWidget',
+    label: 'Add More Widgets',
+    icon: Plus,
+    component: null, // Special handling in DashboardPage
+    defaultEnabled: true,
+    size: 'full',
+    isSpecial: true
   }
 }
 
-export const DEFAULT_WIDGET_ORDER = ['stats', 'recentWorkouts', 'goals', 'health']
+export const DEFAULT_WIDGET_ORDER = ['stats', 'recentWorkouts', 'goals', 'health', 'quickLinks', 'addWidget']
+
+// ============ ADD WIDGET CARD ============
+export function AddWidgetCard({ onCustomize, availableCount }) {
+  if (availableCount === 0) return null
+  
+  return (
+    <button
+      onClick={onCustomize}
+      className="card-steel p-6 w-full border-2 border-dashed border-iron-700 hover:border-flame-500/50 transition-colors group"
+    >
+      <div className="flex flex-col items-center justify-center py-4">
+        <div className="w-12 h-12 rounded-xl bg-iron-800 group-hover:bg-flame-500/20 flex items-center justify-center mb-3 transition-colors">
+          <Plus className="w-6 h-6 text-iron-500 group-hover:text-flame-400 transition-colors" />
+        </div>
+        <p className="text-iron-400 group-hover:text-iron-200 font-medium transition-colors">
+          Add More Widgets
+        </p>
+        <p className="text-xs text-iron-600 mt-1">
+          {availableCount} more available
+        </p>
+      </div>
+    </button>
+  )
+}

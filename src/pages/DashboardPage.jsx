@@ -23,7 +23,8 @@ import {
   HealthWidget,
   HealthChartWidget,
   OneRepMaxWidget,
-  QuickLinksWidget
+  QuickLinksWidget,
+  AddWidgetCard
 } from '../components/DashboardWidgets'
 
 const STORAGE_KEY = 'dashboard_widgets'
@@ -194,6 +195,11 @@ export default function DashboardPage() {
         return <OneRepMaxWidget />
       case 'quickLinks':
         return <QuickLinksWidget />
+      case 'addWidget':
+        const availableCount = Object.keys(WIDGET_REGISTRY).filter(
+          id => !enabledWidgets.includes(id) && id !== 'addWidget'
+        ).length
+        return <AddWidgetCard onCustomize={() => setCustomizeMode(true)} availableCount={availableCount} />
       default:
         return null
     }
@@ -207,8 +213,15 @@ export default function DashboardPage() {
     )
   }
 
-  // Filter to only show enabled widgets in the correct order
-  const visibleWidgets = widgetOrder.filter(id => enabledWidgets.includes(id))
+  // Filter to only show enabled widgets in the correct order (but filter out addWidget if no more available)
+  const availableWidgetCount = Object.keys(WIDGET_REGISTRY).filter(
+    id => !enabledWidgets.includes(id) && id !== 'addWidget'
+  ).length
+  const visibleWidgets = widgetOrder.filter(id => {
+    if (!enabledWidgets.includes(id)) return false
+    if (id === 'addWidget' && availableWidgetCount === 0) return false
+    return true
+  })
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
