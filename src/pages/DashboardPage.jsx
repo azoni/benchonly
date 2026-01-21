@@ -1,140 +1,217 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
+import { motion, Reorder, AnimatePresence } from 'framer-motion'
 import {
-  TrendingUp,
-  Calendar,
-  Target,
-  Users,
-  ChevronRight,
-  Dumbbell,
-  Clock,
   Plus,
   HelpCircle,
-} from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { workoutService, goalService, groupService, scheduleService } from '../services/firestore';
-import { format, startOfWeek, endOfWeek, isToday, parseISO } from 'date-fns';
-import OnboardingModal, { useOnboarding } from '../components/OnboardingModal';
+  Settings,
+  X,
+  GripVertical,
+  Check,
+  RotateCcw
+} from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { workoutService, goalService, healthService, scheduleService } from '../services/firestore'
+import { format, startOfWeek, endOfWeek } from 'date-fns'
+import OnboardingModal, { useOnboarding } from '../components/OnboardingModal'
+import {
+  WIDGET_REGISTRY,
+  DEFAULT_WIDGET_ORDER,
+  StatsWidget,
+  RecentWorkoutsWidget,
+  GoalsWidget,
+  HealthWidget,
+  HealthChartWidget,
+  OneRepMaxWidget,
+  QuickLinksWidget
+} from '../components/DashboardWidgets'
+
+const STORAGE_KEY = 'dashboard_widgets'
 
 export default function DashboardPage() {
-  const { user, userProfile } = useAuth();
-  const { showOnboarding, openOnboarding, closeOnboarding } = useOnboarding();
-  const [stats, setStats] = useState({
-    workoutsThisWeek: 0,
-    totalWorkouts: 0,
-    activeGoals: 0,
-  });
-  const [recentWorkouts, setRecentWorkouts] = useState([]);
-  const [upcomingWorkouts, setUpcomingWorkouts] = useState([]);
-  const [goals, setGoals] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const { isGuest } = useAuth();
+  const { user, userProfile, isGuest } = useAuth()
+  const { showOnboarding, openOnboarding, closeOnboarding } = useOnboarding()
+  
+  // Dashboard data
+  const [stats, setStats] = useState({ workoutsThisWeek: 0, totalWorkouts: 0, activeGoals: 0 })
+  const [recentWorkouts, setRecentWorkouts] = useState([])
+  const [goals, setGoals] = useState([])
+  const [healthData, setHealthData] = useState([])
+  const [healthGoals, setHealthGoals] = useState(() => {
+    const saved = localStorage.getItem('health_goals')
+    return saved ? JSON.parse(saved) : { sleep: 8, water: 64, protein: 150 }
+  })
+  const [loading, setLoading] = useState(true)
+  
+  // Customization state
+  const [customizeMode, setCustomizeMode] = useState(false)
+  const [widgetOrder, setWidgetOrder] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch {
+        return DEFAULT_WIDGET_ORDER
+      }
+    }
+    return DEFAULT_WIDGET_ORDER
+  })
+  const [enabledWidgets, setEnabledWidgets] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY + '_enabled')
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch {
+        return DEFAULT_WIDGET_ORDER
+      }
+    }
+    return DEFAULT_WIDGET_ORDER
+  })
+
+  // Save widget config when changed
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(widgetOrder))
+  }, [widgetOrder])
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY + '_enabled', JSON.stringify(enabledWidgets))
+  }, [enabledWidgets])
 
   useEffect(() => {
     if (user) {
-      loadDashboardData();
+      loadDashboardData()
     }
-  }, [user]);
+  }, [user])
 
   const loadDashboardData = async () => {
     try {
-      // Use sample data for guests
       if (isGuest) {
-        const { getSampleWorkouts, SAMPLE_GOALS } = await import('../context/AuthContext');
-        const sampleWorkouts = getSampleWorkouts();
-        setRecentWorkouts(sampleWorkouts.slice(0, 5));
-        setGoals(SAMPLE_GOALS);
+        const { getSampleWorkouts, SAMPLE_GOALS } = await import('../context/AuthContext')
+        const sampleWorkouts = getSampleWorkouts()
+        setRecentWorkouts(sampleWorkouts.slice(0, 5))
+        setGoals(SAMPLE_GOALS)
         
-        const now = new Date();
-        const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-        const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+        const now = new Date()
+        const weekStart = startOfWeek(now, { weekStartsOn: 1 })
+        const weekEnd = endOfWeek(now, { weekStartsOn: 1 })
         
         const weekWorkouts = sampleWorkouts.filter((w) => {
-          const date = w.date instanceof Date ? w.date : new Date(w.date);
-          return date >= weekStart && date <= weekEnd;
-        });
+          const date = w.date instanceof Date ? w.date : new Date(w.date)
+          return date >= weekStart && date <= weekEnd
+        })
 
         setStats({
           workoutsThisWeek: weekWorkouts.length,
           totalWorkouts: sampleWorkouts.length,
           activeGoals: SAMPLE_GOALS.filter((g) => g.status === 'active').length,
-        });
-        setLoading(false);
-        return;
+        })
+        
+        // Sample health data for guests
+        setHealthData([
+          { date: format(new Date(), 'yyyy-MM-dd'), sleep: 7.5, water: 48, protein: 120 }
+        ])
+        
+        setLoading(false)
+        return
       }
 
-      // Load workouts and schedules
-      const [workouts, schedules] = await Promise.all([
+      // Load all data in parallel
+      const [workouts, userGoals, health] = await Promise.all([
         workoutService.getByUser(user.uid, 60),
-        scheduleService.getByUser(user.uid)
-      ]);
-      setRecentWorkouts(workouts.slice(0, 5));
+        goalService.getByUser(user.uid),
+        healthService.getByUser(user.uid, 14).catch(() => []) // Don't fail if health errors
+      ])
+      
+      setRecentWorkouts(workouts.slice(0, 5))
+      setGoals(userGoals.slice(0, 3))
+      setHealthData(health)
 
       // Calculate stats
-      const now = new Date();
-      const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+      const now = new Date()
+      const weekStart = startOfWeek(now, { weekStartsOn: 1 })
+      const weekEnd = endOfWeek(now, { weekStartsOn: 1 })
       
       const weekWorkouts = workouts.filter((w) => {
-        const date = w.date?.toDate ? w.date.toDate() : new Date(w.date);
-        return date >= weekStart && date <= weekEnd;
-      });
-
-      // Load goals
-      const userGoals = await goalService.getByUser(user.uid);
-      setGoals(userGoals.slice(0, 3));
+        const date = w.date?.toDate ? w.date.toDate() : new Date(w.date)
+        return date >= weekStart && date <= weekEnd
+      })
 
       setStats({
         workoutsThisWeek: weekWorkouts.length,
         totalWorkouts: workouts.length,
         activeGoals: userGoals.filter((g) => g.status === 'active').length,
-      });
+      })
 
-      setLoading(false);
+      setLoading(false)
     } catch (error) {
-      console.error('Error loading dashboard:', error);
-      setLoading(false);
+      console.error('Error loading dashboard:', error)
+      setLoading(false)
     }
-  };
+  }
 
-  const statCards = [
-    {
-      label: 'This Week',
-      value: `${stats.workoutsThisWeek} workouts`,
-      icon: Calendar,
-      color: 'text-flame-400',
-      bgColor: 'bg-flame-500/10',
-    },
-    {
-      label: 'Total Workouts',
-      value: stats.totalWorkouts,
-      icon: Dumbbell,
-      color: 'text-green-400',
-      bgColor: 'bg-green-500/10',
-    },
-  ];
+  const toggleWidget = (widgetId) => {
+    setEnabledWidgets(prev => {
+      if (prev.includes(widgetId)) {
+        return prev.filter(id => id !== widgetId)
+      } else {
+        return [...prev, widgetId]
+      }
+    })
+    // Also update order if adding
+    if (!widgetOrder.includes(widgetId)) {
+      setWidgetOrder(prev => [...prev, widgetId])
+    }
+  }
 
-  // Find upcoming/scheduled workouts from recent
-  const scheduledWorkouts = recentWorkouts.filter(w => w.status === 'scheduled');
+  const resetToDefaults = () => {
+    setWidgetOrder(DEFAULT_WIDGET_ORDER)
+    setEnabledWidgets(DEFAULT_WIDGET_ORDER)
+  }
 
   const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  };
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 18) return 'Good afternoon'
+    return 'Good evening'
+  }
+
+  const renderWidget = (widgetId) => {
+    const config = WIDGET_REGISTRY[widgetId]
+    if (!config) return null
+
+    switch (widgetId) {
+      case 'stats':
+        return <StatsWidget stats={stats} />
+      case 'recentWorkouts':
+        return <RecentWorkoutsWidget workouts={recentWorkouts} />
+      case 'goals':
+        return <GoalsWidget goals={goals} />
+      case 'health':
+        return <HealthWidget healthData={healthData} goals={healthGoals} />
+      case 'healthChart':
+        return <HealthChartWidget healthData={healthData} />
+      case 'oneRepMax':
+        return <OneRepMaxWidget />
+      case 'quickLinks':
+        return <QuickLinksWidget />
+      default:
+        return null
+    }
+  }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-8 h-8 border-2 border-flame-500 border-t-transparent rounded-full animate-spin" />
       </div>
-    );
+    )
   }
 
+  // Filter to only show enabled widgets in the correct order
+  const visibleWidgets = widgetOrder.filter(id => enabledWidgets.includes(id))
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6 pb-20">
       {/* Onboarding Modal */}
       <OnboardingModal isOpen={showOnboarding} onClose={closeOnboarding} />
 
@@ -142,7 +219,7 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="font-display text-display-md text-iron-50">
-            {getGreeting()}, {user?.displayName?.split(' ')[0]}
+            {getGreeting()}, {user?.displayName?.split(' ')[0] || 'there'}
           </h1>
           <p className="text-iron-400 mt-1">
             {format(new Date(), "EEEE, MMMM d")} — Let's crush it today.
@@ -157,214 +234,161 @@ export default function DashboardPage() {
           >
             <HelpCircle className="w-5 h-5" />
           </button>
-          <Link to="/workouts/new" className="btn-primary flex items-center gap-2 w-fit">
+          <button
+            onClick={() => setCustomizeMode(true)}
+            className="p-2 text-iron-500 hover:text-iron-300 hover:bg-iron-800 rounded-lg transition-colors"
+            title="Customize Dashboard"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+          <Link to="/workouts/new" className="btn-primary flex items-center gap-2">
             <Plus className="w-5 h-5" />
             New Workout
           </Link>
         </div>
       </div>
 
-      {/* Stats and Upcoming */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((stat, index) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="card-steel p-5 rounded-xl"
+      {/* Widgets Grid */}
+      {customizeMode ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="space-y-4"
+        >
+          {/* Customize Mode Header */}
+          <div className="flex items-center justify-between p-4 bg-flame-500/10 border border-flame-500/30 rounded-xl">
+            <div>
+              <h3 className="font-medium text-iron-100">Customize Dashboard</h3>
+              <p className="text-sm text-iron-400">Drag to reorder, toggle to show/hide</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={resetToDefaults}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm text-iron-400 hover:text-iron-200 transition-colors"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reset
+              </button>
+              <button
+                onClick={() => setCustomizeMode(false)}
+                className="flex items-center gap-1 px-4 py-1.5 bg-flame-500 text-white rounded-lg text-sm font-medium"
+              >
+                <Check className="w-4 h-4" />
+                Done
+              </button>
+            </div>
+          </div>
+
+          {/* Draggable Widget List */}
+          <Reorder.Group 
+            axis="y" 
+            values={widgetOrder} 
+            onReorder={setWidgetOrder}
+            className="space-y-3"
           >
-            <div className={`w-10 h-10 ${stat.bgColor} rounded-plate flex items-center justify-center mb-3`}>
-              <stat.icon className={`w-5 h-5 ${stat.color}`} />
-            </div>
-            <p className="metric-value">{stat.value}</p>
-            <p className="metric-label mt-1">{stat.label}</p>
-          </motion.div>
-        ))}
+            {widgetOrder.map((widgetId) => {
+              const config = WIDGET_REGISTRY[widgetId]
+              if (!config) return null
+              const Icon = config.icon
+              const isEnabled = enabledWidgets.includes(widgetId)
 
-        {/* Upcoming Workout Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="col-span-2 card-steel p-5 rounded-xl border-l-4 border-l-yellow-500"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-yellow-500/10 rounded-plate flex items-center justify-center">
-                <Clock className="w-5 h-5 text-yellow-400" />
-              </div>
-              <div>
-                <p className="text-xs text-yellow-400 font-medium uppercase tracking-wider">Next Up</p>
-                {scheduledWorkouts.length > 0 ? (
-                  <p className="font-display text-lg text-iron-100">{scheduledWorkouts[0].name}</p>
-                ) : (
-                  <p className="text-iron-400">No scheduled workouts</p>
-                )}
-              </div>
-            </div>
-            {scheduledWorkouts.length > 0 ? (
-              <Link 
-                to={`/workouts/${scheduledWorkouts[0].id}`}
-                className="btn-primary"
-              >
-                Start Workout
-              </Link>
-            ) : (
-              <Link 
-                to="/workouts/new"
-                className="btn-secondary"
-              >
-                Schedule One
-              </Link>
-            )}
-          </div>
-        </motion.div>
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Recent Workouts */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="lg:col-span-2 card-steel rounded-xl"
-        >
-          <div className="flex items-center justify-between p-5 border-b border-iron-800">
-            <h2 className="font-display text-xl text-iron-100">Recent Workouts</h2>
-            <Link to="/workouts" className="text-sm text-flame-400 hover:text-flame-300 flex items-center gap-1">
-              View all <ChevronRight className="w-4 h-4" />
-            </Link>
-          </div>
-
-          <div className="divide-y divide-iron-800">
-            {recentWorkouts.length > 0 ? (
-              recentWorkouts.map((workout) => {
-                const date = workout.date?.toDate ? workout.date.toDate() : new Date(workout.date);
-                return (
-                  <Link
-                    key={workout.id}
-                    to={`/workouts/${workout.id}`}
-                    className="flex items-center gap-4 p-4 hover:bg-iron-800/30 transition-colors"
-                  >
-                    <div className={`w-12 h-12 rounded-plate flex items-center justify-center
-                      ${isToday(date) ? 'bg-flame-500/20 text-flame-400' : 'bg-iron-800 text-iron-400'}`}>
-                      <Dumbbell className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-iron-100 truncate">
-                        {workout.name || 'Workout'}
-                      </h3>
-                      <p className="text-sm text-iron-500">
-                        {workout.exercises?.length || 0} exercises • {format(date, 'MMM d')}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-iron-600" />
-                  </Link>
-                );
-              })
-            ) : (
-              <div className="p-8 text-center">
-                <Dumbbell className="w-12 h-12 text-iron-700 mx-auto mb-3" />
-                <p className="text-iron-400">No workouts yet</p>
-                <Link to="/workouts/new" className="text-flame-400 hover:text-flame-300 text-sm mt-1 inline-block">
-                  Log your first workout
-                </Link>
-              </div>
-            )}
-          </div>
-        </motion.div>
-
-        {/* Goals Progress */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="card-steel rounded-xl"
-        >
-          <div className="flex items-center justify-between p-5 border-b border-iron-800">
-            <h2 className="font-display text-xl text-iron-100">Goals</h2>
-            <Link to="/goals" className="text-sm text-flame-400 hover:text-flame-300 flex items-center gap-1">
-              View all <ChevronRight className="w-4 h-4" />
-            </Link>
-          </div>
-
-          <div className="p-4 space-y-4">
-            {goals.length > 0 ? (
-              goals.map((goal) => {
-                const startWeight = goal.startWeight || goal.currentWeight || 0;
-                const currentWeight = goal.currentWeight || startWeight;
-                const targetWeight = goal.targetWeight || 0;
-                let progress = 0;
-                if (currentWeight > startWeight && targetWeight > startWeight) {
-                  progress = Math.min(100, Math.round(((currentWeight - startWeight) / (targetWeight - startWeight)) * 100));
-                }
-                
-                return (
-                  <div key={goal.id} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-iron-100 font-medium">{goal.lift}</span>
-                      <span className="text-xs text-iron-500">
-                        {currentWeight} / {targetWeight} lbs
-                      </span>
-                    </div>
-                    <div className="h-2 bg-iron-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-flame-500 to-flame-400 rounded-full transition-all duration-500"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
+              return (
+                <Reorder.Item
+                  key={widgetId}
+                  value={widgetId}
+                  className={`flex items-center gap-4 p-4 rounded-xl border transition-colors cursor-grab active:cursor-grabbing ${
+                    isEnabled 
+                      ? 'bg-iron-800 border-iron-700' 
+                      : 'bg-iron-900 border-iron-800 opacity-60'
+                  }`}
+                >
+                  <GripVertical className="w-5 h-5 text-iron-500 flex-shrink-0" />
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    isEnabled ? 'bg-flame-500/20' : 'bg-iron-800'
+                  }`}>
+                    <Icon className={`w-5 h-5 ${isEnabled ? 'text-flame-400' : 'text-iron-500'}`} />
+                  </div>
+                  <div className="flex-1">
+                    <p className={`font-medium ${isEnabled ? 'text-iron-100' : 'text-iron-400'}`}>
+                      {config.label}
+                    </p>
                     <p className="text-xs text-iron-500">
-                      Target: {format(goal.targetDate?.toDate ? goal.targetDate.toDate() : new Date(goal.targetDate), 'MMM d, yyyy')}
+                      {config.size === 'full' ? 'Full width' : 'Half width'}
                     </p>
                   </div>
-                );
-              })
-            ) : (
-              <div className="py-6 text-center">
-                <Target className="w-10 h-10 text-iron-700 mx-auto mb-2" />
-                <p className="text-iron-400 text-sm">No goals set</p>
-                <Link to="/goals/new" className="text-flame-400 hover:text-flame-300 text-sm mt-1 inline-block">
-                  Set your first goal
-                </Link>
-              </div>
-            )}
-          </div>
-        </motion.div>
-      </div>
+                  <button
+                    onClick={() => toggleWidget(widgetId)}
+                    className={`w-12 h-7 rounded-full transition-colors relative ${
+                      isEnabled ? 'bg-flame-500' : 'bg-iron-700'
+                    }`}
+                  >
+                    <span 
+                      className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${
+                        isEnabled ? 'left-6' : 'left-1'
+                      }`}
+                    />
+                  </button>
+                </Reorder.Item>
+              )
+            })}
+          </Reorder.Group>
 
-      {/* Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
-        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
-      >
-        {[
-          { label: 'New Workout', icon: Dumbbell, path: '/workouts/new', color: 'flame' },
-          { label: 'View Calendar', icon: Calendar, path: '/calendar', color: 'blue' },
-          { label: 'My Groups', icon: Users, path: '/groups', color: 'green' },
-          { label: 'Set Goal', icon: Target, path: '/goals', color: 'purple' },
-        ].map((action) => (
-          <Link
-            key={action.label}
-            to={action.path}
-            className="group card-steel p-4 rounded-xl hover:border-glow transition-all duration-200 flex items-center gap-3"
-          >
-            <div className={`w-10 h-10 rounded-plate flex items-center justify-center
-              ${action.color === 'flame' ? 'bg-flame-500/10 text-flame-400' : ''}
-              ${action.color === 'blue' ? 'bg-blue-500/10 text-blue-400' : ''}
-              ${action.color === 'green' ? 'bg-green-500/10 text-green-400' : ''}
-              ${action.color === 'purple' ? 'bg-purple-500/10 text-purple-400' : ''}`}
-            >
-              <action.icon className="w-5 h-5" />
+          {/* Add widgets that aren't in order yet */}
+          {Object.keys(WIDGET_REGISTRY).filter(id => !widgetOrder.includes(id)).length > 0 && (
+            <div className="pt-4 border-t border-iron-800">
+              <p className="text-sm text-iron-500 mb-3">Available Widgets</p>
+              <div className="space-y-2">
+                {Object.entries(WIDGET_REGISTRY)
+                  .filter(([id]) => !widgetOrder.includes(id))
+                  .map(([widgetId, config]) => {
+                    const Icon = config.icon
+                    return (
+                      <button
+                        key={widgetId}
+                        onClick={() => {
+                          setWidgetOrder(prev => [...prev, widgetId])
+                          setEnabledWidgets(prev => [...prev, widgetId])
+                        }}
+                        className="w-full flex items-center gap-4 p-4 rounded-xl bg-iron-900 border border-iron-800 hover:border-iron-700 transition-colors"
+                      >
+                        <Plus className="w-5 h-5 text-iron-500" />
+                        <div className="w-10 h-10 rounded-lg bg-iron-800 flex items-center justify-center">
+                          <Icon className="w-5 h-5 text-iron-500" />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="font-medium text-iron-300">{config.label}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+              </div>
             </div>
-            <span className="font-medium text-iron-200 group-hover:text-iron-50 transition-colors">
-              {action.label}
-            </span>
-          </Link>
-        ))}
-      </motion.div>
+          )}
+        </motion.div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <AnimatePresence mode="popLayout">
+            {visibleWidgets.map((widgetId) => {
+              const config = WIDGET_REGISTRY[widgetId]
+              if (!config) return null
+              const isFullWidth = config.size === 'full'
+
+              return (
+                <motion.div
+                  key={widgetId}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className={isFullWidth ? 'md:col-span-2' : ''}
+                >
+                  {renderWidget(widgetId)}
+                </motion.div>
+              )
+            })}
+          </AnimatePresence>
+        </div>
+      )}
     </div>
-  );
+  )
 }

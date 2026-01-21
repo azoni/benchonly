@@ -725,26 +725,30 @@ export const healthService = {
   },
 
   async getByUser(userId, limitCount = 30) {
+    // Simple query without orderBy to avoid index requirement
+    // Sort on client side instead
     const q = query(
       collection(db, 'health'),
       where('userId', '==', userId),
-      orderBy('date', 'desc'),
       limit(limitCount)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const results = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    // Sort by date descending on client
+    return results.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   },
 
   async getByDateRange(userId, startDate, endDate) {
+    // Simple query, filter on client to avoid composite index
     const q = query(
       collection(db, 'health'),
-      where('userId', '==', userId),
-      where('date', '>=', startDate),
-      where('date', '<=', endDate),
-      orderBy('date', 'desc')
+      where('userId', '==', userId)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const results = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter(entry => entry.date >= startDate && entry.date <= endDate);
+    return results.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   },
 
   async delete(entryId) {
