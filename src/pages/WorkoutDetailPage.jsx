@@ -157,7 +157,26 @@ export default function WorkoutDetailPage() {
     })
   }
 
-  const isScheduled = workout?.status === 'scheduled' || (!workout?.status && !checkIfComplete(workout?.exercises))
+  // Check if workout date is in the future
+  const isFutureWorkout = () => {
+    if (!workout?.date) return false
+    const workoutDate = getDisplayDate(workout.date)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    workoutDate.setHours(0, 0, 0, 0)
+    return workoutDate > today
+  }
+
+  // Determine if workout should show as scheduled/incomplete
+  // Cardio workouts are always complete (no sets to fill in) unless in future
+  // Strength workouts need all sets filled in
+  const isScheduled = (() => {
+    if (isFutureWorkout()) return true
+    if (workout?.status === 'scheduled') return true
+    if (workout?.workoutType === 'cardio') return false // Cardio is complete if not in future
+    if (!workout?.status && !checkIfComplete(workout?.exercises)) return true
+    return false
+  })()
 
   if (loading) {
     return (
