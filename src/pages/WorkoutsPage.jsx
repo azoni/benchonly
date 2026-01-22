@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { workoutService } from '../services/firestore';
-import { format, isToday, isYesterday, isThisWeek, parseISO } from 'date-fns';
+import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
+import { getDisplayDate, toDateString } from '../utils/dateUtils';
 
 export default function WorkoutsPage() {
   const { user, isGuest } = useAuth();
@@ -67,7 +68,7 @@ export default function WorkoutsPage() {
   };
 
   const getDateLabel = (date) => {
-    const d = date instanceof Date ? date : (date?.toDate ? date.toDate() : new Date(date));
+    const d = getDisplayDate(date);
     if (isToday(d)) return 'Today';
     if (isYesterday(d)) return 'Yesterday';
     if (isThisWeek(d, { weekStartsOn: 1 })) return format(d, 'EEEE');
@@ -85,8 +86,7 @@ export default function WorkoutsPage() {
 
   // Group workouts by date
   const groupedWorkouts = filteredWorkouts.reduce((acc, workout) => {
-    const date = workout.date?.toDate ? workout.date.toDate() : new Date(workout.date);
-    const key = format(date, 'yyyy-MM-dd');
+    const key = toDateString(workout.date);
     if (!acc[key]) acc[key] = [];
     acc[key].push(workout);
     return acc;

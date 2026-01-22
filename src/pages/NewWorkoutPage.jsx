@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { workoutService } from '../services/firestore';
 import CardioForm from '../components/CardioForm';
+import { getTodayString, parseLocalDate } from '../utils/dateUtils';
 
 const RPE_INFO = {
   title: 'Rate of Perceived Exertion (RPE)',
@@ -74,7 +75,7 @@ export default function NewWorkoutPage() {
 
   const [workout, setWorkout] = useState({
     name: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getTodayString(),
     notes: '',
     exercises: [createEmptyExercise()],
   });
@@ -178,7 +179,7 @@ export default function NewWorkoutPage() {
     try {
       await workoutService.create(targetUserId, {
         ...workout,
-        date: new Date(workout.date),
+        date: parseLocalDate(workout.date),
       });
       navigate(isAdminCreating ? '/admin' : '/workouts');
     } catch (error) {

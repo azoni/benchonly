@@ -19,6 +19,7 @@ import {
   getActivitiesByCategory,
   calculateActivityCalories 
 } from '../services/calorieService'
+import { getTodayString, parseLocalDate } from '../utils/dateUtils'
 
 const DAYS_OF_WEEK = [
   { id: 0, short: 'Sun', full: 'Sunday' },
@@ -38,7 +39,7 @@ export default function CardioForm({ onBack }) {
   const [showRecurring, setShowRecurring] = useState(false)
   
   const [cardio, setCardio] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: getTodayString(),
     activityType: '',
     duration: '',
     distance: '',
@@ -78,7 +79,7 @@ export default function CardioForm({ onBack }) {
       const workoutData = {
         workoutType: 'cardio',
         name: selectedActivity?.label || 'Cardio',
-        date: new Date(cardio.date),
+        date: parseLocalDate(cardio.date),
         activityType: cardio.activityType,
         duration: parseInt(cardio.duration),
         distance: cardio.distance ? parseFloat(cardio.distance) : null,

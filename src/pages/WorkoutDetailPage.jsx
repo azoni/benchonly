@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { workoutService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
+import { getDisplayDate } from '../utils/dateUtils'
 
 // Calculate estimated 1RM using Epley formula
 const calculateE1RM = (weight, reps) => {
@@ -232,7 +233,7 @@ export default function WorkoutDetailPage() {
         <div className="flex flex-wrap gap-4 text-sm">
           <div className="flex items-center gap-2 text-iron-400">
             <Calendar className="w-4 h-4" />
-            <span>{workout.date ? format(workout.date.toDate ? workout.date.toDate() : new Date(workout.date), 'EEEE, MMMM d, yyyy') : 'No date'}</span>
+            <span>{workout.date ? format(getDisplayDate(workout.date), 'EEEE, MMMM d, yyyy') : 'No date'}</span>
           </div>
           
           {workout.duration && (

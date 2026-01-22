@@ -25,6 +25,7 @@ import {
   hasCompleteProfile 
 } from '../services/calorieService'
 import { Link } from 'react-router-dom'
+import { getTodayString, toDateString, getDisplayDate } from '../utils/dateUtils'
 import {
   LineChart,
   Line,
@@ -92,7 +93,7 @@ export default function HealthPage() {
   const [showModal, setShowModal] = useState(false)
   const [showGoalsModal, setShowGoalsModal] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [selectedDate, setSelectedDate] = useState(getTodayString())
   const [chartRange, setChartRange] = useState(7) // days
   const [activeTab, setActiveTab] = useState('health') // 'health' or 'calories'
   const [formData, setFormData] = useState({
@@ -197,7 +198,7 @@ export default function HealthPage() {
   }
 
   const handleOpenModal = (date = null) => {
-    const targetDate = date || format(new Date(), 'yyyy-MM-dd')
+    const targetDate = date || getTodayString()
     setSelectedDate(targetDate)
     
     // Check if entry exists for this date
@@ -257,7 +258,7 @@ export default function HealthPage() {
   }
 
   // Get today's entry
-  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const todayStr = getTodayString()
   const todayEntry = entries.find(e => e.date === todayStr)
 
   // Prepare chart data

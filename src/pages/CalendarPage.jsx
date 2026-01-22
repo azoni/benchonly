@@ -27,8 +27,8 @@ import {
   startOfWeek,
   endOfWeek,
   isToday,
-  parseISO,
 } from 'date-fns';
+import { toDateString, getDisplayDate } from '../utils/dateUtils';
 
 export default function CalendarPage() {
   const { user, isGuest } = useAuth();
@@ -92,27 +92,24 @@ export default function CalendarPage() {
   };
 
   const getGoalDeadline = (date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
+    const dateStr = toDateString(date);
     return goals.find((g) => {
-      const targetDate = g.targetDate?.toDate ? g.targetDate.toDate() : new Date(g.targetDate);
-      return format(targetDate, 'yyyy-MM-dd') === dateStr;
+      return toDateString(g.targetDate) === dateStr;
     });
   };
 
   const getDateStatus = (date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
+    const dateStr = toDateString(date);
     
     // Check for completed workout
     const hasWorkout = workouts.some((w) => {
-      const workoutDate = w.date?.toDate ? w.date.toDate() : new Date(w.date);
-      return format(workoutDate, 'yyyy-MM-dd') === dateStr;
+      return toDateString(w.date) === dateStr;
     });
 
     // Check for group workout assigned to user
     const hasGroupWorkout = groupWorkouts.some((w) => {
       try {
-        const workoutDate = w.date?.toDate ? w.date.toDate() : new Date(w.date);
-        return format(workoutDate, 'yyyy-MM-dd') === dateStr;
+        return toDateString(w.date) === dateStr;
       } catch {
         return false;
       }
@@ -141,19 +138,17 @@ export default function CalendarPage() {
   };
 
   const getSelectedDateWorkouts = () => {
-    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const dateStr = toDateString(selectedDate);
     return workouts.filter((w) => {
-      const workoutDate = w.date?.toDate ? w.date.toDate() : new Date(w.date);
-      return format(workoutDate, 'yyyy-MM-dd') === dateStr;
+      return toDateString(w.date) === dateStr;
     });
   };
 
   const getSelectedDateGroupWorkouts = () => {
-    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const dateStr = toDateString(selectedDate);
     return groupWorkouts.filter((w) => {
       try {
-        const workoutDate = w.date?.toDate ? w.date.toDate() : new Date(w.date);
-        return format(workoutDate, 'yyyy-MM-dd') === dateStr;
+        return toDateString(w.date) === dateStr;
       } catch {
         return false;
       }
@@ -161,7 +156,7 @@ export default function CalendarPage() {
   };
 
   const getSelectedDateSchedule = () => {
-    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const dateStr = toDateString(selectedDate);
     const dayOfWeek = format(selectedDate, 'EEEE').toLowerCase();
 
     return schedules.filter((s) => {

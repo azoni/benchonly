@@ -29,6 +29,7 @@ import {
   CaloriesWidget
 } from '../components/DashboardWidgets'
 import { calculateTDEE, calculateActivityCalories, calculateStrengthWorkoutCalories } from '../services/calorieService'
+import { getTodayString, toDateString } from '../utils/dateUtils'
 
 const STORAGE_KEY = 'dashboard_widgets'
 
@@ -114,7 +115,7 @@ export default function DashboardPage() {
         
         // Sample health data for guests
         setHealthData([
-          { date: format(new Date(), 'yyyy-MM-dd'), sleep: 7.5, water: 48, protein: 120 }
+          { date: getTodayString(), sleep: 7.5, water: 48, protein: 120 }
         ])
         
         // Sample calorie data for guests
@@ -139,7 +140,7 @@ export default function DashboardPage() {
       const now = new Date()
       const weekStart = startOfWeek(now, { weekStartsOn: 1 })
       const weekEnd = endOfWeek(now, { weekStartsOn: 1 })
-      const todayStr = format(now, 'yyyy-MM-dd')
+      const todayStr = getTodayString()
       
       const weekWorkouts = workouts.filter((w) => {
         const date = w.date?.toDate ? w.date.toDate() : new Date(w.date)
@@ -158,8 +159,7 @@ export default function DashboardPage() {
       
       // Today's calories
       const todayWorkouts = workouts.filter(w => {
-        const wDate = w.date?.toDate ? w.date.toDate() : new Date(w.date)
-        return format(wDate, 'yyyy-MM-dd') === todayStr
+        return toDateString(w.date) === todayStr
       })
       let todayExercise = 0
       todayWorkouts.forEach(w => {
