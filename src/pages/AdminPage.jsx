@@ -13,13 +13,16 @@ import {
   Eye,
   UserCog,
   Edit2,
-  Trash2
+  Trash2,
+  Activity,
+  TrendingUp
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { collection, getDocs, query, orderBy } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import { workoutService, goalService } from '../services/firestore'
-import { format } from 'date-fns'
+import { analyticsService } from '../services/analyticsService'
+import { format, formatDistanceToNow } from 'date-fns'
 
 const ADMIN_EMAILS = ['charltonuw@gmail.com']
 
@@ -36,6 +39,9 @@ export default function AdminPage() {
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [showWorkoutModal, setShowWorkoutModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
+  const [activeTab, setActiveTab] = useState('users') // 'users' or 'activity'
+  const [activityData, setActivityData] = useState(null)
+  const [activityLoading, setActivityLoading] = useState(false)
   const [goalForm, setGoalForm] = useState({
     lift: '',
     metricType: 'weight',
@@ -97,6 +103,25 @@ export default function AdminPage() {
       console.error('Error loading user data:', error)
     }
   }
+
+  const loadActivityData = async () => {
+    setActivityLoading(true)
+    try {
+      const data = await analyticsService.getActivitySummary(7)
+      setActivityData(data)
+    } catch (error) {
+      console.error('Error loading activity:', error)
+    } finally {
+      setActivityLoading(false)
+    }
+  }
+
+  // Load activity when tab changes
+  useEffect(() => {
+    if (activeTab === 'activity' && !activityData) {
+      loadActivityData()
+    }
+  }, [activeTab])
 
   const handleCreateGoal = async (e) => {
     e.preventDefault()
@@ -200,6 +225,32 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="card-steel p-1 mb-6 flex gap-1 max-w-xs">
+        <button
+          onClick={() => setActiveTab('users')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
+            activeTab === 'users'
+              ? 'bg-flame-500 text-white'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Users
+        </button>
+        <button
+          onClick={() => setActiveTab('activity')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
+            activeTab === 'activity'
+              ? 'bg-flame-500 text-white'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <Activity className="w-4 h-4" />
+          Activity
+        </button>
+      </div>
+
       {/* Impersonation Banner */}
       {impersonating && (
         <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl flex items-center justify-between">
@@ -223,6 +274,8 @@ export default function AdminPage() {
         </div>
       )}
 
+      {activeTab === 'users' ? (
+      <>
       <div className="grid lg:grid-cols-3 gap-6">
         {/* User List */}
         <div className="card-steel rounded-xl">
@@ -457,6 +510,129 @@ export default function AdminPage() {
           )}
         </div>
       </div>
+      </>
+      ) : (
+        /* Activity Tab */
+        <div className="space-y-6">
+          {activityLoading ? (
+            <div className="card-steel p-12 text-center">
+              <div className="w-8 h-8 border-2 border-flame-500 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-iron-500 mt-4">Loading activity data...</p>
+            </div>
+          ) : activityData ? (
+            <>
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="card-steel p-4 text-center">
+                  <p className="text-3xl font-display text-flame-400">{activityData.uniqueUsers}</p>
+                  <p className="text-sm text-iron-500">Active Users (7d)</p>
+                </div>
+                <div className="card-steel p-4 text-center">
+                  <p className="text-3xl font-display text-iron-100">{activityData.totalEvents}</p>
+                  <p className="text-sm text-iron-500">Total Events</p>
+                </div>
+                <div className="card-steel p-4 text-center">
+                  <p className="text-3xl font-display text-green-400">{activityData.actionCounts?.workout_created || 0}</p>
+                  <p className="text-sm text-iron-500">Workouts Created</p>
+                </div>
+                <div className="card-steel p-4 text-center">
+                  <p className="text-3xl font-display text-orange-400">{activityData.actionCounts?.cardio_logged || 0}</p>
+                  <p className="text-sm text-iron-500">Cardio Logged</p>
+                </div>
+              </div>
+
+              {/* Daily Active Users Chart */}
+              <div className="card-steel p-4">
+                <h3 className="font-display text-lg text-iron-100 mb-4">Daily Active Users</h3>
+                <div className="flex items-end gap-2 h-32">
+                  {activityData.dailyActiveCounts?.map((day, i) => (
+                    <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
+                      <div 
+                        className="w-full bg-flame-500 rounded-t"
+                        style={{ height: `${Math.max(8, (day.count / Math.max(...activityData.dailyActiveCounts.map(d => d.count), 1)) * 100)}%` }}
+                      />
+                      <span className="text-xs text-iron-500">{format(new Date(day.date), 'EEE')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Page Views */}
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="card-steel p-4">
+                  <h3 className="font-display text-lg text-iron-100 mb-4">Top Pages</h3>
+                  <div className="space-y-2">
+                    {Object.entries(activityData.pageCounts || {})
+                      .sort(([,a], [,b]) => b - a)
+                      .slice(0, 8)
+                      .map(([page, count]) => (
+                        <div key={page} className="flex justify-between items-center py-2 border-b border-iron-800 last:border-0">
+                          <span className="text-iron-300 text-sm">{page}</span>
+                          <span className="text-flame-400 font-medium">{count}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                <div className="card-steel p-4">
+                  <h3 className="font-display text-lg text-iron-100 mb-4">Action Breakdown</h3>
+                  <div className="space-y-2">
+                    {Object.entries(activityData.actionCounts || {})
+                      .sort(([,a], [,b]) => b - a)
+                      .map(([action, count]) => (
+                        <div key={action} className="flex justify-between items-center py-2 border-b border-iron-800 last:border-0">
+                          <span className="text-iron-300 text-sm">{action.replace(/_/g, ' ')}</span>
+                          <span className="text-iron-400 font-medium">{count}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="card-steel p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-display text-lg text-iron-100">Recent Activity</h3>
+                  <button 
+                    onClick={loadActivityData}
+                    className="text-sm text-flame-400 hover:text-flame-300"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {activityData.recentEvents?.map((event) => {
+                    const eventUser = users.find(u => u.uid === event.userId)
+                    return (
+                      <div key={event.id} className="flex items-center gap-3 py-2 border-b border-iron-800 last:border-0">
+                        <div className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 text-xs">
+                          {eventUser?.displayName?.[0] || '?'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-iron-200 truncate">
+                            <span className="text-iron-400">{eventUser?.displayName || 'Unknown'}</span>
+                            {' · '}
+                            <span className="text-flame-400">{event.action.replace(/_/g, ' ')}</span>
+                            {event.metadata?.page && <span className="text-iron-500"> {event.metadata.page}</span>}
+                          </p>
+                          <p className="text-xs text-iron-600">
+                            {event.timestamp?.toDate && formatDistanceToNow(event.timestamp.toDate(), { addSuffix: true })}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="card-steel p-12 text-center">
+              <Activity className="w-12 h-12 text-iron-600 mx-auto mb-4" />
+              <p className="text-iron-500">No activity data yet</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Goal Modal */}
       {showGoalModal && (

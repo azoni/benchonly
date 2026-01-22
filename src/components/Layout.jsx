@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -21,6 +21,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
 import AIChatPanel from './AIChatPanel';
+import { analyticsService } from '../services/analyticsService';
 
 const ADMIN_EMAILS = ['charltonuw@gmail.com'];
 
@@ -42,6 +43,13 @@ export default function Layout() {
   const { user, userProfile, signOut, isGuest } = useAuth();
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Track page views
+  useEffect(() => {
+    if (user && !isGuest) {
+      analyticsService.logPageView(user.uid, location.pathname)
+    }
+  }, [location.pathname, user, isGuest])
 
   const isAdmin = user && ADMIN_EMAILS.includes(user.email);
   

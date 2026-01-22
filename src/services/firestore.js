@@ -17,6 +17,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { analyticsService, ACTIONS } from './analyticsService';
 
 // ============ USERS ============
 export const userService = {
@@ -49,10 +50,29 @@ export const userService = {
 export const workoutService = {
   // Create a workout for yourself
   async create(userId, workoutData) {
+    // Check if workout date is in the future
+    const workoutDate = workoutData.date instanceof Date 
+      ? workoutData.date 
+      : workoutData.date?.toDate 
+        ? workoutData.date.toDate() 
+        : new Date(workoutData.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    workoutDate.setHours(0, 0, 0, 0);
+    const isFuture = workoutDate > today;
+    
     // Determine if workout is complete
-    const isComplete = workoutData.workoutType === 'cardio' 
-      ? true // Cardio workouts are complete when logged
-      : this.checkIfComplete(workoutData.exercises);
+    // Future workouts are always scheduled
+    // Cardio workouts (not in future) are complete when logged
+    // Strength workouts need actual values filled in
+    let isComplete = false;
+    if (isFuture) {
+      isComplete = false;
+    } else if (workoutData.workoutType === 'cardio') {
+      isComplete = true;
+    } else {
+      isComplete = this.checkIfComplete(workoutData.exercises);
+    }
     
     const docRef = await addDoc(collection(db, 'workouts'), {
       ...workoutData,
@@ -68,6 +88,14 @@ export const workoutService = {
     if (isComplete && workoutData.workoutType !== 'cardio') {
       await this.checkAndUpdateGoals(userId, workoutData);
     }
+    
+    // Track analytics
+    const actionType = workoutData.workoutType === 'cardio' ? ACTIONS.CARDIO_LOGGED : ACTIONS.WORKOUT_CREATED;
+    analyticsService.logAction(userId, actionType, {
+      workoutType: workoutData.workoutType,
+      exerciseCount: workoutData.exercises?.length || 0,
+      status: isComplete ? 'completed' : 'scheduled'
+    });
     
     return { id: docRef.id, ...workoutData, status: isComplete ? 'completed' : 'scheduled' };
   },
@@ -98,6 +126,11 @@ export const workoutService = {
     // Check goals
     const workoutData = { exercises: exercisesWithActuals };
     await this.checkAndUpdateGoals(userId, workoutData);
+    
+    // Track analytics
+    analyticsService.logAction(userId, ACTIONS.WORKOUT_COMPLETED, {
+      exerciseCount: exercisesWithActuals?.length || 0
+    });
     
     return { id: workoutId, status: 'completed' };
   },
