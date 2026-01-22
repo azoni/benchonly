@@ -199,21 +199,25 @@ export default function WorkoutsPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
-                      className="card-steel rounded-xl overflow-hidden group"
+                      className="card-steel rounded-xl overflow-hidden group relative"
                     >
                       <Link
                         to={`/workouts/${workout.id}`}
-                        className="flex items-center gap-4 p-4"
+                        className="flex items-center gap-4 p-4 pr-12"
                       >
-                        <div className={`w-12 h-12 rounded-plate flex items-center justify-center ${
+                        <div className={`w-12 h-12 rounded-plate flex items-center justify-center flex-shrink-0 ${
                           workout.status === 'scheduled' 
                             ? 'bg-yellow-500/10' 
-                            : 'bg-flame-500/10'
+                            : workout.workoutType === 'cardio'
+                              ? 'bg-orange-500/10'
+                              : 'bg-flame-500/10'
                         }`}>
                           <Dumbbell className={`w-6 h-6 ${
                             workout.status === 'scheduled'
                               ? 'text-yellow-400'
-                              : 'text-flame-400'
+                              : workout.workoutType === 'cardio'
+                                ? 'text-orange-400'
+                                : 'text-flame-400'
                           }`} />
                         </div>
 
@@ -227,16 +231,22 @@ export default function WorkoutsPage() {
                                 Scheduled
                               </span>
                             )}
+                            {workout.workoutType === 'cardio' && (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-orange-500/20 text-orange-400 rounded">
+                                Cardio
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-4 mt-1">
-                            <span className="text-sm text-iron-500 flex items-center gap-1">
-                              <Dumbbell className="w-3.5 h-3.5" />
-                              {workout.exercises?.length || 0} exercises
-                            </span>
-                            {workout.duration && (
+                            {workout.workoutType === 'cardio' ? (
                               <span className="text-sm text-iron-500 flex items-center gap-1">
                                 <Clock className="w-3.5 h-3.5" />
                                 {workout.duration} min
+                              </span>
+                            ) : (
+                              <span className="text-sm text-iron-500 flex items-center gap-1">
+                                <Dumbbell className="w-3.5 h-3.5" />
+                                {workout.exercises?.length || 0} exercises
                               </span>
                             )}
                           </div>
@@ -259,51 +269,50 @@ export default function WorkoutsPage() {
                           )}
                         </div>
 
-                        <ChevronRight className="w-5 h-5 text-iron-600 group-hover:text-iron-400 transition-colors" />
+                        <ChevronRight className="w-5 h-5 text-iron-600 group-hover:text-iron-400 transition-colors flex-shrink-0" />
                       </Link>
 
-                      {/* Actions Menu */}
-                      <div className="relative">
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setActiveMenu(activeMenu === workout.id ? null : workout.id);
-                          }}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-iron-500
-                            hover:text-iron-300 hover:bg-iron-800 rounded-plate transition-colors z-10"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
+                      {/* Actions Menu - positioned absolutely within the card */}
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setActiveMenu(activeMenu === workout.id ? null : workout.id);
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-iron-500
+                          hover:text-iron-300 hover:bg-iron-800 rounded-lg transition-colors z-10"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
 
-                        <AnimatePresence>
-                          {activeMenu === workout.id && (
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0.95 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              exit={{ opacity: 0, scale: 0.95 }}
-                              className="absolute right-4 top-12 bg-iron-800 border border-iron-700
-                                rounded-plate shadow-xl z-20 py-1 min-w-[140px]"
+                      <AnimatePresence>
+                        {activeMenu === workout.id && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="absolute right-2 top-14 bg-iron-800 border border-iron-700
+                              rounded-lg shadow-xl z-20 py-1 min-w-[140px]"
+                          >
+                            <Link
+                              to={`/workouts/${workout.id}/edit`}
+                              className="flex items-center gap-2 px-4 py-2 text-sm text-iron-300
+                                hover:bg-iron-700 transition-colors"
                             >
-                              <Link
-                                to={`/workouts/${workout.id}/edit`}
-                                className="flex items-center gap-2 px-4 py-2 text-sm text-iron-300
-                                  hover:bg-iron-700 transition-colors"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                                Edit
-                              </Link>
-                              <button
-                                onClick={() => handleDelete(workout.id)}
-                                className="flex items-center gap-2 px-4 py-2 text-sm text-red-400
-                                  hover:bg-iron-700 transition-colors w-full"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                Delete
-                              </button>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
+                              <Edit2 className="w-4 h-4" />
+                              Edit
+                            </Link>
+                            <button
+                              onClick={() => handleDelete(workout.id)}
+                              className="flex items-center gap-2 px-4 py-2 text-sm text-red-400
+                                hover:bg-iron-700 transition-colors w-full"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </motion.div>
                   ))}
                 </div>

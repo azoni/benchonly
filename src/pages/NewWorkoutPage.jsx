@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
@@ -13,11 +13,12 @@ import {
   Dumbbell,
   AlertCircle,
   Activity,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { workoutService } from '../services/firestore';
 import CardioForm from '../components/CardioForm';
-import { getTodayString, parseLocalDate } from '../utils/dateUtils';
+import { getTodayString, parseLocalDate, toDateString } from '../utils/dateUtils';
 
 const RPE_INFO = {
   title: 'Rate of Perceived Exertion (RPE)',
@@ -64,14 +65,17 @@ const COMMON_EXERCISES = [
 export default function NewWorkoutPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { id: editId } = useParams(); // For edit mode
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(!!editId);
   const [rpeModalOpen, setRpeModalOpen] = useState(false);
   const [workoutType, setWorkoutType] = useState('strength'); // 'strength' or 'cardio'
   
   // Support admin creating workout for another user
   const targetUserId = searchParams.get('userId') || user?.uid;
   const isAdminCreating = searchParams.get('userId') && searchParams.get('userId') !== user?.uid;
+  const isEditMode = !!editId;
 
   const [workout, setWorkout] = useState({
     name: '',
@@ -79,6 +83,45 @@ export default function NewWorkoutPage() {
     notes: '',
     exercises: [createEmptyExercise()],
   });
+
+  // Load existing workout if editing
+  useEffect(() => {
+    async function loadWorkout() {
+      if (!editId || !user) return;
+      
+      try {
+        const existingWorkout = await workoutService.getById(editId);
+        if (existingWorkout) {
+          // Check if it's a cardio workout - redirect to detail page since we can't edit cardio yet
+          if (existingWorkout.workoutType === 'cardio') {
+            navigate(`/workouts/${editId}`);
+            return;
+          }
+          
+          setWorkout({
+            name: existingWorkout.name || '',
+            date: toDateString(existingWorkout.date),
+            notes: existingWorkout.notes || '',
+            exercises: existingWorkout.exercises?.map(ex => ({
+              ...ex,
+              id: ex.id || Date.now() + Math.random(),
+              expanded: true,
+              sets: ex.sets?.map(set => ({
+                ...set,
+                id: set.id || Date.now() + Math.random(),
+              })) || [createEmptySet()]
+            })) || [createEmptyExercise()],
+          });
+        }
+      } catch (error) {
+        console.error('Error loading workout:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    loadWorkout();
+  }, [editId, user]);
 
   function createEmptyExercise() {
     return {
@@ -177,10 +220,16 @@ export default function NewWorkoutPage() {
 
     setSaving(true);
     try {
-      await workoutService.create(targetUserId, {
+      const workoutData = {
         ...workout,
         date: parseLocalDate(workout.date),
-      });
+      };
+      
+      if (isEditMode) {
+        await workoutService.update(editId, workoutData);
+      } else {
+        await workoutService.create(targetUserId, workoutData);
+      }
       navigate(isAdminCreating ? '/admin' : '/workouts');
     } catch (error) {
       console.error('Error saving workout:', error);
@@ -189,6 +238,14 @@ export default function NewWorkoutPage() {
       setSaving(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 text-flame-500 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto pb-24">
@@ -201,12 +258,17 @@ export default function NewWorkoutPage() {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="font-display text-display-md text-iron-50">New Workout</h1>
-          <p className="text-iron-400">Log your training session</p>
+          <h1 className="font-display text-display-md text-iron-50">
+            {isEditMode ? 'Edit Workout' : 'New Workout'}
+          </h1>
+          <p className="text-iron-400">
+            {isEditMode ? 'Update your training session' : 'Log your training session'}
+          </p>
         </div>
       </div>
 
-      {/* Workout Type Toggle */}
+      {/* Workout Type Toggle - hide in edit mode */}
+      {!isEditMode && (
       <div className="card-steel p-2 mb-6 flex gap-2">
         <button
           onClick={() => setWorkoutType('strength')}
@@ -231,6 +293,7 @@ export default function NewWorkoutPage() {
           Cardio
         </button>
       </div>
+      )}
 
       {/* Workout Info */}
       <div className="card-steel rounded-xl p-5 mb-6">
@@ -672,7 +735,7 @@ export default function NewWorkoutPage() {
             ) : (
               <>
                 <Save className="w-5 h-5" />
-                Save Workout
+                {isEditMode ? 'Update Workout' : 'Save Workout'}
               </>
             )}
           </button>

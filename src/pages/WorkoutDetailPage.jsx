@@ -14,11 +14,15 @@ import {
   MoreVertical,
   Check,
   Play,
-  CheckCircle2
+  CheckCircle2,
+  Flame,
+  Activity,
+  MapPin
 } from 'lucide-react'
 import { workoutService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
 import { getDisplayDate } from '../utils/dateUtils'
+import { ACTIVITY_METS } from '../services/calorieService'
 
 // Calculate estimated 1RM using Epley formula
 const calculateE1RM = (weight, reps) => {
@@ -210,8 +214,13 @@ export default function WorkoutDetailPage() {
       </div>
 
       {/* Status Badge */}
-      <div className="mb-4">
-        {isScheduled ? (
+      <div className="mb-4 flex items-center gap-2">
+        {workout.workoutType === 'cardio' ? (
+          <span className="inline-flex items-center gap-2 px-3 py-1 bg-orange-500/20 text-orange-400 rounded-full text-sm font-medium">
+            <Activity className="w-4 h-4" />
+            Cardio
+          </span>
+        ) : isScheduled ? (
           <span className="inline-flex items-center gap-2 px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm font-medium">
             <Calendar className="w-4 h-4" />
             Scheduled
@@ -242,6 +251,13 @@ export default function WorkoutDetailPage() {
               <span>{workout.duration} min</span>
             </div>
           )}
+          
+          {workout.distance && (
+            <div className="flex items-center gap-2 text-iron-400">
+              <MapPin className="w-4 h-4" />
+              <span>{workout.distance} mi</span>
+            </div>
+          )}
         </div>
         
         {workout.notes && (
@@ -251,7 +267,7 @@ export default function WorkoutDetailPage() {
         )}
 
         {/* Log Workout Button for Scheduled Workouts */}
-        {isScheduled && !isLogging && (
+        {isScheduled && !isLogging && workout.workoutType !== 'cardio' && (
           <button
             onClick={() => setIsLogging(true)}
             className="mt-6 btn-primary w-full flex items-center justify-center gap-2"
@@ -262,7 +278,46 @@ export default function WorkoutDetailPage() {
         )}
       </div>
 
-      {/* Exercises */}
+      {/* Cardio Details */}
+      {workout.workoutType === 'cardio' && (
+        <div className="card-steel p-6 mb-6">
+          <h2 className="text-lg font-display text-iron-300 mb-4">Activity Details</h2>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-iron-800/50 rounded-lg p-4">
+              <p className="text-sm text-iron-500 mb-1">Activity</p>
+              <p className="text-lg font-medium text-iron-100">
+                {ACTIVITY_METS[workout.activityType]?.label || workout.activityType || 'Unknown'}
+              </p>
+            </div>
+            
+            <div className="bg-iron-800/50 rounded-lg p-4">
+              <p className="text-sm text-iron-500 mb-1">Duration</p>
+              <p className="text-lg font-medium text-iron-100">{workout.duration} min</p>
+            </div>
+            
+            {workout.estimatedCalories > 0 && (
+              <div className="bg-flame-500/10 rounded-lg p-4">
+                <p className="text-sm text-iron-500 mb-1">Calories Burned</p>
+                <p className="text-lg font-medium text-flame-400 flex items-center gap-2">
+                  <Flame className="w-5 h-5" />
+                  {workout.estimatedCalories}
+                </p>
+              </div>
+            )}
+            
+            {workout.distance && (
+              <div className="bg-iron-800/50 rounded-lg p-4">
+                <p className="text-sm text-iron-500 mb-1">Distance</p>
+                <p className="text-lg font-medium text-iron-100">{workout.distance} mi</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Exercises - only show for strength workouts */}
+      {workout.workoutType !== 'cardio' && (
       <div className="space-y-4">
         <h2 className="text-lg font-display text-iron-300">Exercises</h2>
         
@@ -403,6 +458,7 @@ export default function WorkoutDetailPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Save Button when Logging */}
       {isLogging && (
