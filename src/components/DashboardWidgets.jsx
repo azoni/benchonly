@@ -14,9 +14,10 @@ import {
   Clock,
   Users,
   Heart,
-  Plus
+  Plus,
+  Flame
 } from 'lucide-react'
-import { format, subDays } from 'date-fns'
+import { format, subDays, startOfWeek, endOfWeek } from 'date-fns'
 import {
   LineChart,
   Line,
@@ -393,6 +394,74 @@ export function QuickLinksWidget() {
   )
 }
 
+// ============ CALORIES WIDGET ============
+export function CaloriesWidget({ calorieData, profile }) {
+  const [view, setView] = useState('week') // 'week' or 'lifetime'
+  
+  const weekTotal = calorieData?.weekTotal || 0
+  const lifetimeTotal = calorieData?.lifetimeTotal || 0
+  const todayTotal = calorieData?.todayTotal || 0
+  const hasProfile = profile?.weight && profile?.height && profile?.age
+  
+  return (
+    <div className="card-steel p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-display text-lg text-iron-100">Calories Burned</h3>
+        <div className="flex bg-iron-800 rounded-lg p-1">
+          <button
+            onClick={() => setView('week')}
+            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+              view === 'week' ? 'bg-flame-500 text-white' : 'text-iron-400'
+            }`}
+          >
+            Week
+          </button>
+          <button
+            onClick={() => setView('lifetime')}
+            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+              view === 'lifetime' ? 'bg-flame-500 text-white' : 'text-iron-400'
+            }`}
+          >
+            Lifetime
+          </button>
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-4">
+        <div className="w-14 h-14 rounded-xl bg-flame-500/20 flex items-center justify-center">
+          <Flame className="w-7 h-7 text-flame-400" />
+        </div>
+        <div>
+          <p className="text-3xl font-display text-iron-100">
+            {view === 'week' 
+              ? weekTotal.toLocaleString()
+              : lifetimeTotal.toLocaleString()
+            }
+          </p>
+          <p className="text-sm text-iron-500">
+            {view === 'week' ? 'calories this week' : 'total calories'}
+          </p>
+        </div>
+      </div>
+      
+      {!hasProfile && (
+        <Link 
+          to="/settings"
+          className="mt-4 block p-3 bg-iron-800 rounded-lg text-sm text-iron-400 hover:text-iron-200 transition-colors"
+        >
+          Complete your profile for accurate estimates →
+        </Link>
+      )}
+      
+      {todayTotal > 0 && (
+        <div className="mt-4 pt-4 border-t border-iron-800">
+          <p className="text-sm text-iron-500">Today: <span className="text-flame-400">{todayTotal.toLocaleString()} cal</span></p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ============ WIDGET REGISTRY ============
 export const WIDGET_REGISTRY = {
   stats: {
@@ -425,6 +494,14 @@ export const WIDGET_REGISTRY = {
     icon: Heart,
     component: HealthWidget,
     defaultEnabled: true,
+    size: 'half'
+  },
+  calories: {
+    id: 'calories',
+    label: 'Calories Burned',
+    icon: Flame,
+    component: CaloriesWidget,
+    defaultEnabled: false,
     size: 'half'
   },
   healthChart: {

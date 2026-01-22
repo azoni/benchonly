@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { 
   User, 
   Bell, 
@@ -11,11 +11,16 @@ import {
   Trash2,
   ExternalLink,
   Camera,
-  Loader2
+  Loader2,
+  Ruler,
+  Calendar,
+  Activity,
+  ChevronDown
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
 import { auth } from '../services/firebase'
+import { ACTIVITY_LEVELS } from '../services/calorieService'
 
 export default function SettingsPage() {
   const { user, userProfile, updateProfile } = useAuth()
@@ -23,11 +28,36 @@ export default function SettingsPage() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [photoURL, setPhotoURL] = useState(userProfile?.photoURL || user?.photoURL)
   const fileInputRef = useRef(null)
+  const [showProfileSection, setShowProfileSection] = useState(false)
+  
   const [settings, setSettings] = useState({
     notifications: userProfile?.settings?.notifications ?? true,
     units: userProfile?.settings?.units || 'lbs',
-    theme: userProfile?.settings?.theme || 'dark'
+    theme: userProfile?.settings?.theme || 'dark',
+    weekStartDay: userProfile?.settings?.weekStartDay || 'monday'
   })
+
+  const [profile, setProfile] = useState({
+    weight: userProfile?.weight || '',
+    heightFeet: userProfile?.heightFeet || '',
+    heightInches: userProfile?.heightInches || '',
+    age: userProfile?.age || '',
+    gender: userProfile?.gender || '',
+    activityLevel: userProfile?.activityLevel || 'light'
+  })
+
+  useEffect(() => {
+    if (userProfile) {
+      setProfile({
+        weight: userProfile.weight || '',
+        heightFeet: userProfile.heightFeet || '',
+        heightInches: userProfile.heightInches || '',
+        age: userProfile.age || '',
+        gender: userProfile.gender || '',
+        activityLevel: userProfile.activityLevel || 'light'
+      })
+    }
+  }, [userProfile])
 
   const compressImage = (file, maxWidth = 200, quality = 0.8) => {
     return new Promise((resolve) => {
@@ -55,13 +85,11 @@ export default function SettingsPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file')
       return
     }
 
-    // Validate file size (max 5MB before compression)
     if (file.size > 5 * 1024 * 1024) {
       alert('Image must be less than 5MB')
       return
@@ -69,14 +97,8 @@ export default function SettingsPage() {
 
     setUploadingPhoto(true)
     try {
-      // Compress image to small Base64
       const base64Image = await compressImage(file, 200, 0.8)
-      
-      // Update Firestore profile with Base64 image
-      await updateProfile({
-        photoURL: base64Image
-      })
-      
+      await updateProfile({ photoURL: base64Image })
       setPhotoURL(base64Image)
     } catch (error) {
       console.error('Error uploading photo:', error)
@@ -96,7 +118,6 @@ export default function SettingsPage() {
       })
     } catch (error) {
       console.error('Error updating setting:', error)
-      // Revert on error
       setSettings(prev => ({ ...prev, [key]: !newValue }))
     }
   }
@@ -114,6 +135,43 @@ export default function SettingsPage() {
     }
   }
 
+  const handleWeekStartChange = async (day) => {
+    setSettings(prev => ({ ...prev, weekStartDay: day }))
+    
+    try {
+      await updateProfile({
+        settings: { ...userProfile?.settings, weekStartDay: day }
+      })
+    } catch (error) {
+      console.error('Error updating week start:', error)
+    }
+  }
+
+  const handleProfileSave = async () => {
+    setSaving(true)
+    try {
+      // Calculate total height in inches for calorie calculations
+      const heightTotal = profile.heightFeet && profile.heightInches 
+        ? (parseInt(profile.heightFeet) * 12) + parseInt(profile.heightInches)
+        : null
+
+      await updateProfile({
+        weight: profile.weight ? parseFloat(profile.weight) : null,
+        heightFeet: profile.heightFeet ? parseInt(profile.heightFeet) : null,
+        heightInches: profile.heightInches ? parseInt(profile.heightInches) : null,
+        height: heightTotal, // Total inches for calorie service
+        age: profile.age ? parseInt(profile.age) : null,
+        gender: profile.gender || null,
+        activityLevel: profile.activityLevel || 'light'
+      })
+    } catch (error) {
+      console.error('Error saving profile:', error)
+      alert('Failed to save profile. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleSignOut = async () => {
     try {
       await signOut(auth)
@@ -124,10 +182,11 @@ export default function SettingsPage() {
 
   const handleDeleteAccount = () => {
     if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-      // TODO: Implement account deletion
       alert('Account deletion coming soon. Contact support for now.')
     }
   }
+
+  const profileComplete = profile.weight && profile.heightFeet && profile.age && profile.gender
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 pb-24">
@@ -139,7 +198,7 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* Profile Section */}
+      {/* Profile Photo Section */}
       <div className="card-steel p-5 mb-6">
         <div className="flex items-center gap-4">
           <div className="relative">
@@ -155,7 +214,6 @@ export default function SettingsPage() {
               </div>
             )}
             
-            {/* Upload button overlay */}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingPhoto}
@@ -192,6 +250,150 @@ export default function SettingsPage() {
               {uploadingPhoto ? 'Uploading...' : 'Change photo'}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Body Profile Section */}
+      <div className="space-y-3 mb-6">
+        <h3 className="text-sm font-medium text-iron-400 px-1">Body Profile</h3>
+        
+        <div className="card-steel overflow-hidden">
+          <button
+            onClick={() => setShowProfileSection(!showProfileSection)}
+            className="w-full p-4 flex items-center gap-4"
+          >
+            <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+              <Activity className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium text-iron-200">Calorie Tracking Profile</p>
+              <p className="text-sm text-iron-500">
+                {profileComplete ? 'Profile complete ✓' : 'Set up for calorie estimates'}
+              </p>
+            </div>
+            <ChevronDown className={`w-5 h-5 text-iron-500 transition-transform ${showProfileSection ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showProfileSection && (
+            <div className="px-4 pb-4 space-y-4 border-t border-iron-800 pt-4">
+              {/* Weight */}
+              <div>
+                <label className="text-sm text-iron-400 mb-1 block">Weight (lbs)</label>
+                <input
+                  type="number"
+                  value={profile.weight}
+                  onChange={(e) => setProfile(p => ({ ...p, weight: e.target.value }))}
+                  placeholder="170"
+                  className="input-field w-full"
+                />
+              </div>
+
+              {/* Height */}
+              <div>
+                <label className="text-sm text-iron-400 mb-1 block">Height</label>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      value={profile.heightFeet}
+                      onChange={(e) => setProfile(p => ({ ...p, heightFeet: e.target.value }))}
+                      placeholder="5"
+                      className="input-field w-full"
+                    />
+                    <span className="text-xs text-iron-500 mt-1 block">feet</span>
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      value={profile.heightInches}
+                      onChange={(e) => setProfile(p => ({ ...p, heightInches: e.target.value }))}
+                      placeholder="10"
+                      className="input-field w-full"
+                    />
+                    <span className="text-xs text-iron-500 mt-1 block">inches</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Age */}
+              <div>
+                <label className="text-sm text-iron-400 mb-1 block">Age</label>
+                <input
+                  type="number"
+                  value={profile.age}
+                  onChange={(e) => setProfile(p => ({ ...p, age: e.target.value }))}
+                  placeholder="30"
+                  className="input-field w-full"
+                />
+              </div>
+
+              {/* Gender */}
+              <div>
+                <label className="text-sm text-iron-400 mb-1 block">Gender</label>
+                <div className="flex gap-2">
+                  {['male', 'female', 'other'].map(g => (
+                    <button
+                      key={g}
+                      onClick={() => setProfile(p => ({ ...p, gender: g }))}
+                      className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-colors capitalize ${
+                        profile.gender === g
+                          ? 'bg-flame-500 text-white'
+                          : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Activity Level */}
+              <div>
+                <label className="text-sm text-iron-400 mb-1 block">Daily Activity Level</label>
+                <div className="space-y-2">
+                  {Object.entries(ACTIVITY_LEVELS).map(([key, level]) => (
+                    <button
+                      key={key}
+                      onClick={() => setProfile(p => ({ ...p, activityLevel: key }))}
+                      className={`w-full p-3 rounded-lg text-left transition-colors ${
+                        profile.activityLevel === key
+                          ? 'bg-flame-500/20 border border-flame-500'
+                          : 'bg-iron-800 border border-iron-700 hover:border-iron-600'
+                      }`}
+                    >
+                      <p className={`font-medium text-sm ${profile.activityLevel === key ? 'text-flame-400' : 'text-iron-200'}`}>
+                        {level.label}
+                      </p>
+                      <p className="text-xs text-iron-500">{level.description}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <button
+                onClick={handleProfileSave}
+                disabled={saving}
+                className="btn-primary w-full flex items-center justify-center gap-2"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Save Profile
+                  </>
+                )}
+              </button>
+
+              <p className="text-xs text-iron-500 text-center">
+                This info is used to estimate calories burned. All fields are optional.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -244,6 +446,35 @@ export default function SettingsPage() {
                 }`}
               >
                 {unit.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Week Start Day */}
+        <div className="card-steel p-4">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-orange-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-iron-200">Week Starts On</p>
+              <p className="text-sm text-iron-500">For calorie tracking reset</p>
+            </div>
+          </div>
+          
+          <div className="flex gap-2">
+            {['sunday', 'monday'].map(day => (
+              <button
+                key={day}
+                onClick={() => handleWeekStartChange(day)}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-colors capitalize ${
+                  settings.weekStartDay === day
+                    ? 'bg-flame-500 text-white'
+                    : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                }`}
+              >
+                {day}
               </button>
             ))}
           </div>
@@ -312,7 +543,7 @@ export default function SettingsPage() {
 
       {/* Version */}
       <div className="mt-12 text-center text-sm text-iron-600">
-        <p>BenchPressOnly v1.0.0</p>
+        <p>Bench Only v1.0.0</p>
         <p className="mt-1">Made with 💪 for serious lifters</p>
       </div>
     </div>

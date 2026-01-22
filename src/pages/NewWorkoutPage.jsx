@@ -12,9 +12,11 @@ import {
   ArrowLeft,
   Dumbbell,
   AlertCircle,
+  Activity,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { workoutService } from '../services/firestore';
+import CardioForm from '../components/CardioForm';
 
 const RPE_INFO = {
   title: 'Rate of Perceived Exertion (RPE)',
@@ -64,10 +66,16 @@ export default function NewWorkoutPage() {
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
   const [rpeModalOpen, setRpeModalOpen] = useState(false);
+  const [workoutType, setWorkoutType] = useState('strength'); // 'strength' or 'cardio'
   
   // Support admin creating workout for another user
   const targetUserId = searchParams.get('userId') || user?.uid;
   const isAdminCreating = searchParams.get('userId') && searchParams.get('userId') !== user?.uid;
+
+  // If cardio is selected, render the CardioForm instead
+  if (workoutType === 'cardio') {
+    return <CardioForm onBack={() => setWorkoutType('strength')} />;
+  }
   
   const [workout, setWorkout] = useState({
     name: '',
@@ -195,6 +203,32 @@ export default function NewWorkoutPage() {
           <h1 className="font-display text-display-md text-iron-50">New Workout</h1>
           <p className="text-iron-400">Log your training session</p>
         </div>
+      </div>
+
+      {/* Workout Type Toggle */}
+      <div className="card-steel p-2 mb-6 flex gap-2">
+        <button
+          onClick={() => setWorkoutType('strength')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition-colors ${
+            workoutType === 'strength'
+              ? 'bg-flame-500 text-white'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <Dumbbell className="w-5 h-5" />
+          Strength
+        </button>
+        <button
+          onClick={() => setWorkoutType('cardio')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition-colors ${
+            workoutType === 'cardio'
+              ? 'bg-flame-500 text-white'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <Activity className="w-5 h-5" />
+          Cardio
+        </button>
       </div>
 
       {/* Workout Info */}

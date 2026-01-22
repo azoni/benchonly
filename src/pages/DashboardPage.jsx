@@ -12,8 +12,9 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { workoutService, goalService, healthService, scheduleService } from '../services/firestore'
-import { format, startOfWeek, endOfWeek } from 'date-fns'
+import { format, startOfWeek, endOfWeek, subDays } from 'date-fns'
 import OnboardingModal, { useOnboarding } from '../components/OnboardingModal'
+import ProfileSetupModal, { useProfileSetup } from '../components/ProfileSetupModal'
 import {
   WIDGET_REGISTRY,
   DEFAULT_WIDGET_ORDER,
@@ -24,20 +25,24 @@ import {
   HealthChartWidget,
   OneRepMaxWidget,
   QuickLinksWidget,
-  AddWidgetCard
+  AddWidgetCard,
+  CaloriesWidget
 } from '../components/DashboardWidgets'
+import { calculateTDEE, calculateActivityCalories, calculateStrengthWorkoutCalories } from '../services/calorieService'
 
 const STORAGE_KEY = 'dashboard_widgets'
 
 export default function DashboardPage() {
   const { user, userProfile, isGuest } = useAuth()
   const { showOnboarding, openOnboarding, closeOnboarding } = useOnboarding()
+  const { showModal: showProfileSetup, dismissModal: dismissProfileSetup } = useProfileSetup()
   
   // Dashboard data
   const [stats, setStats] = useState({ workoutsThisWeek: 0, totalWorkouts: 0, activeGoals: 0 })
   const [recentWorkouts, setRecentWorkouts] = useState([])
   const [goals, setGoals] = useState([])
   const [healthData, setHealthData] = useState([])
+  const [calorieData, setCalorieData] = useState({ todayTotal: 0, weekTotal: 0, lifetimeTotal: 0 })
   const [healthGoals, setHealthGoals] = useState(() => {
     const saved = localStorage.getItem('health_goals')
     return saved ? JSON.parse(saved) : { sleep: 8, water: 64, protein: 150 }
@@ -112,6 +117,9 @@ export default function DashboardPage() {
           { date: format(new Date(), 'yyyy-MM-dd'), sleep: 7.5, water: 48, protein: 120 }
         ])
         
+        // Sample calorie data for guests
+        setCalorieData({ todayTotal: 2450, weekTotal: 17150, lifetimeTotal: 245000 })
+        
         setLoading(false)
         return
       }
@@ -131,6 +139,7 @@ export default function DashboardPage() {
       const now = new Date()
       const weekStart = startOfWeek(now, { weekStartsOn: 1 })
       const weekEnd = endOfWeek(now, { weekStartsOn: 1 })
+      const todayStr = format(now, 'yyyy-MM-dd')
       
       const weekWorkouts = workouts.filter((w) => {
         const date = w.date?.toDate ? w.date.toDate() : new Date(w.date)
@@ -141,6 +150,55 @@ export default function DashboardPage() {
         workoutsThisWeek: weekWorkouts.length,
         totalWorkouts: workouts.length,
         activeGoals: userGoals.filter((g) => g.status === 'active').length,
+      })
+
+      // Calculate calories
+      const dailyTDEE = calculateTDEE(userProfile)
+      const weight = userProfile?.weight || 170
+      
+      // Today's calories
+      const todayWorkouts = workouts.filter(w => {
+        const wDate = w.date?.toDate ? w.date.toDate() : new Date(w.date)
+        return format(wDate, 'yyyy-MM-dd') === todayStr
+      })
+      let todayExercise = 0
+      todayWorkouts.forEach(w => {
+        if (w.workoutType === 'cardio' && w.activityType && w.duration) {
+          todayExercise += calculateActivityCalories(w.activityType, w.duration, weight)
+        } else {
+          todayExercise += calculateStrengthWorkoutCalories(w, weight)
+        }
+      })
+      
+      // Week's calories (TDEE * days so far + exercise)
+      const dayOfWeek = now.getDay() || 7 // 1-7 for Mon-Sun
+      let weekExercise = 0
+      weekWorkouts.forEach(w => {
+        if (w.workoutType === 'cardio' && w.activityType && w.duration) {
+          weekExercise += calculateActivityCalories(w.activityType, w.duration, weight)
+        } else {
+          weekExercise += calculateStrengthWorkoutCalories(w, weight)
+        }
+      })
+      const weekTotal = (dailyTDEE * dayOfWeek) + weekExercise
+      
+      // Lifetime (rough estimate based on total workouts)
+      let lifetimeExercise = 0
+      workouts.forEach(w => {
+        if (w.workoutType === 'cardio' && w.activityType && w.duration) {
+          lifetimeExercise += calculateActivityCalories(w.activityType, w.duration, weight)
+        } else {
+          lifetimeExercise += calculateStrengthWorkoutCalories(w, weight)
+        }
+      })
+      // Estimate days tracked (rough: total workouts * 2 assuming ~3-4 workouts/week)
+      const estimatedDays = Math.max(workouts.length * 2, 7)
+      const lifetimeTotal = (dailyTDEE * estimatedDays) + lifetimeExercise
+      
+      setCalorieData({
+        todayTotal: dailyTDEE + todayExercise,
+        weekTotal,
+        lifetimeTotal
       })
 
       setLoading(false)
@@ -189,6 +247,8 @@ export default function DashboardPage() {
         return <GoalsWidget goals={goals} />
       case 'health':
         return <HealthWidget healthData={healthData} goals={healthGoals} />
+      case 'calories':
+        return <CaloriesWidget calorieData={calorieData} profile={userProfile} />
       case 'healthChart':
         return <HealthChartWidget healthData={healthData} />
       case 'oneRepMax':
@@ -227,6 +287,9 @@ export default function DashboardPage() {
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
       {/* Onboarding Modal */}
       <OnboardingModal isOpen={showOnboarding} onClose={closeOnboarding} />
+      
+      {/* Profile Setup Modal */}
+      {!isGuest && <ProfileSetupModal isOpen={showProfileSetup} onClose={dismissProfileSetup} />}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

@@ -6,6 +6,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  setDoc,
   query,
   where,
   orderBy,
@@ -48,12 +49,15 @@ export const userService = {
 export const workoutService = {
   // Create a workout for yourself
   async create(userId, workoutData) {
-    // Determine if workout is complete (has actual values filled in)
-    const isComplete = this.checkIfComplete(workoutData.exercises);
+    // Determine if workout is complete
+    const isComplete = workoutData.workoutType === 'cardio' 
+      ? true // Cardio workouts are complete when logged
+      : this.checkIfComplete(workoutData.exercises);
     
     const docRef = await addDoc(collection(db, 'workouts'), {
       ...workoutData,
       userId,
+      workoutType: workoutData.workoutType || 'strength',
       status: isComplete ? 'completed' : 'scheduled',
       completedAt: isComplete ? serverTimestamp() : null,
       createdAt: serverTimestamp(),
@@ -61,7 +65,7 @@ export const workoutService = {
     });
     
     // Check if any goals should be updated based on this workout
-    if (isComplete) {
+    if (isComplete && workoutData.workoutType !== 'cardio') {
       await this.checkAndUpdateGoals(userId, workoutData);
     }
     
@@ -98,6 +102,39 @@ export const workoutService = {
     return { id: workoutId, status: 'completed' };
   },
   
+  // Get cardio activities by user
+  async getCardioByUser(userId, limitCount = 30) {
+    const q = query(
+      collection(db, 'workouts'),
+      where('userId', '==', userId),
+      where('workoutType', '==', 'cardio'),
+      limit(limitCount)
+    );
+    const snapshot = await getDocs(q);
+    const results = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    return results.sort((a, b) => {
+      const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+      const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+      return dateB - dateA;
+    });
+  },
+  
+  // Get workouts for a specific date
+  async getByDate(userId, date) {
+    const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+    const q = query(
+      collection(db, 'workouts'),
+      where('userId', '==', userId)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter(w => {
+        const wDate = w.date?.toDate ? w.date.toDate().toISOString().split('T')[0] : w.date;
+        return wDate === dateStr;
+      });
+  },
+  
   // Create a workout assigned to another user (for group admins)
   async createForUser(assignedUserId, workoutData, createdByUserId, groupId) {
     const docRef = await addDoc(collection(db, 'workouts'), {
@@ -105,6 +142,7 @@ export const workoutService = {
       userId: assignedUserId,
       createdBy: createdByUserId,
       groupId: groupId,
+      workoutType: workoutData.workoutType || 'strength',
       status: 'scheduled',  // Always starts as scheduled when assigned
       isAssigned: true,
       createdAt: serverTimestamp(),
@@ -126,6 +164,7 @@ export const workoutService = {
         userId: memberId,
         createdBy: createdByUserId,
         groupId: groupId,
+        workoutType: workoutData.workoutType || 'strength',
         status: 'scheduled',  // Always starts as scheduled
         isAssigned: true,
         createdAt: serverTimestamp(),
@@ -867,5 +906,75 @@ export const groupWorkoutService = {
 
     await batch.commit();
     return results;
+  }
+};
+
+// ============ RECURRING ACTIVITIES ============
+export const recurringActivityService = {
+  async create(userId, activityData) {
+    const docRef = await addDoc(collection(db, 'recurringActivities'), {
+      ...activityData,
+      userId,
+      active: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return { id: docRef.id, ...activityData, userId, active: true };
+  },
+
+  async getByUser(userId) {
+    const q = query(
+      collection(db, 'recurringActivities'),
+      where('userId', '==', userId)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  },
+
+  async update(activityId, updates) {
+    const docRef = doc(db, 'recurringActivities', activityId);
+    await updateDoc(docRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+    return { id: activityId, ...updates };
+  },
+
+  async delete(activityId) {
+    await deleteDoc(doc(db, 'recurringActivities', activityId));
+    return activityId;
+  },
+
+  // Log a skip for a specific date
+  async logSkip(activityId, date, userId) {
+    const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+    const skipRef = doc(db, 'activitySkips', `${activityId}_${dateStr}`);
+    await setDoc(skipRef, {
+      activityId,
+      userId,
+      date: dateStr,
+      createdAt: serverTimestamp(),
+    });
+    return { activityId, date: dateStr, skipped: true };
+  },
+
+  // Check if activity was skipped on a date
+  async getSkips(userId, startDate, endDate) {
+    const q = query(
+      collection(db, 'activitySkips'),
+      where('userId', '==', userId)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter(skip => skip.date >= startDate && skip.date <= endDate);
+  },
+
+  // Remove a skip (user completed it after all)
+  async removeSkip(activityId, date) {
+    const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+    const skipRef = doc(db, 'activitySkips', `${activityId}_${dateStr}`);
+    await deleteDoc(skipRef);
+    return { activityId, date: dateStr, skipped: false };
   }
 };

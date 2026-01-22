@@ -12,12 +12,54 @@ export async function handler(event) {
   try {
     const { message, context, userId } = JSON.parse(event.body)
 
+    // Build user context summary
+    const userContext = []
+    
+    // Profile info
+    if (context?.profile) {
+      const p = context.profile
+      if (p.weight) userContext.push(`Weight: ${p.weight}lbs`)
+      if (p.age) userContext.push(`Age: ${p.age}`)
+      if (p.activityLevel) userContext.push(`Activity level: ${p.activityLevel}`)
+    }
+    
+    // Recent strength workouts
+    const strengthWorkouts = context?.recentWorkouts?.filter(w => w.workoutType !== 'cardio') || []
+    if (strengthWorkouts.length) {
+      userContext.push(`Recent strength: ${strengthWorkouts.slice(0, 3).map(w => w.name).join(', ')}`)
+    }
+    
+    // Recent cardio
+    const cardioWorkouts = context?.recentWorkouts?.filter(w => w.workoutType === 'cardio') || []
+    if (cardioWorkouts.length) {
+      const cardioSummary = cardioWorkouts.slice(0, 5).map(w => 
+        `${w.name || 'Cardio'} (${w.duration}min)`
+      ).join(', ')
+      userContext.push(`Recent cardio: ${cardioSummary}`)
+    }
+    
+    // Goals
+    if (context?.goals?.length) {
+      userContext.push(`Goals: ${context.goals.map(g => `${g.lift} ${g.targetWeight || g.targetValue}`).join(', ')}`)
+    }
+    
+    // Health data
+    if (context?.health) {
+      const h = context.health
+      const healthInfo = []
+      if (h.avgSleep) healthInfo.push(`${h.avgSleep}hrs sleep avg`)
+      if (h.avgProtein) healthInfo.push(`${h.avgProtein}g protein avg`)
+      if (healthInfo.length) userContext.push(`Health: ${healthInfo.join(', ')}`)
+    }
+
+    const contextString = userContext.length ? `\n\nUser context:\n${userContext.join('\n')}` : ''
+
     // Check if user is asking for a workout suggestion/generation
     const isWorkoutRequest = /generate|create|make|suggest|give me|plan|recommend/i.test(message) && 
                              /workout|routine|session|exercises|program/i.test(message)
 
     const systemPrompt = isWorkoutRequest 
-      ? `You are a strength training coach for BenchPressOnly. The user wants a workout recommendation.
+      ? `You are a strength training coach for Bench Only. The user wants a workout recommendation.
 
 Generate a workout and respond with BOTH:
 1. A brief explanation (2-3 sentences)
@@ -38,18 +80,16 @@ Generate a workout and respond with BOTH:
 }
 \`\`\`
 
-Base the workout on their history and goals. Use appropriate weights based on their recent performance.
+Base the workout on their history, goals, and recovery needs. Consider their cardio activity when programming volume. Use appropriate weights based on their recent performance.
+${contextString}
 
-${context?.recentWorkouts?.length ? `Recent workouts: ${JSON.stringify(context.recentWorkouts.slice(0, 5))}` : 'No recent workout data.'}
-${context?.goals?.length ? `Goals: ${JSON.stringify(context.goals)}` : 'No specific goals set.'}`
-      : `You are a strength training assistant for BenchPressOnly. Be brief and direct - 2-3 sentences max unless asked to elaborate.
+${context?.recentWorkouts?.length ? `\nDetailed recent workouts: ${JSON.stringify(strengthWorkouts.slice(0, 3))}` : ''}`
+      : `You are a strength training assistant for Bench Only. Be brief and direct - 2-3 sentences max unless asked to elaborate.
 
-You help with: workout programs, exercise form, programming, recovery, nutrition basics, and interpreting training data.
+You help with: workout programs, exercise form, programming, recovery, nutrition basics, cardio integration, and interpreting training data.
 
-Keep responses short and actionable. Skip fluff. Use numbers when relevant. Say "want me to expand?" if there's more to share.
-
-${context?.recentWorkouts?.length ? `Recent: ${context.recentWorkouts.slice(0, 3).map(w => w.name).join(', ')}` : ''}
-${context?.goals?.length ? `Goals: ${context.goals.map(g => `${g.lift} ${g.targetWeight || g.targetValue}`).join(', ')}` : ''}`
+Keep responses short and actionable. Skip fluff. Use numbers when relevant. Consider their full activity picture (strength + cardio) when giving advice. Say "want me to expand?" if there's more to share.
+${contextString}`
 
     const startTime = Date.now()
 
