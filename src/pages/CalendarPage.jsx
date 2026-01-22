@@ -12,6 +12,7 @@ import {
   Repeat,
   Target,
   Users,
+  Award,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { workoutService, scheduleService, attendanceService, goalService, groupWorkoutService } from '../services/firestore';
@@ -98,6 +99,16 @@ export default function CalendarPage() {
     });
   };
 
+  // Check if any goal was completed on this date
+  const getCompletedGoal = (date) => {
+    const dateStr = toDateString(date);
+    return goals.find((g) => {
+      if (g.status !== 'completed' || !g.completedAt) return false;
+      const completedDate = g.completedAt?.toDate ? g.completedAt.toDate() : new Date(g.completedAt);
+      return toDateString(completedDate) === dateStr;
+    });
+  };
+
   const getDateStatus = (date) => {
     const dateStr = toDateString(date);
     
@@ -134,7 +145,10 @@ export default function CalendarPage() {
       return s.date === dateStr;
     });
 
-    return { hasWorkout, hasGroupWorkout, isVacation, isMissed, isScheduled };
+    // Check for completed goal on this date
+    const hasCompletedGoal = !!getCompletedGoal(date);
+
+    return { hasWorkout, hasGroupWorkout, isVacation, isMissed, isScheduled, hasCompletedGoal };
   };
 
   const getSelectedDateWorkouts = () => {
@@ -282,6 +296,9 @@ export default function CalendarPage() {
                         {goalDeadline && (
                           <div className="w-1.5 h-1.5 rounded-full bg-purple-500" title={`Goal: ${goalDeadline.lift}`} />
                         )}
+                        {status.hasCompletedGoal && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" title="Goal Achieved!" />
+                        )}
                       </div>
                     </div>
                   </button>
@@ -314,6 +331,10 @@ export default function CalendarPage() {
               <div className="flex items-center gap-2 text-xs text-iron-400">
                 <div className="w-2 h-2 rounded-full bg-purple-500" />
                 Goal Deadline
+              </div>
+              <div className="flex items-center gap-2 text-xs text-iron-400">
+                <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                Goal Achieved
               </div>
             </div>
           </div>
@@ -422,13 +443,43 @@ export default function CalendarPage() {
                         {workout.name || 'Workout'}
                       </p>
                       <p className="text-xs text-iron-500">
-                        {workout.exercises?.length || 0} exercises
+                        {workout.workoutType === 'cardio' 
+                          ? `${workout.duration} min` 
+                          : `${workout.exercises?.length || 0} exercises`}
                       </p>
                     </div>
                   </div>
                 ))}
               </div>
             )}
+
+            {/* Completed Goals */}
+            {(() => {
+              const completedGoal = getCompletedGoal(selectedDate);
+              if (!completedGoal) return null;
+              return (
+                <div>
+                  <h4 className="text-xs text-iron-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <Award className="w-3.5 h-3.5" />
+                    Goal Achieved
+                  </h4>
+                  <div className="flex items-center gap-3 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-plate">
+                    <div className="w-8 h-8 rounded-plate bg-yellow-500/20 flex items-center justify-center">
+                      <Award className="w-4 h-4 text-yellow-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-iron-100">
+                        {completedGoal.lift}
+                      </p>
+                      <p className="text-xs text-iron-500">
+                        {completedGoal.targetValue || completedGoal.targetWeight} {completedGoal.metricType === 'reps' ? 'reps' : completedGoal.metricType === 'time' ? 'sec' : 'lbs'}
+                      </p>
+                    </div>
+                    <span className="text-yellow-400 text-xs font-medium">🎉</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Empty State */}
             {selectedSchedule.length === 0 && selectedWorkouts.length === 0 && selectedGroupWorkouts.length === 0 && (
