@@ -196,43 +196,58 @@ export const workoutService = {
         for (const goalDoc of goalsSnapshot.docs) {
           const goal = goalDoc.data();
           const goalLift = goal.lift?.toLowerCase().trim();
+          const metricType = goal.metricType || 'weight';
           
           // Check if exercise matches goal lift
-          if (exerciseName && goalLift && exerciseName.includes(goalLift) || goalLift?.includes(exerciseName)) {
-            // Find the heaviest successful set
-            let maxWeight = 0;
+          if (exerciseName && goalLift && (exerciseName.includes(goalLift) || goalLift?.includes(exerciseName))) {
+            let bestValue = 0;
+            
+            // Find the best value from a SINGLE set based on metric type
             for (const set of exercise.sets || []) {
-              const weight = parseFloat(set.actualWeight) || parseFloat(set.prescribedWeight) || 0;
-              if (weight > maxWeight) {
-                maxWeight = weight;
+              let setValue = 0;
+              
+              if (metricType === 'weight') {
+                setValue = parseFloat(set.actualWeight) || parseFloat(set.prescribedWeight) || 0;
+              } else if (metricType === 'reps') {
+                // For reps goals, find the MAX reps in a single set (not total)
+                setValue = parseInt(set.actualReps) || parseInt(set.prescribedReps) || 0;
+              } else if (metricType === 'time') {
+                // For time goals, find the max time in a single set
+                setValue = parseFloat(set.actualTime) || parseFloat(set.prescribedTime) || 0;
+              }
+              
+              if (setValue > bestValue) {
+                bestValue = setValue;
               }
             }
             
-            if (maxWeight > 0) {
-              const targetWeight = parseFloat(goal.targetWeight) || 0;
-              const startWeight = parseFloat(goal.startWeight) || 0;
+            if (bestValue > 0) {
+              const targetValue = parseFloat(goal.targetValue) || parseFloat(goal.targetWeight) || 0;
+              const startValue = parseFloat(goal.startValue) || parseFloat(goal.startWeight) || parseFloat(goal.currentValue) || parseFloat(goal.currentWeight) || 0;
+              const currentValue = parseFloat(goal.currentValue) || parseFloat(goal.currentWeight) || startValue;
               
               // Calculate progress percentage
               let progress = 0;
-              if (targetWeight > startWeight) {
-                progress = Math.min(100, Math.round(((maxWeight - startWeight) / (targetWeight - startWeight)) * 100));
+              if (targetValue > startValue) {
+                progress = Math.min(100, Math.round(((bestValue - startValue) / (targetValue - startValue)) * 100));
               }
               
-              // Update goal with new progress and current weight
+              // Update goal with new progress and current value
               const updates = {
-                currentWeight: maxWeight,
+                currentValue: bestValue,
+                currentWeight: metricType === 'weight' ? bestValue : goal.currentWeight, // Keep for backward compat
                 progress: Math.max(goal.progress || 0, progress), // Only increase, never decrease
                 updatedAt: serverTimestamp(),
               };
               
               // Mark as completed if target reached
-              if (maxWeight >= targetWeight) {
+              if (bestValue >= targetValue) {
                 updates.status = 'completed';
                 updates.completedAt = serverTimestamp();
               }
               
               // Only update if this is a new PR or first entry
-              if (maxWeight >= (goal.currentWeight || 0)) {
+              if (bestValue >= currentValue) {
                 await updateDoc(doc(db, 'goals', goalDoc.id), updates);
               }
             }
