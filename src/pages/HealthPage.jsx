@@ -183,39 +183,25 @@ export default function HealthPage() {
     setCalorieData(data)
   }
 
-  // Calculate actual week calories (always current week, not chart range)
-  const calculateWeekCalories = () => {
-    const dailyTDEE = calculateTDEE(userProfile)
+  // Calculate week exercise calories (just from workouts)
+  const calculateWeekExerciseCalories = () => {
     const weight = userProfile?.weight || 170
     const weekStartDay = userProfile?.settings?.weekStartDay === 'sunday' ? 0 : 1
     const now = new Date()
     const weekStart = startOfWeek(now, { weekStartsOn: weekStartDay })
-    const trackingStart = getTrackingStartDate()
     
     let total = 0
-    let daysInWeek = 0
     
-    // Calculate from week start to today
-    for (let d = new Date(weekStart); d <= now; d.setDate(d.getDate() + 1)) {
-      // Skip days before user started tracking
-      if (d < trackingStart) continue
-      
-      daysInWeek++
-      const dateStr = format(d, 'yyyy-MM-dd')
-      
-      // Add base TDEE
-      total += dailyTDEE
-      
-      // Add exercise calories for this day
-      const dayWorkouts = workouts.filter(w => toDateString(w.date) === dateStr)
-      dayWorkouts.forEach(w => {
+    workouts.forEach(w => {
+      const wDate = w.date?.toDate ? w.date.toDate() : new Date(w.date)
+      if (wDate >= weekStart && wDate <= now) {
         if (w.workoutType === 'cardio' && w.activityType && w.duration) {
           total += calculateActivityCalories(w.activityType, w.duration, weight)
         } else {
           total += calculateStrengthWorkoutCalories(w, weight)
         }
-      })
-    }
+      }
+    })
     
     return total
   }
@@ -361,7 +347,8 @@ export default function HealthPage() {
 
   // Calculate calorie totals
   const todayCalories = calorieData.find(d => d.fullDate === todayStr)
-  const weekCalories = calculateWeekCalories()
+  const weekExerciseCalories = calculateWeekExerciseCalories()
+  const dailyBase = calculateTDEE(userProfile)
   const weekStartDay = userProfile?.settings?.weekStartDay || 'monday'
 
   return (
@@ -432,14 +419,14 @@ export default function HealthPage() {
                   <Flame className="w-5 h-5 text-flame-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-iron-500">Today</p>
+                  <p className="text-sm text-iron-500">Today's Exercise</p>
                   <p className="text-2xl font-display text-iron-100">
-                    {todayCalories?.total?.toLocaleString() || '-'}
+                    +{todayCalories?.exercise?.toLocaleString() || '0'}
                   </p>
                 </div>
               </div>
               <div className="text-xs text-iron-500">
-                Base: {todayCalories?.base?.toLocaleString() || '-'} + Exercise: {todayCalories?.exercise?.toLocaleString() || '0'}
+                Daily base: {dailyBase.toLocaleString()} cal
               </div>
             </div>
             
@@ -451,12 +438,12 @@ export default function HealthPage() {
                 <div>
                   <p className="text-sm text-iron-500">This Week</p>
                   <p className="text-2xl font-display text-iron-100">
-                    {weekCalories.toLocaleString()}
+                    +{weekExerciseCalories.toLocaleString()}
                   </p>
                 </div>
               </div>
               <div className="text-xs text-iron-500">
-                Resets {weekStartDay === 'monday' ? 'Monday' : 'Sunday'}
+                Exercise calories · Resets {weekStartDay === 'monday' ? 'Monday' : 'Sunday'}
               </div>
             </div>
           </div>

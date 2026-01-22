@@ -349,7 +349,8 @@ export default function SettingsPage() {
 
               {/* Activity Level */}
               <div>
-                <label className="text-sm text-iron-400 mb-1 block">Daily Activity Level</label>
+                <label className="text-sm text-iron-400 mb-1 block">Daily Activity (excluding workouts)</label>
+                <p className="text-xs text-iron-600 mb-2">How active is your day-to-day life outside of exercise?</p>
                 <div className="space-y-2">
                   {Object.entries(ACTIVITY_LEVELS).map(([key, level]) => (
                     <button

@@ -154,10 +154,10 @@ export default function DashboardPage() {
       })
 
       // Calculate calories
-      const dailyTDEE = calculateTDEE(userProfile)
+      const dailyBase = calculateTDEE(userProfile)
       const weight = userProfile?.weight || 170
       
-      // Today's calories
+      // Today's exercise calories
       const todayWorkouts = workouts.filter(w => {
         return toDateString(w.date) === todayStr
       })
@@ -170,8 +170,7 @@ export default function DashboardPage() {
         }
       })
       
-      // Week's calories (TDEE * days so far + exercise)
-      const dayOfWeek = now.getDay() || 7 // 1-7 for Mon-Sun
+      // Week's exercise calories (just from workouts, not base)
       let weekExercise = 0
       weekWorkouts.forEach(w => {
         if (w.workoutType === 'cardio' && w.activityType && w.duration) {
@@ -180,9 +179,8 @@ export default function DashboardPage() {
           weekExercise += calculateStrengthWorkoutCalories(w, weight)
         }
       })
-      const weekTotal = (dailyTDEE * dayOfWeek) + weekExercise
       
-      // Lifetime (rough estimate based on total workouts)
+      // Lifetime exercise calories (total from all workouts)
       let lifetimeExercise = 0
       let oldestWorkoutDate = null
       workouts.forEach(w => {
@@ -197,14 +195,13 @@ export default function DashboardPage() {
           oldestWorkoutDate = wDate
         }
       })
-      // Estimate days tracked (rough: total workouts * 2 assuming ~3-4 workouts/week)
-      const estimatedDays = Math.max(workouts.length * 2, 7)
-      const lifetimeTotal = (dailyTDEE * estimatedDays) + lifetimeExercise
       
       setCalorieData({
-        todayTotal: dailyTDEE + todayExercise,
-        weekTotal,
-        lifetimeTotal,
+        dailyBase,                    // Base calories per day (BMR + NEAT)
+        todayExercise,               // Exercise calories today
+        todayTotal: dailyBase + todayExercise, // Total for today
+        weekExercise,                // Exercise calories this week
+        lifetimeExercise,            // Total exercise calories all time
         trackingStartDate: oldestWorkoutDate?.toISOString() || null
       })
 

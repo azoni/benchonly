@@ -82,13 +82,13 @@ export const ACTIVITY_CATEGORIES = [
   { id: 'other', label: 'Other', icon: '⭐' },
 ]
 
-// Daily activity level multipliers for TDEE
+// Daily activity level - describes NON-EXERCISE activity (NEAT)
+// This is separate from workouts which are tracked individually
 export const ACTIVITY_LEVELS = {
-  sedentary: { multiplier: 1.2, label: 'Sedentary', description: 'Desk job, little exercise' },
-  light: { multiplier: 1.375, label: 'Lightly Active', description: 'Light exercise 1-3 days/week' },
-  moderate: { multiplier: 1.55, label: 'Moderately Active', description: 'Moderate exercise 3-5 days/week' },
-  active: { multiplier: 1.725, label: 'Very Active', description: 'Hard exercise 6-7 days/week' },
-  athlete: { multiplier: 1.9, label: 'Athlete', description: 'Very hard exercise, physical job' },
+  sedentary: { multiplier: 1.2, label: 'Sedentary', description: 'Desk job, mostly sitting' },
+  light: { multiplier: 1.3, label: 'Lightly Active', description: 'Some walking, light housework' },
+  moderate: { multiplier: 1.4, label: 'Moderately Active', description: 'On feet most of the day' },
+  active: { multiplier: 1.5, label: 'Very Active', description: 'Physical job, lots of movement' },
 }
 
 // Default values when user hasn't provided info
@@ -122,15 +122,22 @@ export function calculateBMR(profile) {
 }
 
 /**
- * Calculate TDEE (Total Daily Energy Expenditure)
- * BMR * activity level multiplier
+ * Calculate daily base calories (BMR + NEAT)
+ * This is calories burned WITHOUT exercise
+ * BMR = basal metabolic rate (just existing)
+ * NEAT = non-exercise activity thermogenesis (daily movement, not workouts)
  */
-export function calculateTDEE(profile) {
+export function calculateDailyBase(profile) {
   const bmr = calculateBMR(profile)
   const activityLevel = profile?.activityLevel || DEFAULTS.activityLevel
-  const multiplier = ACTIVITY_LEVELS[activityLevel]?.multiplier || 1.375
+  const multiplier = ACTIVITY_LEVELS[activityLevel]?.multiplier || 1.3
   
   return Math.round(bmr * multiplier)
+}
+
+// Alias for backward compatibility
+export function calculateTDEE(profile) {
+  return calculateDailyBase(profile)
 }
 
 /**

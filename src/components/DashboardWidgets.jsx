@@ -398,9 +398,10 @@ export function QuickLinksWidget() {
 export function CaloriesWidget({ calorieData, profile }) {
   const [view, setView] = useState('week') // 'week' or 'lifetime'
   
-  const weekTotal = calorieData?.weekTotal || 0
-  const lifetimeTotal = calorieData?.lifetimeTotal || 0
-  const todayTotal = calorieData?.todayTotal || 0
+  const dailyBase = calorieData?.dailyBase || 0
+  const todayExercise = calorieData?.todayExercise || 0
+  const weekExercise = calorieData?.weekExercise || 0
+  const lifetimeExercise = calorieData?.lifetimeExercise || 0
   const hasProfile = profile?.weight && profile?.height && profile?.age
   const weekStartDay = profile?.settings?.weekStartDay || 'monday'
   const trackingStartDate = calorieData?.trackingStartDate 
@@ -410,7 +411,7 @@ export function CaloriesWidget({ calorieData, profile }) {
   return (
     <div className="card-steel p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-display text-lg text-iron-100">Calories Burned</h3>
+        <h3 className="font-display text-lg text-iron-100">Exercise Calories</h3>
         <div className="flex bg-iron-800 rounded-lg p-1">
           <button
             onClick={() => setView('week')}
@@ -426,7 +427,7 @@ export function CaloriesWidget({ calorieData, profile }) {
               view === 'lifetime' ? 'bg-flame-500 text-white' : 'text-iron-400'
             }`}
           >
-            Lifetime
+            All Time
           </button>
         </div>
       </div>
@@ -438,16 +439,16 @@ export function CaloriesWidget({ calorieData, profile }) {
         <div>
           <p className="text-3xl font-display text-iron-100">
             {view === 'week' 
-              ? weekTotal.toLocaleString()
-              : lifetimeTotal.toLocaleString()
+              ? weekExercise.toLocaleString()
+              : lifetimeExercise.toLocaleString()
             }
           </p>
           <p className="text-sm text-iron-500">
             {view === 'week' 
-              ? `this week · resets ${weekStartDay === 'monday' ? 'Mon' : 'Sun'}` 
+              ? `burned this week · resets ${weekStartDay === 'monday' ? 'Mon' : 'Sun'}` 
               : trackingStartDate 
-                ? `since ${trackingStartDate}` 
-                : 'total calories'
+                ? `burned since ${trackingStartDate}` 
+                : 'total burned'
             }
           </p>
         </div>
@@ -462,10 +463,16 @@ export function CaloriesWidget({ calorieData, profile }) {
         </Link>
       )}
       
-      {todayTotal > 0 && hasProfile && (
-        <div className="mt-4 pt-4 border-t border-iron-800 flex justify-between items-center">
-          <p className="text-sm text-iron-500">Today</p>
-          <p className="text-sm font-medium text-flame-400">{todayTotal.toLocaleString()} cal</p>
+      {hasProfile && (
+        <div className="mt-4 pt-4 border-t border-iron-800">
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-iron-500">Today's exercise</span>
+            <span className="text-flame-400 font-medium">+{todayExercise.toLocaleString()} cal</span>
+          </div>
+          <div className="flex justify-between items-center text-sm mt-1">
+            <span className="text-iron-500">Daily base</span>
+            <span className="text-iron-400">{dailyBase.toLocaleString()} cal</span>
+          </div>
         </div>
       )}
       
