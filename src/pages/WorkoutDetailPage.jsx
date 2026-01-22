@@ -103,6 +103,17 @@ export default function WorkoutDetailPage() {
   }
 
   const handleCompleteWorkout = async () => {
+    // Check if all sets have actual data
+    const isComplete = exercises.every(exercise => {
+      if (!exercise.sets || exercise.sets.length === 0) return false
+      return exercise.sets.every(set => set.actualWeight || set.actualReps)
+    })
+    
+    if (!isComplete) {
+      alert('Please fill in actual weight or reps for all sets before completing')
+      return
+    }
+    
     setSaving(true)
     try {
       await workoutService.completeWorkout(id, exercises, user.uid)
@@ -132,12 +143,18 @@ export default function WorkoutDetailPage() {
     return 'bg-red-500/20 text-red-400'
   }
 
-  // Check if workout is scheduled (not yet completed)
+  // Check if workout is complete (all sets have actual data filled in)
   const checkIfComplete = (exercises) => {
     if (!exercises || exercises.length === 0) return false
-    return exercises.some(exercise => 
-      exercise.sets?.some(set => set.actualWeight || set.actualReps)
-    )
+    
+    // Check that every exercise has at least one set with actual data
+    // AND every set in every exercise has actual weight or reps filled in
+    return exercises.every(exercise => {
+      if (!exercise.sets || exercise.sets.length === 0) return false
+      return exercise.sets.every(set => 
+        set.actualWeight || set.actualReps
+      )
+    })
   }
 
   const isScheduled = workout?.status === 'scheduled' || (!workout?.status && !checkIfComplete(workout?.exercises))
