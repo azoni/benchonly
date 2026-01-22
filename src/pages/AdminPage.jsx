@@ -152,6 +152,17 @@ export default function AdminPage() {
     }
   }
 
+  const handleDeleteWorkout = async (workoutId) => {
+    if (!confirm('Delete this workout?')) return
+    try {
+      await workoutService.delete(workoutId)
+      setUserWorkouts(prev => prev.filter(w => w.id !== workoutId))
+    } catch (error) {
+      console.error('Error deleting workout:', error)
+      alert('Failed to delete workout')
+    }
+  }
+
   const handleEditGoal = (goal) => {
     setEditingGoal(goal)
     setGoalForm({
@@ -392,20 +403,39 @@ export default function AdminPage() {
                       {userWorkouts.slice(0, 5).map(workout => {
                         const date = workout.date?.toDate ? workout.date.toDate() : new Date(workout.date)
                         return (
-                          <div key={workout.id} className="p-3 bg-iron-800/50 rounded-lg flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-iron-100">{workout.name || 'Workout'}</p>
-                              <p className="text-sm text-iron-500">
-                                {format(date, 'MMM d, yyyy')} · {workout.exercises?.length || 0} exercises
-                              </p>
+                          <div key={workout.id} className="p-3 bg-iron-800/50 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-iron-100">{workout.name || 'Workout'}</p>
+                                <p className="text-sm text-iron-500">
+                                  {format(date, 'MMM d, yyyy')} · {workout.exercises?.length || 0} exercises
+                                  {workout.workoutType === 'cardio' && ` · ${workout.duration}min`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                  workout.status === 'completed' 
+                                    ? 'bg-green-500/20 text-green-400' 
+                                    : 'bg-yellow-500/20 text-yellow-400'
+                                }`}>
+                                  {workout.workoutType === 'cardio' ? 'cardio' : workout.status}
+                                </span>
+                                <button
+                                  onClick={() => navigate(`/workouts/${workout.id}`)}
+                                  className="p-1.5 text-iron-400 hover:text-iron-200 hover:bg-iron-700 rounded transition-colors"
+                                  title="View/Edit"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteWorkout(workout.id)}
+                                  className="p-1.5 text-iron-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
-                            <span className={`text-xs px-2 py-1 rounded-full ${
-                              workout.status === 'completed' 
-                                ? 'bg-green-500/20 text-green-400' 
-                                : 'bg-yellow-500/20 text-yellow-400'
-                            }`}>
-                              {workout.status}
-                            </span>
                           </div>
                         )
                       })}

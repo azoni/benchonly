@@ -402,6 +402,10 @@ export function CaloriesWidget({ calorieData, profile }) {
   const lifetimeTotal = calorieData?.lifetimeTotal || 0
   const todayTotal = calorieData?.todayTotal || 0
   const hasProfile = profile?.weight && profile?.height && profile?.age
+  const weekStartDay = profile?.settings?.weekStartDay || 'monday'
+  const trackingStartDate = calorieData?.trackingStartDate 
+    ? format(new Date(calorieData.trackingStartDate), 'MMM d, yyyy')
+    : null
   
   return (
     <div className="card-steel p-6">
@@ -439,7 +443,12 @@ export function CaloriesWidget({ calorieData, profile }) {
             }
           </p>
           <p className="text-sm text-iron-500">
-            {view === 'week' ? 'calories this week' : 'total calories'}
+            {view === 'week' 
+              ? `this week · resets ${weekStartDay === 'monday' ? 'Mon' : 'Sun'}` 
+              : trackingStartDate 
+                ? `since ${trackingStartDate}` 
+                : 'total calories'
+            }
           </p>
         </div>
       </div>
@@ -453,11 +462,19 @@ export function CaloriesWidget({ calorieData, profile }) {
         </Link>
       )}
       
-      {todayTotal > 0 && (
-        <div className="mt-4 pt-4 border-t border-iron-800">
-          <p className="text-sm text-iron-500">Today: <span className="text-flame-400">{todayTotal.toLocaleString()} cal</span></p>
+      {todayTotal > 0 && hasProfile && (
+        <div className="mt-4 pt-4 border-t border-iron-800 flex justify-between items-center">
+          <p className="text-sm text-iron-500">Today</p>
+          <p className="text-sm font-medium text-flame-400">{todayTotal.toLocaleString()} cal</p>
         </div>
       )}
+      
+      <Link 
+        to="/health"
+        className="mt-3 block text-center text-xs text-iron-500 hover:text-flame-400 transition-colors"
+      >
+        View details →
+      </Link>
     </div>
   )
 }

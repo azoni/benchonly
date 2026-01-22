@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { format, subDays, parseISO, startOfDay } from 'date-fns'
+import { format, subDays, parseISO, startOfDay, startOfWeek } from 'date-fns'
 import {
   Moon,
   Droplets,
@@ -12,10 +12,19 @@ import {
   X,
   Check,
   Loader2,
-  Settings
+  Settings,
+  Flame,
+  Activity
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { healthService } from '../services/firestore'
+import { healthService, workoutService } from '../services/firestore'
+import { 
+  calculateTDEE, 
+  calculateActivityCalories, 
+  calculateStrengthWorkoutCalories,
+  hasCompleteProfile 
+} from '../services/calorieService'
+import { Link } from 'react-router-dom'
 import {
   LineChart,
   Line,
@@ -24,7 +33,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend
+  Legend,
+  BarChart,
+  Bar
 } from 'recharts'
 
 const DEFAULT_GOALS = {
@@ -73,14 +84,17 @@ const METRIC_CONFIG = {
 }
 
 export default function HealthPage() {
-  const { user, isGuest } = useAuth()
+  const { user, userProfile, isGuest } = useAuth()
   const [entries, setEntries] = useState([])
+  const [workouts, setWorkouts] = useState([])
+  const [calorieData, setCalorieData] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showGoalsModal, setShowGoalsModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [chartRange, setChartRange] = useState(7) // days
+  const [activeTab, setActiveTab] = useState('health') // 'health' or 'calories'
   const [formData, setFormData] = useState({
     sleep: '',
     water: '',
@@ -100,6 +114,49 @@ export default function HealthPage() {
     localStorage.setItem('health_goals', JSON.stringify(goals))
   }, [goals])
 
+  // Calculate calorie data when workouts or profile changes
+  useEffect(() => {
+    if (workouts.length > 0 || userProfile) {
+      calculateCalorieData()
+    }
+  }, [workouts, userProfile, chartRange])
+
+  const calculateCalorieData = () => {
+    const dailyTDEE = calculateTDEE(userProfile)
+    const weight = userProfile?.weight || 170
+    const data = []
+    
+    for (let i = chartRange - 1; i >= 0; i--) {
+      const date = subDays(new Date(), i)
+      const dateStr = format(date, 'yyyy-MM-dd')
+      
+      // Find workouts for this day
+      const dayWorkouts = workouts.filter(w => {
+        const wDate = w.date?.toDate ? w.date.toDate() : new Date(w.date)
+        return format(wDate, 'yyyy-MM-dd') === dateStr
+      })
+      
+      let exerciseCalories = 0
+      dayWorkouts.forEach(w => {
+        if (w.workoutType === 'cardio' && w.activityType && w.duration) {
+          exerciseCalories += calculateActivityCalories(w.activityType, w.duration, weight)
+        } else {
+          exerciseCalories += calculateStrengthWorkoutCalories(w, weight)
+        }
+      })
+      
+      data.push({
+        date: format(date, 'MMM d'),
+        fullDate: dateStr,
+        base: dailyTDEE,
+        exercise: exerciseCalories,
+        total: dailyTDEE + exerciseCalories
+      })
+    }
+    
+    setCalorieData(data)
+  }
+
   const loadEntries = async () => {
     if (!user) return
     setLoading(true)
@@ -118,9 +175,19 @@ export default function HealthPage() {
           })
         }
         setEntries(sampleData)
+        // Sample workout data for calorie calculation
+        setWorkouts([
+          { date: subDays(new Date(), 1), workoutType: 'strength', exercises: [{sets: [{}, {}, {}]}, {sets: [{}, {}]}] },
+          { date: subDays(new Date(), 2), workoutType: 'cardio', activityType: 'running_moderate', duration: 30 },
+          { date: subDays(new Date(), 4), workoutType: 'strength', exercises: [{sets: [{}, {}, {}]}] },
+        ])
       } else {
-        const data = await healthService.getByUser(user.uid, 30)
-        setEntries(data)
+        const [healthData, workoutData] = await Promise.all([
+          healthService.getByUser(user.uid, 30),
+          workoutService.getByUser(user.uid, 60)
+        ])
+        setEntries(healthData)
+        setWorkouts(workoutData)
       }
     } catch (error) {
       console.error('Error loading health data:', error)
@@ -229,14 +296,19 @@ export default function HealthPage() {
     )
   }
 
+  // Calculate calorie totals
+  const todayCalories = calorieData.find(d => d.fullDate === todayStr)
+  const weekCalories = calorieData.reduce((sum, d) => sum + d.total, 0)
+  const weekStartDay = userProfile?.settings?.weekStartDay || 'monday'
+
   return (
     <div className="max-w-4xl mx-auto pb-24">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-display text-iron-100">Health</h1>
           <p className="text-iron-500 text-sm mt-1">
-            Track sleep, hydration & nutrition
+            Track sleep, hydration, nutrition & calories
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -260,6 +332,181 @@ export default function HealthPage() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="card-steel p-1 mb-6 flex gap-1">
+        <button
+          onClick={() => setActiveTab('health')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-sm transition-colors ${
+            activeTab === 'health'
+              ? 'bg-flame-500 text-white'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <Moon className="w-4 h-4" />
+          Health Metrics
+        </button>
+        <button
+          onClick={() => setActiveTab('calories')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-sm transition-colors ${
+            activeTab === 'calories'
+              ? 'bg-flame-500 text-white'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <Flame className="w-4 h-4" />
+          Calories
+        </button>
+      </div>
+
+      {activeTab === 'calories' ? (
+        /* Calories Tab */
+        <div className="space-y-6">
+          {/* Calorie Summary Cards */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="card-steel p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg bg-flame-500/20 flex items-center justify-center">
+                  <Flame className="w-5 h-5 text-flame-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-iron-500">Today</p>
+                  <p className="text-2xl font-display text-iron-100">
+                    {todayCalories?.total?.toLocaleString() || '-'}
+                  </p>
+                </div>
+              </div>
+              <div className="text-xs text-iron-500">
+                Base: {todayCalories?.base?.toLocaleString() || '-'} + Exercise: {todayCalories?.exercise?.toLocaleString() || '0'}
+              </div>
+            </div>
+            
+            <div className="card-steel p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-iron-500">This Week</p>
+                  <p className="text-2xl font-display text-iron-100">
+                    {weekCalories.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <div className="text-xs text-iron-500">
+                Resets {weekStartDay === 'monday' ? 'Monday' : 'Sunday'}
+              </div>
+            </div>
+          </div>
+
+          {/* Profile Status */}
+          {!hasCompleteProfile(userProfile) && (
+            <Link 
+              to="/settings"
+              className="block card-steel p-4 border-yellow-500/30 hover:border-yellow-500/50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Activity className="w-5 h-5 text-yellow-400" />
+                <div>
+                  <p className="text-sm font-medium text-iron-200">Complete your profile for accurate estimates</p>
+                  <p className="text-xs text-iron-500">Add weight, height, age for personalized calorie calculations</p>
+                </div>
+              </div>
+            </Link>
+          )}
+
+          {/* Calorie Chart */}
+          <div className="card-steel p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-iron-400">Daily Calories ({chartRange} days)</h3>
+              <div className="flex gap-2">
+                {[7, 14, 30].map(days => (
+                  <button
+                    key={days}
+                    onClick={() => setChartRange(days)}
+                    className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+                      chartRange === days
+                        ? 'bg-flame-500 text-white'
+                        : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                    }`}
+                  >
+                    {days}d
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={calorieData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="#6b7280" 
+                    fontSize={12}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    stroke="#6b7280" 
+                    fontSize={12}
+                    tickLine={false}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1f2937', 
+                      border: '1px solid #374151',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: '#9ca3af' }}
+                    formatter={(value, name) => [value.toLocaleString(), name === 'base' ? 'Base (TDEE)' : 'Exercise']}
+                  />
+                  <Legend />
+                  <Bar dataKey="base" stackId="a" fill="#6b7280" name="Base (TDEE)" />
+                  <Bar dataKey="exercise" stackId="a" fill="#f97316" name="Exercise" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Recent Activity */}
+          <div className="card-steel overflow-hidden">
+            <div className="p-4 border-b border-iron-800">
+              <h3 className="text-sm font-medium text-iron-400 flex items-center gap-2">
+                <Activity className="w-4 h-4" />
+                Recent Activity
+              </h3>
+            </div>
+            <div className="divide-y divide-iron-800">
+              {workouts.slice(0, 5).map(workout => {
+                const date = workout.date?.toDate ? workout.date.toDate() : new Date(workout.date)
+                const weight = userProfile?.weight || 170
+                const calories = workout.workoutType === 'cardio' && workout.activityType
+                  ? calculateActivityCalories(workout.activityType, workout.duration, weight)
+                  : calculateStrengthWorkoutCalories(workout, weight)
+                
+                return (
+                  <div key={workout.id} className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-iron-200">{workout.name || 'Workout'}</p>
+                      <p className="text-xs text-iron-500">
+                        {format(date, 'MMM d')} · {workout.workoutType === 'cardio' ? `${workout.duration}min` : `${workout.exercises?.length || 0} exercises`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-flame-400">+{calories}</p>
+                      <p className="text-xs text-iron-500">calories</p>
+                    </div>
+                  </div>
+                )
+              })}
+              {workouts.length === 0 && (
+                <p className="p-4 text-center text-iron-500 text-sm">No recent activity</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Health Metrics Tab */
+        <>
       {/* Today's Summary */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {Object.entries(METRIC_CONFIG).map(([key, metric]) => {
@@ -462,6 +709,8 @@ export default function HealthPage() {
           })}
         </div>
       </div>
+      </>
+      )}
 
       {/* Entry Modal */}
       {showModal && (

@@ -184,11 +184,17 @@ export default function DashboardPage() {
       
       // Lifetime (rough estimate based on total workouts)
       let lifetimeExercise = 0
+      let oldestWorkoutDate = null
       workouts.forEach(w => {
         if (w.workoutType === 'cardio' && w.activityType && w.duration) {
           lifetimeExercise += calculateActivityCalories(w.activityType, w.duration, weight)
         } else {
           lifetimeExercise += calculateStrengthWorkoutCalories(w, weight)
+        }
+        // Track oldest workout date
+        const wDate = w.date?.toDate ? w.date.toDate() : new Date(w.date)
+        if (!oldestWorkoutDate || wDate < oldestWorkoutDate) {
+          oldestWorkoutDate = wDate
         }
       })
       // Estimate days tracked (rough: total workouts * 2 assuming ~3-4 workouts/week)
@@ -198,7 +204,8 @@ export default function DashboardPage() {
       setCalorieData({
         todayTotal: dailyTDEE + todayExercise,
         weekTotal,
-        lifetimeTotal
+        lifetimeTotal,
+        trackingStartDate: oldestWorkoutDate?.toISOString() || null
       })
 
       setLoading(false)

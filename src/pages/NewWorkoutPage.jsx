@@ -72,11 +72,6 @@ export default function NewWorkoutPage() {
   const targetUserId = searchParams.get('userId') || user?.uid;
   const isAdminCreating = searchParams.get('userId') && searchParams.get('userId') !== user?.uid;
 
-  // If cardio is selected, render the CardioForm instead
-  if (workoutType === 'cardio') {
-    return <CardioForm onBack={() => setWorkoutType('strength')} />;
-  }
-  
   const [workout, setWorkout] = useState({
     name: '',
     date: new Date().toISOString().split('T')[0],
@@ -105,6 +100,11 @@ export default function NewWorkoutPage() {
       painLevel: 0,
       completed: false,
     };
+  }
+
+  // If cardio is selected, render the CardioForm instead
+  if (workoutType === 'cardio') {
+    return <CardioForm onBack={() => setWorkoutType('strength')} />;
   }
 
   const addExercise = () => {
