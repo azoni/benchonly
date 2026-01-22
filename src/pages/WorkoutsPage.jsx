@@ -185,12 +185,12 @@ export default function WorkoutsPage() {
       {Object.keys(groupedWorkouts).length > 0 ? (
         <div className="space-y-6">
           {Object.entries(groupedWorkouts)
-            .sort(([a], [b]) => new Date(b) - new Date(a))
+            .sort(([a], [b]) => b.localeCompare(a))
             .map(([dateKey, dateWorkouts]) => (
               <div key={dateKey}>
                 <h3 className="text-sm font-medium text-iron-400 mb-3 flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
-                  {getDateLabel(new Date(dateKey))}
+                  {getDateLabel(dateKey)}
                 </h3>
                 <div className="space-y-3">
                   {dateWorkouts.map((workout, index) => (

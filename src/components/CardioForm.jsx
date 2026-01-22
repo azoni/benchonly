@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { workoutService, recurringActivityService } from '../services/firestore'
+import { workoutService, scheduleService } from '../services/firestore'
 import { 
   ACTIVITY_CATEGORIES, 
   ACTIVITY_METS, 
@@ -22,13 +22,13 @@ import {
 import { getTodayString, parseLocalDate } from '../utils/dateUtils'
 
 const DAYS_OF_WEEK = [
-  { id: 0, short: 'Sun', full: 'Sunday' },
-  { id: 1, short: 'Mon', full: 'Monday' },
-  { id: 2, short: 'Tue', full: 'Tuesday' },
-  { id: 3, short: 'Wed', full: 'Wednesday' },
-  { id: 4, short: 'Thu', full: 'Thursday' },
-  { id: 5, short: 'Fri', full: 'Friday' },
-  { id: 6, short: 'Sat', full: 'Saturday' },
+  { id: 'sunday', short: 'Sun', full: 'Sunday' },
+  { id: 'monday', short: 'Mon', full: 'Monday' },
+  { id: 'tuesday', short: 'Tue', full: 'Tuesday' },
+  { id: 'wednesday', short: 'Wed', full: 'Wednesday' },
+  { id: 'thursday', short: 'Thu', full: 'Thursday' },
+  { id: 'friday', short: 'Fri', full: 'Friday' },
+  { id: 'saturday', short: 'Sat', full: 'Saturday' },
 ]
 
 export default function CardioForm({ onBack }) {
@@ -89,14 +89,16 @@ export default function CardioForm({ onBack }) {
       
       await workoutService.create(user.uid, workoutData)
 
-      // Create recurring activity if selected
+      // Create recurring schedule if selected (uses scheduleService for calendar integration)
       if (cardio.recurring && cardio.recurringDays.length > 0) {
-        await recurringActivityService.create(user.uid, {
+        await scheduleService.create(user.uid, {
+          type: 'recurring',
+          name: selectedActivity?.label || 'Cardio',
+          days: cardio.recurringDays, // Array of day names like ['monday', 'wednesday']
           activityType: cardio.activityType,
           duration: parseInt(cardio.duration),
           distance: cardio.distance ? parseFloat(cardio.distance) : null,
-          days: cardio.recurringDays,
-          name: selectedActivity?.label || 'Cardio'
+          workoutType: 'cardio'
         })
       }
 

@@ -117,24 +117,49 @@ export default function HealthPage() {
 
   // Calculate calorie data when workouts or profile changes
   useEffect(() => {
-    if (workouts.length > 0 || userProfile) {
+    if (workouts.length >= 0 || userProfile) {
       calculateCalorieData()
     }
   }, [workouts, userProfile, chartRange])
 
+  // Get user's account creation date (first workout or profile creation)
+  const getTrackingStartDate = () => {
+    if (workouts.length === 0) return new Date()
+    
+    let oldest = new Date()
+    workouts.forEach(w => {
+      const wDate = w.date?.toDate ? w.date.toDate() : new Date(w.date)
+      if (wDate < oldest) oldest = wDate
+    })
+    return oldest
+  }
+
   const calculateCalorieData = () => {
     const dailyTDEE = calculateTDEE(userProfile)
     const weight = userProfile?.weight || 170
+    const trackingStart = getTrackingStartDate()
     const data = []
     
     for (let i = chartRange - 1; i >= 0; i--) {
       const date = subDays(new Date(), i)
       const dateStr = format(date, 'yyyy-MM-dd')
       
+      // Only include days from when user started tracking
+      if (date < trackingStart) {
+        data.push({
+          date: format(date, 'MMM d'),
+          fullDate: dateStr,
+          base: 0,
+          exercise: 0,
+          total: 0,
+          beforeTracking: true
+        })
+        continue
+      }
+      
       // Find workouts for this day
       const dayWorkouts = workouts.filter(w => {
-        const wDate = w.date?.toDate ? w.date.toDate() : new Date(w.date)
-        return format(wDate, 'yyyy-MM-dd') === dateStr
+        return toDateString(w.date) === dateStr
       })
       
       let exerciseCalories = 0
@@ -156,6 +181,43 @@ export default function HealthPage() {
     }
     
     setCalorieData(data)
+  }
+
+  // Calculate actual week calories (always current week, not chart range)
+  const calculateWeekCalories = () => {
+    const dailyTDEE = calculateTDEE(userProfile)
+    const weight = userProfile?.weight || 170
+    const weekStartDay = userProfile?.settings?.weekStartDay === 'sunday' ? 0 : 1
+    const now = new Date()
+    const weekStart = startOfWeek(now, { weekStartsOn: weekStartDay })
+    const trackingStart = getTrackingStartDate()
+    
+    let total = 0
+    let daysInWeek = 0
+    
+    // Calculate from week start to today
+    for (let d = new Date(weekStart); d <= now; d.setDate(d.getDate() + 1)) {
+      // Skip days before user started tracking
+      if (d < trackingStart) continue
+      
+      daysInWeek++
+      const dateStr = format(d, 'yyyy-MM-dd')
+      
+      // Add base TDEE
+      total += dailyTDEE
+      
+      // Add exercise calories for this day
+      const dayWorkouts = workouts.filter(w => toDateString(w.date) === dateStr)
+      dayWorkouts.forEach(w => {
+        if (w.workoutType === 'cardio' && w.activityType && w.duration) {
+          total += calculateActivityCalories(w.activityType, w.duration, weight)
+        } else {
+          total += calculateStrengthWorkoutCalories(w, weight)
+        }
+      })
+    }
+    
+    return total
   }
 
   const loadEntries = async () => {
@@ -299,7 +361,7 @@ export default function HealthPage() {
 
   // Calculate calorie totals
   const todayCalories = calorieData.find(d => d.fullDate === todayStr)
-  const weekCalories = calorieData.reduce((sum, d) => sum + d.total, 0)
+  const weekCalories = calculateWeekCalories()
   const weekStartDay = userProfile?.settings?.weekStartDay || 'monday'
 
   return (
