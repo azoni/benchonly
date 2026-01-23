@@ -17,6 +17,8 @@ import HealthPage from './pages/HealthPage'
 import UsagePage from './pages/UsagePage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
+import FeedPage from './pages/FeedPage'
+import ProfilePage from './pages/ProfilePage'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -116,6 +118,9 @@ export default function App() {
         <Route path="goals" element={<GoalsPage />} />
         <Route path="tools" element={<ToolsPage />} />
         <Route path="health" element={<HealthPage />} />
+        <Route path="feed" element={<FeedPage />} />
+        <Route path="profile/:userId" element={<ProfilePage />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="usage" element={<UsagePage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="admin" element={<AdminPage />} />

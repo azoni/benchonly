@@ -19,12 +19,15 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
-  BarChart3
+  BarChart3,
+  AtSign,
+  AlertCircle
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
 import { auth } from '../services/firebase'
 import { ACTIVITY_LEVELS } from '../services/calorieService'
+import { userService } from '../services/firestore'
 
 export default function SettingsPage() {
   const { user, userProfile, updateProfile } = useAuth()
@@ -33,6 +36,13 @@ export default function SettingsPage() {
   const [photoURL, setPhotoURL] = useState(userProfile?.photoURL || user?.photoURL)
   const fileInputRef = useRef(null)
   const [showProfileSection, setShowProfileSection] = useState(false)
+  
+  // Username state
+  const [username, setUsername] = useState(userProfile?.username || '')
+  const [usernameError, setUsernameError] = useState('')
+  const [usernameAvailable, setUsernameAvailable] = useState(null)
+  const [checkingUsername, setCheckingUsername] = useState(false)
+  const [savingUsername, setSavingUsername] = useState(false)
   
   const [settings, setSettings] = useState({
     notifications: userProfile?.settings?.notifications ?? true,
@@ -61,8 +71,58 @@ export default function SettingsPage() {
         gender: userProfile.gender || '',
         activityLevel: userProfile.activityLevel || 'light'
       })
+      setUsername(userProfile.username || '')
     }
   }, [userProfile])
+
+  // Debounced username availability check
+  useEffect(() => {
+    if (!username || username === userProfile?.username) {
+      setUsernameError('')
+      setUsernameAvailable(null)
+      return
+    }
+    
+    // Validate format
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+      setUsernameError('3-20 characters, letters, numbers, underscores only')
+      setUsernameAvailable(false)
+      return
+    }
+    
+    const timer = setTimeout(async () => {
+      setCheckingUsername(true)
+      setUsernameError('')
+      try {
+        const available = await userService.isUsernameAvailable(username, user?.uid)
+        setUsernameAvailable(available)
+        if (!available) {
+          setUsernameError('Username is taken or reserved')
+        }
+      } catch (error) {
+        console.error('Error checking username:', error)
+      } finally {
+        setCheckingUsername(false)
+      }
+    }, 500)
+    
+    return () => clearTimeout(timer)
+  }, [username, userProfile?.username, user?.uid])
+
+  const handleSaveUsername = async () => {
+    if (!username || !usernameAvailable) return
+    
+    setSavingUsername(true)
+    try {
+      await userService.setUsername(user.uid, username)
+      await updateProfile({ username: username.toLowerCase() })
+      setUsernameAvailable(null)
+    } catch (error) {
+      setUsernameError(error.message)
+    } finally {
+      setSavingUsername(false)
+    }
+  }
 
   const compressImage = (file, maxWidth = 200, quality = 0.8) => {
     return new Promise((resolve) => {
@@ -247,6 +307,11 @@ export default function SettingsPage() {
             <p className="text-sm text-iron-500 truncate">
               {user?.email}
             </p>
+            {userProfile?.username && (
+              <p className="text-sm text-flame-400">
+                @{userProfile.username}
+              </p>
+            )}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingPhoto}
@@ -255,6 +320,64 @@ export default function SettingsPage() {
               {uploadingPhoto ? 'Uploading...' : 'Change photo'}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Username Section */}
+      <div className="space-y-3 mb-6">
+        <h3 className="text-sm font-medium text-iron-400 px-1">Username</h3>
+        
+        <div className="card-steel p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-lg bg-flame-500/20 flex items-center justify-center">
+              <AtSign className="w-5 h-5 text-flame-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-iron-200">Profile URL</p>
+              <p className="text-sm text-iron-500">
+                benchpressonly.com/profile/{username || 'your-username'}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-iron-500">@</span>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                placeholder="username"
+                maxLength={20}
+                className="input-field w-full pl-8"
+              />
+              {checkingUsername && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iron-500 animate-spin" />
+              )}
+              {!checkingUsername && usernameAvailable === true && username !== userProfile?.username && (
+                <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-400" />
+              )}
+              {!checkingUsername && usernameAvailable === false && (
+                <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400" />
+              )}
+            </div>
+            <button
+              onClick={handleSaveUsername}
+              disabled={!usernameAvailable || savingUsername || username === userProfile?.username}
+              className="btn-primary px-4 disabled:opacity-50"
+            >
+              {savingUsername ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+            </button>
+          </div>
+          
+          {usernameError && (
+            <p className="text-xs text-red-400 mt-2">{usernameError}</p>
+          )}
+          {!usernameError && username && username !== userProfile?.username && (
+            <p className="text-xs text-iron-500 mt-2">
+              3-20 characters, letters, numbers, and underscores only
+            </p>
+          )}
         </div>
       </div>
 

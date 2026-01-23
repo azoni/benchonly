@@ -11,7 +11,7 @@ import {
   RotateCcw
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { workoutService, goalService, healthService, scheduleService } from '../services/firestore'
+import { workoutService, goalService, healthService, scheduleService, userService } from '../services/firestore'
 import { format, startOfWeek, endOfWeek, subDays } from 'date-fns'
 import OnboardingModal, { useOnboarding } from '../components/OnboardingModal'
 import ProfileSetupModal, { useProfileSetup } from '../components/ProfileSetupModal'
@@ -26,10 +26,12 @@ import {
   OneRepMaxWidget,
   QuickLinksWidget,
   AddWidgetCard,
-  CaloriesWidget
+  CaloriesWidget,
+  FeedWidget
 } from '../components/DashboardWidgets'
 import { calculateTDEE, calculateActivityCalories, calculateStrengthWorkoutCalories } from '../services/calorieService'
 import { getTodayString, toDateString } from '../utils/dateUtils'
+import { feedService } from '../services/feedService'
 
 const STORAGE_KEY = 'dashboard_widgets'
 
@@ -44,6 +46,8 @@ export default function DashboardPage() {
   const [goals, setGoals] = useState([])
   const [healthData, setHealthData] = useState([])
   const [calorieData, setCalorieData] = useState({ todayTotal: 0, weekTotal: 0, lifetimeTotal: 0 })
+  const [feedItems, setFeedItems] = useState([])
+  const [feedUsers, setFeedUsers] = useState({})
   const [healthGoals, setHealthGoals] = useState(() => {
     const saved = localStorage.getItem('health_goals')
     return saved ? JSON.parse(saved) : { sleep: 8, water: 64, protein: 150 }
@@ -56,7 +60,17 @@ export default function DashboardPage() {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
       try {
-        return JSON.parse(saved)
+        const parsed = JSON.parse(saved)
+        // Migration: Add 'feed' widget if missing (for existing users)
+        if (!parsed.includes('feed')) {
+          const insertIndex = parsed.indexOf('quickLinks')
+          if (insertIndex !== -1) {
+            parsed.splice(insertIndex, 0, 'feed')
+          } else {
+            parsed.push('feed')
+          }
+        }
+        return parsed
       } catch {
         return DEFAULT_WIDGET_ORDER
       }
@@ -67,7 +81,12 @@ export default function DashboardPage() {
     const saved = localStorage.getItem(STORAGE_KEY + '_enabled')
     if (saved) {
       try {
-        return JSON.parse(saved)
+        const parsed = JSON.parse(saved)
+        // Migration: Add 'feed' widget if missing (for existing users)
+        if (!parsed.includes('feed')) {
+          parsed.push('feed')
+        }
+        return parsed
       } catch {
         return DEFAULT_WIDGET_ORDER
       }
@@ -126,10 +145,11 @@ export default function DashboardPage() {
       }
 
       // Load all data in parallel
-      const [workouts, userGoals, health] = await Promise.all([
+      const [workouts, userGoals, health, feedResult] = await Promise.all([
         workoutService.getByUser(user.uid, 60),
         goalService.getByUser(user.uid),
-        healthService.getByUser(user.uid, 14).catch(() => []) // Don't fail if health errors
+        healthService.getByUser(user.uid, 14).catch(() => []), // Don't fail if health errors
+        feedService.getFeed(5).catch(() => ({ items: [] })) // Load feed for widget
       ])
       
       setRecentWorkouts(workouts.slice(0, 5))
@@ -205,6 +225,22 @@ export default function DashboardPage() {
         trackingStartDate: oldestWorkoutDate?.toISOString() || null
       })
 
+      // Process feed data
+      if (feedResult?.items?.length > 0) {
+        setFeedItems(feedResult.items)
+        
+        // Load user data for feed items
+        const userIds = [...new Set(feedResult.items.map(item => item.userId))]
+        const allUsers = await userService.getAll()
+        const usersMap = {}
+        allUsers.forEach(u => {
+          if (userIds.includes(u.uid)) {
+            usersMap[u.uid] = u
+          }
+        })
+        setFeedUsers(usersMap)
+      }
+
       setLoading(false)
     } catch (error) {
       console.error('Error loading dashboard:', error)
@@ -251,6 +287,8 @@ export default function DashboardPage() {
         return <GoalsWidget goals={goals} />
       case 'health':
         return <HealthWidget healthData={healthData} goals={healthGoals} />
+      case 'feed':
+        return <FeedWidget feedItems={feedItems} users={feedUsers} />
       case 'calories':
         return <CaloriesWidget calorieData={calorieData} profile={userProfile} />
       case 'healthChart':

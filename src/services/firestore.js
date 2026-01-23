@@ -30,6 +30,67 @@ export const userService = {
     return null;
   },
 
+  async getByUsername(username) {
+    if (!username) return null;
+    const q = query(
+      collection(db, 'users'),
+      where('username', '==', username.toLowerCase()),
+      limit(1)
+    );
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    const doc = snapshot.docs[0];
+    return { uid: doc.id, ...doc.data() };
+  },
+
+  async isUsernameAvailable(username, currentUserId = null) {
+    if (!username) return false;
+    const normalized = username.toLowerCase();
+    
+    // Check reserved words
+    const reserved = ['admin', 'settings', 'feed', 'profile', 'workouts', 'calendar', 'groups', 'goals', 'health', 'tools', 'usage', 'login', 'api'];
+    if (reserved.includes(normalized)) return false;
+    
+    // Check if already taken
+    const q = query(
+      collection(db, 'users'),
+      where('username', '==', normalized),
+      limit(1)
+    );
+    const snapshot = await getDocs(q);
+    
+    // If no one has it, it's available
+    if (snapshot.empty) return true;
+    
+    // If the current user has it, it's still "available" for them
+    if (currentUserId && snapshot.docs[0].id === currentUserId) return true;
+    
+    return false;
+  },
+
+  async setUsername(userId, username) {
+    const normalized = username.toLowerCase();
+    
+    // Validate format
+    if (!/^[a-z0-9_]{3,20}$/.test(normalized)) {
+      throw new Error('Username must be 3-20 characters, letters, numbers, and underscores only');
+    }
+    
+    // Check availability
+    const available = await this.isUsernameAvailable(normalized, userId);
+    if (!available) {
+      throw new Error('Username is already taken or reserved');
+    }
+    
+    // Update user document
+    await updateDoc(doc(db, 'users', userId), {
+      username: normalized,
+      updatedAt: serverTimestamp()
+    });
+    
+    return normalized;
+  },
+
   async getAll() {
     const snapshot = await getDocs(collection(db, 'users'));
     return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
@@ -42,7 +103,8 @@ export const userService = {
     const term = searchTerm.toLowerCase();
     return users.filter(u => 
       u.displayName?.toLowerCase().includes(term) ||
-      u.email?.toLowerCase().includes(term)
+      u.email?.toLowerCase().includes(term) ||
+      u.username?.toLowerCase().includes(term)
     );
   }
 };

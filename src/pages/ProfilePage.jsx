@@ -18,7 +18,7 @@ import { userService, workoutService, goalService } from '../services/firestore'
 import { feedService, FEED_TYPES, REACTIONS } from '../services/feedService'
 
 export default function ProfilePage() {
-  const { userId } = useParams()
+  const { userId: handle } = useParams() // Can be username or uid
   const { user: currentUser } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -28,15 +28,32 @@ export default function ProfilePage() {
 
   useEffect(() => {
     loadProfile()
-  }, [userId, currentUser])
+  }, [handle, currentUser])
 
   const loadProfile = async () => {
     setLoading(true)
     try {
-      const targetUserId = userId || currentUser?.uid
-      setIsOwnProfile(targetUserId === currentUser?.uid)
+      let userData = null
+      let targetUserId = null
       
-      const userData = await userService.get(targetUserId)
+      if (!handle) {
+        // No handle provided, show current user's profile
+        targetUserId = currentUser?.uid
+        userData = await userService.get(targetUserId)
+      } else {
+        // First try to find by username
+        userData = await userService.getByUsername(handle)
+        
+        if (userData) {
+          targetUserId = userData.uid
+        } else {
+          // Fall back to looking up by uid (for backward compatibility)
+          userData = await userService.get(handle)
+          targetUserId = handle
+        }
+      }
+      
+      setIsOwnProfile(targetUserId === currentUser?.uid)
       
       if (!userData) {
         setProfile(null)

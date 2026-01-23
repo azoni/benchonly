@@ -252,16 +252,20 @@ export default function FeedPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredItems.map((item) => (
+          {filteredItems.map((item) => {
+            const itemUser = users[item.userId]
+            const profileLink = `/profile/${itemUser?.username || item.userId}`
+            
+            return (
             <div key={item.id} className="card-steel p-4">
               {/* Header */}
               <div className="flex items-start gap-3">
                 <Link 
-                  to={`/profile/${item.userId}`}
+                  to={profileLink}
                   className="w-10 h-10 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 hover:bg-iron-700 transition-colors"
                 >
-                  {users[item.userId]?.photoURL ? (
-                    <img src={users[item.userId].photoURL} alt="" className="w-10 h-10 rounded-full" />
+                  {itemUser?.photoURL ? (
+                    <img src={itemUser.photoURL} alt="" className="w-10 h-10 rounded-full" />
                   ) : (
                     <User className="w-5 h-5" />
                   )}
@@ -322,7 +326,8 @@ export default function FeedPage() {
                 </button>
               </div>
             </div>
-          ))}
+            )
+          })}
 
           {/* Load More */}
           {hasMore && (
