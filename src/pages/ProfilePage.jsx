@@ -284,7 +284,7 @@ export default function ProfilePage() {
         )}
         
         <Link 
-          to={`/feed?user=${userId || currentUser?.uid}`}
+          to={`/feed?user=${profile?.uid || currentUser?.uid}`}
           className="block mt-4 text-center text-sm text-flame-400 hover:text-flame-300"
         >
           View all activity →

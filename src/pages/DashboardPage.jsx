@@ -69,6 +69,8 @@ export default function DashboardPage() {
           } else {
             parsed.push('feed')
           }
+          // Save migrated order immediately
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
         }
         return parsed
       } catch {
@@ -85,6 +87,8 @@ export default function DashboardPage() {
         // Migration: Add 'feed' widget if missing (for existing users)
         if (!parsed.includes('feed')) {
           parsed.push('feed')
+          // Save migrated enabled list immediately
+          localStorage.setItem(STORAGE_KEY + '_enabled', JSON.stringify(parsed))
         }
         return parsed
       } catch {
