@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { analyticsService, ACTIONS } from './analyticsService';
+import { feedService, FEED_TYPES } from './feedService';
 
 // ============ USERS ============
 export const userService = {
@@ -97,6 +98,22 @@ export const workoutService = {
       status: isComplete ? 'completed' : 'scheduled'
     });
     
+    // Create feed item for completed workouts
+    if (isComplete) {
+      try {
+        const feedType = workoutData.workoutType === 'cardio' ? FEED_TYPES.CARDIO : FEED_TYPES.WORKOUT;
+        await feedService.createFeedItem(userId, feedType, {
+          workoutId: docRef.id,
+          name: workoutData.name,
+          exerciseCount: workoutData.exercises?.length || 0,
+          duration: workoutData.duration,
+          activityType: workoutData.activityType
+        });
+      } catch (e) {
+        console.error('Feed error:', e);
+      }
+    }
+    
     return { id: docRef.id, ...workoutData, status: isComplete ? 'completed' : 'scheduled' };
   },
   
@@ -116,6 +133,10 @@ export const workoutService = {
   async completeWorkout(workoutId, exercisesWithActuals, userId) {
     const docRef = doc(db, 'workouts', workoutId);
     
+    // Get workout name for feed
+    const workoutDoc = await getDoc(docRef);
+    const workoutName = workoutDoc.data()?.name || 'Workout';
+    
     await updateDoc(docRef, {
       exercises: exercisesWithActuals,
       status: 'completed',
@@ -131,6 +152,17 @@ export const workoutService = {
     analyticsService.logAction(userId, ACTIONS.WORKOUT_COMPLETED, {
       exerciseCount: exercisesWithActuals?.length || 0
     });
+    
+    // Create feed item
+    try {
+      await feedService.createFeedItem(userId, FEED_TYPES.WORKOUT, {
+        workoutId,
+        name: workoutName,
+        exerciseCount: exercisesWithActuals?.length || 0
+      });
+    } catch (e) {
+      console.error('Feed error:', e);
+    }
     
     return { id: workoutId, status: 'completed' };
   },
@@ -277,6 +309,19 @@ export const workoutService = {
               if (bestValue >= targetValue) {
                 updates.status = 'completed';
                 updates.completedAt = serverTimestamp();
+                
+                // Create feed item for goal completion
+                try {
+                  await feedService.createFeedItem(userId, FEED_TYPES.GOAL_COMPLETED, {
+                    goalId: goalDoc.id,
+                    lift: goal.lift,
+                    targetValue: targetValue,
+                    metricType,
+                    unit: metricType === 'weight' ? 'lbs' : metricType === 'reps' ? 'reps' : 'sec'
+                  });
+                } catch (e) {
+                  console.error('Feed error:', e);
+                }
               }
               
               // Only update if this is a new PR or first entry

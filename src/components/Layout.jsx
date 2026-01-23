@@ -27,13 +27,13 @@ const ADMIN_EMAILS = ['charltonuw@gmail.com'];
 
 const baseNavItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { path: '/feed', icon: MessageCircle, label: 'Feed' },
   { path: '/workouts', icon: Dumbbell, label: 'Workouts' },
   { path: '/calendar', icon: Calendar, label: 'Calendar' },
   { path: '/groups', icon: Users, label: 'Groups' },
   { path: '/goals', icon: Target, label: 'Goals' },
   { path: '/health', icon: Heart, label: 'Health' },
   { path: '/tools', icon: Calculator, label: 'Tools' },
-  { path: '/usage', icon: BarChart3, label: 'Usage' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 

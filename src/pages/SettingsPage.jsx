@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { 
   User, 
   Bell, 
@@ -15,7 +16,10 @@ import {
   Ruler,
   Calendar,
   Activity,
-  ChevronDown
+  ChevronDown,
+  Eye,
+  EyeOff,
+  BarChart3
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
@@ -34,7 +38,8 @@ export default function SettingsPage() {
     notifications: userProfile?.settings?.notifications ?? true,
     units: userProfile?.settings?.units || 'lbs',
     theme: userProfile?.settings?.theme || 'dark',
-    weekStartDay: userProfile?.settings?.weekStartDay || 'monday'
+    weekStartDay: userProfile?.settings?.weekStartDay || 'monday',
+    isPrivate: userProfile?.isPrivate || false
   })
 
   const [profile, setProfile] = useState({
@@ -480,6 +485,57 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
+
+        {/* Privacy Toggle */}
+        <button
+          onClick={async () => {
+            const newValue = !settings.isPrivate
+            setSettings(prev => ({ ...prev, isPrivate: newValue }))
+            try {
+              await updateProfile({ isPrivate: newValue })
+            } catch (error) {
+              console.error('Error updating privacy:', error)
+              setSettings(prev => ({ ...prev, isPrivate: !newValue }))
+            }
+          }}
+          className="card-steel p-4 w-full flex items-center gap-4 hover:border-iron-600 transition-colors"
+        >
+          <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+            {settings.isPrivate ? (
+              <EyeOff className="w-5 h-5 text-orange-400" />
+            ) : (
+              <Eye className="w-5 h-5 text-orange-400" />
+            )}
+          </div>
+          <div className="flex-1 text-left">
+            <p className="font-medium text-iron-200">Private Profile</p>
+            <p className="text-sm text-iron-500">
+              {settings.isPrivate ? 'Your activity is hidden from the feed' : 'Your activity appears in the feed'}
+            </p>
+          </div>
+          <div className={`w-12 h-7 rounded-full transition-colors ${
+            settings.isPrivate ? 'bg-flame-500' : 'bg-iron-700'
+          }`}>
+            <div className={`w-5 h-5 bg-white rounded-full mt-1 transition-transform ${
+              settings.isPrivate ? 'translate-x-6' : 'translate-x-1'
+            }`} />
+          </div>
+        </button>
+
+        {/* Usage Stats Link */}
+        <Link
+          to="/usage"
+          className="card-steel p-4 flex items-center gap-4 hover:border-iron-600 transition-colors"
+        >
+          <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+            <BarChart3 className="w-5 h-5 text-cyan-400" />
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-iron-200">AI Usage Stats</p>
+            <p className="text-sm text-iron-500">View your AI token usage</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-iron-500" />
+        </Link>
 
         {/* Theme */}
         <div className="card-steel p-4 opacity-50">

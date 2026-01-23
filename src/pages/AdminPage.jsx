@@ -18,7 +18,7 @@ import {
   TrendingUp
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { collection, getDocs, query, orderBy } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import { workoutService, goalService } from '../services/firestore'
 import { analyticsService } from '../services/analyticsService'
@@ -39,9 +39,12 @@ export default function AdminPage() {
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [showWorkoutModal, setShowWorkoutModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
-  const [activeTab, setActiveTab] = useState('users') // 'users' or 'activity'
+  const [activeTab, setActiveTab] = useState('users') // 'users', 'activity', or 'usage'
   const [activityData, setActivityData] = useState(null)
   const [activityLoading, setActivityLoading] = useState(false)
+  const [usageData, setUsageData] = useState([])
+  const [usageLoading, setUsageLoading] = useState(false)
+  const [usageFilter, setUsageFilter] = useState('')
   const [goalForm, setGoalForm] = useState({
     lift: '',
     metricType: 'weight',
@@ -121,7 +124,28 @@ export default function AdminPage() {
     if (activeTab === 'activity' && !activityData) {
       loadActivityData()
     }
+    if (activeTab === 'usage' && usageData.length === 0) {
+      loadUsageData()
+    }
   }, [activeTab])
+
+  const loadUsageData = async () => {
+    setUsageLoading(true)
+    try {
+      const q = query(
+        collection(db, 'tokenUsage'),
+        orderBy('createdAt', 'desc'),
+        limit(200)
+      )
+      const snapshot = await getDocs(q)
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      setUsageData(data)
+    } catch (error) {
+      console.error('Error loading usage:', error)
+    } finally {
+      setUsageLoading(false)
+    }
+  }
 
   const handleCreateGoal = async (e) => {
     e.preventDefault()
@@ -248,6 +272,17 @@ export default function AdminPage() {
         >
           <Activity className="w-4 h-4" />
           Activity
+        </button>
+        <button
+          onClick={() => setActiveTab('usage')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
+            activeTab === 'usage'
+              ? 'bg-flame-500 text-white'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          Usage
         </button>
       </div>
 
@@ -511,7 +546,7 @@ export default function AdminPage() {
         </div>
       </div>
       </>
-      ) : (
+      ) : activeTab === 'activity' ? (
         /* Activity Tab */
         <div className="space-y-6">
           {activityLoading ? (
@@ -632,7 +667,99 @@ export default function AdminPage() {
             </div>
           )}
         </div>
-      )}
+      ) : activeTab === 'usage' ? (
+        /* Usage Tab */
+        <div className="space-y-6">
+          {/* Filter */}
+          <div className="card-steel p-4">
+            <label className="text-sm text-iron-400 mb-2 block">Filter by User</label>
+            <select
+              value={usageFilter}
+              onChange={(e) => setUsageFilter(e.target.value)}
+              className="input-field w-full max-w-xs"
+            >
+              <option value="">All Users</option>
+              {users.map(u => (
+                <option key={u.uid} value={u.uid}>{u.displayName || u.email}</option>
+              ))}
+            </select>
+          </div>
+
+          {usageLoading ? (
+            <div className="card-steel p-12 text-center">
+              <div className="w-8 h-8 border-2 border-flame-500 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-iron-500 mt-4">Loading usage data...</p>
+            </div>
+          ) : (
+            <>
+              {/* Usage Summary */}
+              {(() => {
+                const filtered = usageFilter 
+                  ? usageData.filter(u => u.userId === usageFilter)
+                  : usageData
+                const totalTokens = filtered.reduce((sum, u) => sum + (u.totalTokens || 0), 0)
+                const totalCost = filtered.reduce((sum, u) => sum + (u.estimatedCost || 0), 0)
+                
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="card-steel p-4 text-center">
+                        <p className="text-3xl font-display text-flame-400">{filtered.length}</p>
+                        <p className="text-sm text-iron-500">Total Requests</p>
+                      </div>
+                      <div className="card-steel p-4 text-center">
+                        <p className="text-3xl font-display text-iron-100">{(totalTokens / 1000).toFixed(1)}k</p>
+                        <p className="text-sm text-iron-500">Tokens Used</p>
+                      </div>
+                      <div className="card-steel p-4 text-center">
+                        <p className="text-3xl font-display text-green-400">${totalCost.toFixed(2)}</p>
+                        <p className="text-sm text-iron-500">Est. Cost</p>
+                      </div>
+                    </div>
+
+                    {/* Usage Table */}
+                    <div className="card-steel overflow-hidden">
+                      <div className="max-h-[500px] overflow-y-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-iron-800 sticky top-0">
+                            <tr>
+                              <th className="text-left p-3 text-iron-400">User</th>
+                              <th className="text-left p-3 text-iron-400">Date</th>
+                              <th className="text-right p-3 text-iron-400">Tokens</th>
+                              <th className="text-right p-3 text-iron-400">Cost</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filtered.slice(0, 100).map((usage) => {
+                              const usageUser = users.find(u => u.uid === usage.userId)
+                              return (
+                                <tr key={usage.id} className="border-t border-iron-800">
+                                  <td className="p-3 text-iron-300">
+                                    {usageUser?.displayName || usage.userId?.slice(0, 8)}
+                                  </td>
+                                  <td className="p-3 text-iron-500">
+                                    {usage.createdAt?.toDate && format(usage.createdAt.toDate(), 'MMM d, h:mm a')}
+                                  </td>
+                                  <td className="p-3 text-right text-iron-300">
+                                    {usage.totalTokens?.toLocaleString()}
+                                  </td>
+                                  <td className="p-3 text-right text-green-400">
+                                    ${usage.estimatedCost?.toFixed(4)}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
+            </>
+          )}
+        </div>
+      ) : null}
 
       {/* Goal Modal */}
       {showGoalModal && (

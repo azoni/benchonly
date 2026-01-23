@@ -588,3 +588,62 @@ export function AddWidgetCard({ onCustomize, availableCount }) {
     </button>
   )
 }
+
+// ============ ACTIVITY FEED WIDGET ============
+export function FeedWidget({ feedItems = [], users = {} }) {
+  const getActivityText = (item) => {
+    const userName = users[item.userId]?.displayName || 'Someone'
+    switch (item.type) {
+      case 'workout':
+        return `${userName} completed ${item.data?.name || 'a workout'}`
+      case 'cardio':
+        return `${userName} logged ${item.data?.duration}min ${item.data?.name || 'cardio'}`
+      case 'goal_completed':
+        return `${userName} achieved ${item.data?.lift} 🎉`
+      case 'personal_record':
+        return `${userName} set a new PR`
+      default:
+        return `${userName} was active`
+    }
+  }
+
+  return (
+    <div className="card-steel p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-display text-lg text-iron-100">Activity Feed</h3>
+        <Link 
+          to="/feed" 
+          className="text-xs text-flame-400 hover:text-flame-300"
+        >
+          View all →
+        </Link>
+      </div>
+
+      {feedItems.length === 0 ? (
+        <div className="py-6 text-center">
+          <Users className="w-8 h-8 text-iron-600 mx-auto mb-2" />
+          <p className="text-sm text-iron-500">No recent activity</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {feedItems.slice(0, 5).map((item) => (
+            <div key={item.id} className="flex items-center gap-3 py-2 border-b border-iron-800 last:border-0">
+              <div className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 text-xs flex-shrink-0">
+                {users[item.userId]?.displayName?.[0] || '?'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-iron-300 truncate">{getActivityText(item)}</p>
+                <p className="text-xs text-iron-600">
+                  {item.createdAt?.toDate && format(item.createdAt.toDate(), 'MMM d, h:mm a')}
+                </p>
+              </div>
+              {item.reactionCount > 0 && (
+                <span className="text-xs text-iron-500">{item.reactionCount} 💪</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
