@@ -97,7 +97,7 @@ export function RecentWorkoutsWidget({ workouts }) {
         </Link>
       </div>
       <div className="space-y-3">
-        {workouts.slice(0, 4).map((workout) => {
+        {workouts.slice(0, 5).map((workout) => {
           const workoutDate = workout.date?.toDate ? workout.date.toDate() : new Date(workout.date)
           return (
             <Link
@@ -145,7 +145,7 @@ export function GoalsWidget({ goals }) {
         </Link>
       </div>
       <div className="space-y-4">
-        {goals.slice(0, 3).map((goal) => {
+        {goals.slice(0, 4).map((goal) => {
           const current = goal.currentValue ?? goal.currentWeight ?? 0
           const target = goal.targetValue ?? goal.targetWeight ?? 100
           const start = goal.startValue ?? goal.startWeight ?? current
@@ -680,7 +680,7 @@ export const WIDGET_REGISTRY = {
   }
 }
 
-export const DEFAULT_WIDGET_ORDER = ['stats', 'recentWorkouts', 'goals', 'health', 'profile', 'quickLinks', 'addWidget']
+export const DEFAULT_WIDGET_ORDER = ['profile', 'stats', 'recentWorkouts', 'goals', 'quickLinks', 'addWidget']
 
 // ============ ADD WIDGET CARD ============
 export function AddWidgetCard({ onCustomize, availableCount }) {
