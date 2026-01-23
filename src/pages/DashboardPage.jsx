@@ -27,10 +27,12 @@ import {
   QuickLinksWidget,
   AddWidgetCard,
   CaloriesWidget,
-  ProfileWidget
+  ProfileWidget,
+  FeedWidget
 } from '../components/DashboardWidgets'
 import { calculateTDEE, calculateActivityCalories, calculateStrengthWorkoutCalories } from '../services/calorieService'
 import { getTodayString, toDateString } from '../utils/dateUtils'
+import { feedService } from '../services/feedService'
 
 const STORAGE_KEY = 'dashboard_widgets'
 
@@ -45,6 +47,8 @@ export default function DashboardPage() {
   const [goals, setGoals] = useState([])
   const [healthData, setHealthData] = useState([])
   const [calorieData, setCalorieData] = useState({ todayTotal: 0, weekTotal: 0, lifetimeTotal: 0 })
+  const [feedItems, setFeedItems] = useState([])
+  const [feedUsers, setFeedUsers] = useState({})
   const [healthGoals, setHealthGoals] = useState(() => {
     const saved = localStorage.getItem('health_goals')
     return saved ? JSON.parse(saved) : { sleep: 8, water: 64, protein: 150 }
@@ -229,6 +233,26 @@ export default function DashboardPage() {
         trackingStartDate: oldestWorkoutDate?.toISOString() || null
       })
 
+      // Load feed data (non-blocking)
+      try {
+        const feedResult = await feedService.getFeed(5)
+        if (feedResult?.items?.length > 0) {
+          setFeedItems(feedResult.items)
+          const userIds = [...new Set(feedResult.items.map(item => item.userId))]
+          const allUsers = await userService.getAll()
+          const usersMap = {}
+          allUsers.forEach(u => {
+            if (userIds.includes(u.uid)) {
+              usersMap[u.uid] = u
+            }
+          })
+          setFeedUsers(usersMap)
+        }
+      } catch (feedError) {
+        console.error('Error loading feed:', feedError)
+        // Don't fail dashboard if feed fails
+      }
+
       setLoading(false)
     } catch (error) {
       console.error('Error loading dashboard:', error)
@@ -277,6 +301,8 @@ export default function DashboardPage() {
         return <HealthWidget healthData={healthData} goals={healthGoals} />
       case 'profile':
         return <ProfileWidget user={user} userProfile={userProfile} />
+      case 'feed':
+        return <FeedWidget feedItems={feedItems} users={feedUsers} />
       case 'calories':
         return <CaloriesWidget calorieData={calorieData} profile={userProfile} />
       case 'healthChart':
