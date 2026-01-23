@@ -643,7 +643,11 @@ export default function GroupDetailPage() {
       {activeTab === 'members' && (
         <div className="space-y-3">
           {members.map(member => (
-            <div key={member.uid} className="card-steel p-4 flex items-center gap-4">
+            <Link 
+              key={member.uid} 
+              to={`/profile/${member.username || member.uid}`}
+              className="card-steel p-4 flex items-center gap-4 hover:border-iron-600 transition-colors"
+            >
               {member.photoURL ? (
                 <img 
                   src={member.photoURL} 
@@ -670,6 +674,9 @@ export default function GroupDetailPage() {
                     <span className="text-xs text-iron-500">(you)</span>
                   )}
                 </div>
+                {member.username && (
+                  <p className="text-xs text-iron-500">@{member.username}</p>
+                )}
               </div>
               
               {/* Mini attendance dots */}
@@ -682,7 +689,7 @@ export default function GroupDetailPage() {
                   />
                 ))}
               </div>
-            </div>
+            </Link>
           ))}
           
           {isAdmin && (

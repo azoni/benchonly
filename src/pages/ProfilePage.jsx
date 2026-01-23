@@ -5,17 +5,14 @@ import {
   User, 
   Dumbbell, 
   Target, 
-  Flame, 
-  Calendar,
   Lock,
   ArrowLeft,
   Activity,
-  Trophy,
   Loader2
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { userService, workoutService, goalService } from '../services/firestore'
-import { feedService, FEED_TYPES, REACTIONS } from '../services/feedService'
+import { userService, workoutService } from '../services/firestore'
+import { feedService } from '../services/feedService'
 
 export default function ProfilePage() {
   const { userId: handle } = useParams() // Can be username or uid
@@ -70,21 +67,44 @@ export default function ProfilePage() {
 
       setProfile(userData)
 
-      // Load stats
-      const [workouts, goals] = await Promise.all([
-        workoutService.getByUser(targetUserId, 100),
-        goalService.getByUser(targetUserId)
-      ])
-
+      // Load workouts to calculate maxes
+      const workouts = await workoutService.getByUser(targetUserId, 500)
       const completedWorkouts = workouts.filter(w => w.status === 'completed')
-      const completedGoals = goals.filter(g => g.status === 'completed')
+
+      // Calculate maxes from workout history
+      const maxes = { bench: 0, squat: 0, deadlift: 0 }
+      
+      completedWorkouts.forEach(workout => {
+        if (workout.exercises) {
+          workout.exercises.forEach(exercise => {
+            const name = exercise.name?.toLowerCase() || ''
+            
+            exercise.sets?.forEach(set => {
+              const weight = parseFloat(set.actualWeight) || parseFloat(set.prescribedWeight) || 0
+              
+              // Match bench press variations
+              if (name.includes('bench') && !name.includes('incline') && !name.includes('decline')) {
+                maxes.bench = Math.max(maxes.bench, weight)
+              }
+              // Match squat variations
+              else if (name.includes('squat') && !name.includes('front') && !name.includes('hack')) {
+                maxes.squat = Math.max(maxes.squat, weight)
+              }
+              // Match deadlift variations
+              else if (name.includes('deadlift') && !name.includes('romanian') && !name.includes('rdl') && !name.includes('stiff')) {
+                maxes.deadlift = Math.max(maxes.deadlift, weight)
+              }
+            })
+          })
+        }
+      })
 
       setStats({
         totalWorkouts: completedWorkouts.length,
-        totalGoals: goals.length,
-        completedGoals: completedGoals.length,
-        // Calculate streak (consecutive days with workouts)
-        streak: calculateStreak(completedWorkouts)
+        bench: maxes.bench,
+        squat: maxes.squat,
+        deadlift: maxes.deadlift,
+        total: maxes.bench + maxes.squat + maxes.deadlift
       })
 
       // Load recent activity
@@ -96,37 +116,6 @@ export default function ProfilePage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const calculateStreak = (workouts) => {
-    if (!workouts.length) return 0
-    
-    // Sort by date descending
-    const sorted = [...workouts].sort((a, b) => {
-      const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date)
-      const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date)
-      return dateB - dateA
-    })
-
-    let streak = 0
-    let currentDate = new Date()
-    currentDate.setHours(0, 0, 0, 0)
-
-    for (const workout of sorted) {
-      const workoutDate = workout.date?.toDate ? workout.date.toDate() : new Date(workout.date)
-      workoutDate.setHours(0, 0, 0, 0)
-      
-      const diffDays = Math.floor((currentDate - workoutDate) / (1000 * 60 * 60 * 24))
-      
-      if (diffDays <= 1) {
-        streak++
-        currentDate = workoutDate
-      } else {
-        break
-      }
-    }
-
-    return streak
   }
 
   const getActivityIcon = (type) => {
@@ -200,8 +189,11 @@ export default function ProfilePage() {
             <h1 className="text-2xl font-display text-iron-100">
               {profile.displayName || 'User'}
             </h1>
+            {profile.username && (
+              <p className="text-sm text-flame-400">@{profile.username}</p>
+            )}
             {profile.createdAt && (
-              <p className="text-sm text-iron-500">
+              <p className="text-xs text-iron-500 mt-1">
                 Member since {format(profile.createdAt.toDate ? profile.createdAt.toDate() : new Date(profile.createdAt), 'MMMM yyyy')}
               </p>
             )}
@@ -218,33 +210,39 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Maxes */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="card-steel p-4 text-center">
-            <Dumbbell className="w-6 h-6 text-green-400 mx-auto mb-2" />
-            <p className="text-2xl font-display text-iron-100">{stats.totalWorkouts}</p>
-            <p className="text-xs text-iron-500">Workouts</p>
-          </div>
-          
-          <div className="card-steel p-4 text-center">
-            <Target className="w-6 h-6 text-purple-400 mx-auto mb-2" />
-            <p className="text-2xl font-display text-iron-100">
-              {stats.completedGoals}/{stats.totalGoals}
+            <p className="text-xs text-iron-500 mb-1">Bench Press</p>
+            <p className="text-2xl font-display text-flame-400">
+              {stats.bench > 0 ? `${stats.bench}` : '—'}
             </p>
-            <p className="text-xs text-iron-500">Goals</p>
+            <p className="text-xs text-iron-600">lbs</p>
           </div>
           
           <div className="card-steel p-4 text-center">
-            <Flame className="w-6 h-6 text-flame-400 mx-auto mb-2" />
-            <p className="text-2xl font-display text-iron-100">{stats.streak}</p>
-            <p className="text-xs text-iron-500">Day Streak</p>
+            <p className="text-xs text-iron-500 mb-1">Squat</p>
+            <p className="text-2xl font-display text-purple-400">
+              {stats.squat > 0 ? `${stats.squat}` : '—'}
+            </p>
+            <p className="text-xs text-iron-600">lbs</p>
           </div>
           
           <div className="card-steel p-4 text-center">
-            <Trophy className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-            <p className="text-2xl font-display text-iron-100">{stats.completedGoals}</p>
-            <p className="text-xs text-iron-500">Achieved</p>
+            <p className="text-xs text-iron-500 mb-1">Deadlift</p>
+            <p className="text-2xl font-display text-green-400">
+              {stats.deadlift > 0 ? `${stats.deadlift}` : '—'}
+            </p>
+            <p className="text-xs text-iron-600">lbs</p>
+          </div>
+          
+          <div className="card-steel p-4 text-center">
+            <p className="text-xs text-iron-500 mb-1">Total</p>
+            <p className="text-2xl font-display text-yellow-400">
+              {stats.total > 0 ? `${stats.total}` : '—'}
+            </p>
+            <p className="text-xs text-iron-600">lbs</p>
           </div>
         </div>
       )}

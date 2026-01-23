@@ -27,11 +27,10 @@ import {
   QuickLinksWidget,
   AddWidgetCard,
   CaloriesWidget,
-  FeedWidget
+  ProfileWidget
 } from '../components/DashboardWidgets'
 import { calculateTDEE, calculateActivityCalories, calculateStrengthWorkoutCalories } from '../services/calorieService'
 import { getTodayString, toDateString } from '../utils/dateUtils'
-import { feedService } from '../services/feedService'
 
 const STORAGE_KEY = 'dashboard_widgets'
 
@@ -46,8 +45,6 @@ export default function DashboardPage() {
   const [goals, setGoals] = useState([])
   const [healthData, setHealthData] = useState([])
   const [calorieData, setCalorieData] = useState({ todayTotal: 0, weekTotal: 0, lifetimeTotal: 0 })
-  const [feedItems, setFeedItems] = useState([])
-  const [feedUsers, setFeedUsers] = useState({})
   const [healthGoals, setHealthGoals] = useState(() => {
     const saved = localStorage.getItem('health_goals')
     return saved ? JSON.parse(saved) : { sleep: 8, water: 64, protein: 150 }
@@ -60,18 +57,20 @@ export default function DashboardPage() {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
       try {
-        const parsed = JSON.parse(saved)
-        // Migration: Add 'feed' widget if missing (for existing users)
-        if (!parsed.includes('feed')) {
+        let parsed = JSON.parse(saved)
+        // Migration: Replace 'feed' with 'profile', add 'profile' if missing
+        const feedIndex = parsed.indexOf('feed')
+        if (feedIndex !== -1) {
+          parsed[feedIndex] = 'profile'
+        } else if (!parsed.includes('profile')) {
           const insertIndex = parsed.indexOf('quickLinks')
           if (insertIndex !== -1) {
-            parsed.splice(insertIndex, 0, 'feed')
+            parsed.splice(insertIndex, 0, 'profile')
           } else {
-            parsed.push('feed')
+            parsed.push('profile')
           }
-          // Save migrated order immediately
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
         }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
         return parsed
       } catch {
         return DEFAULT_WIDGET_ORDER
@@ -83,13 +82,15 @@ export default function DashboardPage() {
     const saved = localStorage.getItem(STORAGE_KEY + '_enabled')
     if (saved) {
       try {
-        const parsed = JSON.parse(saved)
-        // Migration: Add 'feed' widget if missing (for existing users)
-        if (!parsed.includes('feed')) {
-          parsed.push('feed')
-          // Save migrated enabled list immediately
-          localStorage.setItem(STORAGE_KEY + '_enabled', JSON.stringify(parsed))
+        let parsed = JSON.parse(saved)
+        // Migration: Replace 'feed' with 'profile', add 'profile' if missing
+        const feedIndex = parsed.indexOf('feed')
+        if (feedIndex !== -1) {
+          parsed[feedIndex] = 'profile'
+        } else if (!parsed.includes('profile')) {
+          parsed.push('profile')
         }
+        localStorage.setItem(STORAGE_KEY + '_enabled', JSON.stringify(parsed))
         return parsed
       } catch {
         return DEFAULT_WIDGET_ORDER
@@ -149,11 +150,10 @@ export default function DashboardPage() {
       }
 
       // Load all data in parallel
-      const [workouts, userGoals, health, feedResult] = await Promise.all([
+      const [workouts, userGoals, health] = await Promise.all([
         workoutService.getByUser(user.uid, 60),
         goalService.getByUser(user.uid),
         healthService.getByUser(user.uid, 14).catch(() => []), // Don't fail if health errors
-        feedService.getFeed(5).catch(() => ({ items: [] })) // Load feed for widget
       ])
       
       setRecentWorkouts(workouts.slice(0, 5))
@@ -229,22 +229,6 @@ export default function DashboardPage() {
         trackingStartDate: oldestWorkoutDate?.toISOString() || null
       })
 
-      // Process feed data
-      if (feedResult?.items?.length > 0) {
-        setFeedItems(feedResult.items)
-        
-        // Load user data for feed items
-        const userIds = [...new Set(feedResult.items.map(item => item.userId))]
-        const allUsers = await userService.getAll()
-        const usersMap = {}
-        allUsers.forEach(u => {
-          if (userIds.includes(u.uid)) {
-            usersMap[u.uid] = u
-          }
-        })
-        setFeedUsers(usersMap)
-      }
-
       setLoading(false)
     } catch (error) {
       console.error('Error loading dashboard:', error)
@@ -291,8 +275,8 @@ export default function DashboardPage() {
         return <GoalsWidget goals={goals} />
       case 'health':
         return <HealthWidget healthData={healthData} goals={healthGoals} />
-      case 'feed':
-        return <FeedWidget feedItems={feedItems} users={feedUsers} />
+      case 'profile':
+        return <ProfileWidget user={user} userProfile={userProfile} />
       case 'calories':
         return <CaloriesWidget calorieData={calorieData} profile={userProfile} />
       case 'healthChart':

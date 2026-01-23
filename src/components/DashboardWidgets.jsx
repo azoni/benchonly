@@ -15,7 +15,10 @@ import {
   Users,
   Heart,
   Plus,
-  Flame
+  Flame,
+  MessageCircle,
+  Settings,
+  User
 } from 'lucide-react'
 import { format, subDays, startOfWeek, endOfWeek } from 'date-fns'
 import {
@@ -26,6 +29,7 @@ import {
   ResponsiveContainer,
   Tooltip
 } from 'recharts'
+import { useAuth } from '../context/AuthContext'
 
 // ============ STAT CARD WIDGET ============
 export function StatsWidget({ stats }) {
@@ -371,12 +375,14 @@ export function QuickLinksWidget() {
     { to: '/groups', label: 'Groups', icon: Users, color: 'text-cyan-400', bgColor: 'bg-cyan-500/20' },
     { to: '/health', label: 'Health', icon: Heart, color: 'text-red-400', bgColor: 'bg-red-500/20' },
     { to: '/tools', label: 'Tools', icon: Calculator, color: 'text-yellow-400', bgColor: 'bg-yellow-500/20' },
+    { to: '/feed', label: 'Feed', icon: MessageCircle, color: 'text-orange-400', bgColor: 'bg-orange-500/20' },
+    { to: '/settings', label: 'Settings', icon: Settings, color: 'text-iron-400', bgColor: 'bg-iron-700' },
   ]
 
   return (
     <div className="card-steel p-6">
       <h3 className="font-display text-lg text-iron-100 mb-4">Quick Access</h3>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         {links.map(({ to, label, icon: Icon, color, bgColor }) => (
           <Link
             key={to}
@@ -486,6 +492,39 @@ export function CaloriesWidget({ calorieData, profile }) {
   )
 }
 
+// ============ PROFILE WIDGET ============
+export function ProfileWidget({ user, userProfile }) {
+  const displayName = user?.displayName || 'User'
+  const username = userProfile?.username
+  
+  return (
+    <Link to="/profile" className="card-steel p-6 block hover:border-iron-600 transition-colors">
+      <div className="flex items-center gap-4">
+        <div className="w-16 h-16 rounded-full bg-iron-800 flex items-center justify-center">
+          {userProfile?.photoURL || user?.photoURL ? (
+            <img 
+              src={userProfile?.photoURL || user?.photoURL} 
+              alt="" 
+              className="w-16 h-16 rounded-full object-cover" 
+            />
+          ) : (
+            <span className="text-2xl font-display text-iron-400">
+              {displayName[0]?.toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-display text-lg text-iron-100 truncate">{displayName}</h3>
+          {username && (
+            <p className="text-sm text-flame-400">@{username}</p>
+          )}
+          <p className="text-xs text-iron-500 mt-1">View your profile →</p>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
 // ============ WIDGET REGISTRY ============
 export const WIDGET_REGISTRY = {
   stats: {
@@ -517,6 +556,14 @@ export const WIDGET_REGISTRY = {
     label: "Today's Health",
     icon: Heart,
     component: HealthWidget,
+    defaultEnabled: true,
+    size: 'half'
+  },
+  profile: {
+    id: 'profile',
+    label: 'My Profile',
+    icon: User,
+    component: ProfileWidget,
     defaultEnabled: true,
     size: 'half'
   },
@@ -563,7 +610,7 @@ export const WIDGET_REGISTRY = {
   }
 }
 
-export const DEFAULT_WIDGET_ORDER = ['stats', 'recentWorkouts', 'goals', 'health', 'quickLinks', 'addWidget']
+export const DEFAULT_WIDGET_ORDER = ['stats', 'recentWorkouts', 'goals', 'health', 'profile', 'quickLinks', 'addWidget']
 
 // ============ ADD WIDGET CARD ============
 export function AddWidgetCard({ onCustomize, availableCount }) {
@@ -586,64 +633,5 @@ export function AddWidgetCard({ onCustomize, availableCount }) {
         </p>
       </div>
     </button>
-  )
-}
-
-// ============ ACTIVITY FEED WIDGET ============
-export function FeedWidget({ feedItems = [], users = {} }) {
-  const getActivityText = (item) => {
-    const userName = users[item.userId]?.displayName || 'Someone'
-    switch (item.type) {
-      case 'workout':
-        return `${userName} completed ${item.data?.name || 'a workout'}`
-      case 'cardio':
-        return `${userName} logged ${item.data?.duration}min ${item.data?.name || 'cardio'}`
-      case 'goal_completed':
-        return `${userName} achieved ${item.data?.lift} 🎉`
-      case 'personal_record':
-        return `${userName} set a new PR`
-      default:
-        return `${userName} was active`
-    }
-  }
-
-  return (
-    <div className="card-steel p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-display text-lg text-iron-100">Activity Feed</h3>
-        <Link 
-          to="/feed" 
-          className="text-xs text-flame-400 hover:text-flame-300"
-        >
-          View all →
-        </Link>
-      </div>
-
-      {feedItems.length === 0 ? (
-        <div className="py-6 text-center">
-          <Users className="w-8 h-8 text-iron-600 mx-auto mb-2" />
-          <p className="text-sm text-iron-500">No recent activity</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {feedItems.slice(0, 5).map((item) => (
-            <div key={item.id} className="flex items-center gap-3 py-2 border-b border-iron-800 last:border-0">
-              <div className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 text-xs flex-shrink-0">
-                {users[item.userId]?.displayName?.[0] || '?'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-iron-300 truncate">{getActivityText(item)}</p>
-                <p className="text-xs text-iron-600">
-                  {item.createdAt?.toDate && format(item.createdAt.toDate(), 'MMM d, h:mm a')}
-                </p>
-              </div>
-              {item.reactionCount > 0 && (
-                <span className="text-xs text-iron-500">{item.reactionCount} 💪</span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   )
 }
