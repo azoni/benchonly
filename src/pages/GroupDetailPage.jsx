@@ -596,11 +596,11 @@ export default function GroupDetailPage() {
           ) : (
             <div className="space-y-3">
               {groupWorkouts.map(workout => {
-                const assignedMember = members.find(m => m.uid === workout.userId)
+                const assignedMember = members.find(m => m.uid === workout.assignedTo)
                 return (
                   <Link 
                     key={workout.id} 
-                    to={`/workouts/${workout.id}`}
+                    to={`/workouts/group/${workout.id}`}
                     className="card-steel p-4 block hover:border-iron-600 transition-colors"
                   >
                     <div className="flex items-center justify-between mb-2">

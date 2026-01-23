@@ -15,7 +15,7 @@ import {
   Edit2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { workoutService } from '../services/firestore';
+import { workoutService, groupWorkoutService } from '../services/firestore';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { getDisplayDate, toDateString } from '../utils/dateUtils';
 
@@ -41,8 +41,27 @@ export default function WorkoutsPage() {
         setLoading(false);
         return;
       }
-      const data = await workoutService.getByUser(user.uid, 100);
-      setWorkouts(data);
+      
+      // Load both personal and group workouts
+      const [personalWorkouts, groupWorkouts] = await Promise.all([
+        workoutService.getByUser(user.uid, 100),
+        groupWorkoutService.getByUser(user.uid).catch(() => [])
+      ]);
+      
+      // Mark group workouts so we can link to correct page
+      const markedGroupWorkouts = groupWorkouts.map(w => ({
+        ...w,
+        isGroupWorkout: true
+      }));
+      
+      // Merge and sort by date
+      const allWorkouts = [...personalWorkouts, ...markedGroupWorkouts].sort((a, b) => {
+        const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+        const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+        return dateB - dateA;
+      });
+      
+      setWorkouts(allWorkouts);
     } catch (error) {
       console.error('Error loading workouts:', error);
     } finally {
@@ -202,22 +221,26 @@ export default function WorkoutsPage() {
                       className="card-steel rounded-xl overflow-hidden group relative"
                     >
                       <Link
-                        to={`/workouts/${workout.id}`}
+                        to={workout.isGroupWorkout ? `/workouts/group/${workout.id}` : `/workouts/${workout.id}`}
                         className="flex items-center gap-4 p-4 pr-12"
                       >
                         <div className={`w-12 h-12 rounded-plate flex items-center justify-center flex-shrink-0 ${
-                          workout.status === 'scheduled' 
-                            ? 'bg-yellow-500/10' 
-                            : workout.workoutType === 'cardio'
-                              ? 'bg-orange-500/10'
-                              : 'bg-flame-500/10'
+                          workout.isGroupWorkout
+                            ? 'bg-cyan-500/10'
+                            : workout.status === 'scheduled' 
+                              ? 'bg-yellow-500/10' 
+                              : workout.workoutType === 'cardio'
+                                ? 'bg-orange-500/10'
+                                : 'bg-flame-500/10'
                         }`}>
                           <Dumbbell className={`w-6 h-6 ${
-                            workout.status === 'scheduled'
-                              ? 'text-yellow-400'
-                              : workout.workoutType === 'cardio'
-                                ? 'text-orange-400'
-                                : 'text-flame-400'
+                            workout.isGroupWorkout
+                              ? 'text-cyan-400'
+                              : workout.status === 'scheduled'
+                                ? 'text-yellow-400'
+                                : workout.workoutType === 'cardio'
+                                  ? 'text-orange-400'
+                                  : 'text-flame-400'
                           }`} />
                         </div>
 
@@ -226,7 +249,12 @@ export default function WorkoutsPage() {
                             <h3 className="font-semibold text-iron-100 truncate group-hover:text-flame-400 transition-colors">
                               {workout.name || 'Untitled Workout'}
                             </h3>
-                            {workout.status === 'scheduled' && (
+                            {workout.isGroupWorkout && (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-cyan-500/20 text-cyan-400 rounded">
+                                Group
+                              </span>
+                            )}
+                            {workout.status === 'scheduled' && !workout.isGroupWorkout && (
                               <span className="px-2 py-0.5 text-xs font-medium bg-yellow-500/20 text-yellow-400 rounded">
                                 Scheduled
                               </span>
@@ -272,34 +300,36 @@ export default function WorkoutsPage() {
                         <ChevronRight className="w-5 h-5 text-iron-600 group-hover:text-iron-400 transition-colors flex-shrink-0" />
                       </Link>
 
-                      {/* Actions Menu - positioned absolutely within the card */}
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setActiveMenu(activeMenu === workout.id ? null : workout.id);
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-iron-500
-                          hover:text-iron-300 hover:bg-iron-800 rounded-lg transition-colors z-10"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-
-                      <AnimatePresence>
-                        {activeMenu === workout.id && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="absolute right-2 top-14 bg-iron-800 border border-iron-700
-                              rounded-lg shadow-xl z-20 py-1 min-w-[140px]"
+                      {/* Actions Menu - positioned absolutely within the card (not for group workouts) */}
+                      {!workout.isGroupWorkout && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setActiveMenu(activeMenu === workout.id ? null : workout.id);
+                            }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-iron-500
+                              hover:text-iron-300 hover:bg-iron-800 rounded-lg transition-colors z-10"
                           >
-                            <Link
-                              to={`/workouts/${workout.id}/edit`}
-                              className="flex items-center gap-2 px-4 py-2 text-sm text-iron-300
-                                hover:bg-iron-700 transition-colors"
-                            >
-                              <Edit2 className="w-4 h-4" />
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+
+                          <AnimatePresence>
+                            {activeMenu === workout.id && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="absolute right-2 top-14 bg-iron-800 border border-iron-700
+                                  rounded-lg shadow-xl z-20 py-1 min-w-[140px]"
+                              >
+                                <Link
+                                  to={`/workouts/${workout.id}/edit`}
+                                  className="flex items-center gap-2 px-4 py-2 text-sm text-iron-300
+                                    hover:bg-iron-700 transition-colors"
+                                >
+                                  <Edit2 className="w-4 h-4" />
                               Edit
                             </Link>
                             <button
@@ -313,6 +343,8 @@ export default function WorkoutsPage() {
                           </motion.div>
                         )}
                       </AnimatePresence>
+                        </>
+                      )}
                     </motion.div>
                   ))}
                 </div>

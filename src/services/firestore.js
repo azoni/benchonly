@@ -1048,6 +1048,7 @@ export const groupWorkoutService = {
         groupId,
         groupAdmins,
         assignedTo,
+        userId: assignedTo, // Add userId for consistency
         name,
         date,
         exercises,
