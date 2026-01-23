@@ -7,17 +7,15 @@ import {
   Trash2, 
   Calendar, 
   Clock, 
-  Target,
-  TrendingUp,
-  AlertCircle,
-  Share2,
   MoreVertical,
   Check,
   Play,
-  CheckCircle2,
   Flame,
   Activity,
-  MapPin
+  MapPin,
+  X,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
 import { workoutService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
@@ -43,6 +41,7 @@ export default function WorkoutDetailPage() {
   const [isLogging, setIsLogging] = useState(false)
   const [exercises, setExercises] = useState([])
   const [saving, setSaving] = useState(false)
+  const [expandedExercises, setExpandedExercises] = useState({})
 
   useEffect(() => {
     async function fetchWorkout() {
@@ -62,6 +61,10 @@ export default function WorkoutDetailPage() {
             ...ex,
             sets: ex.sets?.map(set => ({ ...set })) || []
           })))
+          // Expand all exercises by default
+          const expanded = {}
+          data.exercises.forEach((_, i) => expanded[i] = true)
+          setExpandedExercises(expanded)
         }
       } catch (error) {
         console.error('Error fetching workout:', error)
@@ -91,436 +94,434 @@ export default function WorkoutDetailPage() {
 
   const updateSetActual = (exerciseIndex, setIndex, field, value) => {
     setExercises(prev => {
-      const updated = [...prev]
-      updated[exerciseIndex] = {
-        ...updated[exerciseIndex],
-        sets: updated[exerciseIndex].sets.map((set, idx) =>
-          idx === setIndex ? { ...set, [field]: value } : set
+      const newExercises = [...prev]
+      newExercises[exerciseIndex] = {
+        ...newExercises[exerciseIndex],
+        sets: newExercises[exerciseIndex].sets.map((set, i) => 
+          i === setIndex ? { ...set, [field]: value } : set
         )
       }
-      return updated
+      return newExercises
     })
   }
 
   const handleCompleteWorkout = async () => {
-    // Check if all sets have actual data
-    const isComplete = exercises.every(exercise => {
-      if (!exercise.sets || exercise.sets.length === 0) return false
-      return exercise.sets.every(set => set.actualWeight || set.actualReps)
-    })
-    
-    if (!isComplete) {
-      alert('Please fill in actual weight or reps for all sets before completing')
-      return
-    }
-    
     setSaving(true)
     try {
-      await workoutService.completeWorkout(id, exercises, user.uid)
-      setWorkout(prev => ({ ...prev, status: 'completed', exercises }))
+      if (!isGuest) {
+        await workoutService.update(id, {
+          exercises,
+          status: 'completed'
+        })
+      }
+      setWorkout(prev => ({ ...prev, exercises, status: 'completed' }))
       setIsLogging(false)
-      alert('Workout completed!')
     } catch (error) {
       console.error('Error completing workout:', error)
-      alert('Failed to save workout')
     } finally {
       setSaving(false)
     }
   }
 
+  const toggleExercise = (index) => {
+    setExpandedExercises(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }))
+  }
+
   const getRPEColor = (rpe) => {
-    if (!rpe) return 'text-iron-500'
-    if (rpe <= 6) return 'text-green-400'
-    if (rpe <= 7) return 'text-yellow-400'
-    if (rpe <= 8) return 'text-orange-400'
-    return 'text-red-400'
+    if (rpe >= 9) return 'text-red-400'
+    if (rpe >= 7) return 'text-yellow-400'
+    return 'text-green-400'
   }
 
   const getPainColor = (pain) => {
-    if (!pain || pain === 0) return 'bg-green-500/20 text-green-400'
-    if (pain <= 3) return 'bg-yellow-500/20 text-yellow-400'
-    if (pain <= 6) return 'bg-orange-500/20 text-orange-400'
-    return 'bg-red-500/20 text-red-400'
+    if (pain >= 7) return 'bg-red-500/20 text-red-400'
+    if (pain >= 4) return 'bg-yellow-500/20 text-yellow-400'
+    return 'bg-green-500/20 text-green-400'
   }
-
-  // Check if workout is complete (all sets have actual data filled in)
-  const checkIfComplete = (exercises) => {
-    if (!exercises || exercises.length === 0) return false
-    
-    // Check that every exercise has at least one set with actual data
-    // AND every set in every exercise has actual weight or reps filled in
-    return exercises.every(exercise => {
-      if (!exercise.sets || exercise.sets.length === 0) return false
-      return exercise.sets.every(set => 
-        set.actualWeight || set.actualReps
-      )
-    })
-  }
-
-  // Check if workout date is in the future
-  const isFutureWorkout = () => {
-    if (!workout?.date) return false
-    const workoutDate = getDisplayDate(workout.date)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    workoutDate.setHours(0, 0, 0, 0)
-    return workoutDate > today
-  }
-
-  // Determine if workout should show as scheduled/incomplete
-  // Cardio workouts are always complete (no sets to fill in) unless in future
-  // Strength workouts need all sets filled in
-  const isScheduled = (() => {
-    if (isFutureWorkout()) return true
-    if (workout?.status === 'scheduled') return true
-    if (workout?.workoutType === 'cardio') return false // Cardio is complete if not in future
-    if (!workout?.status && !checkIfComplete(workout?.exercises)) return true
-    return false
-  })()
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-10 h-10 border-4 border-flame-500 border-t-transparent rounded-full animate-spin" />
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="w-8 h-8 border-2 border-flame-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   if (!workout) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="card-steel p-8 text-center">
-          <AlertCircle className="w-12 h-12 text-iron-500 mx-auto mb-4" />
-          <h2 className="text-xl font-display text-iron-200 mb-2">Workout Not Found</h2>
-          <p className="text-iron-400 mb-6">This workout may have been deleted or doesn't exist.</p>
-          <Link to="/workouts" className="btn-primary">
-            Back to Workouts
-          </Link>
+      <div className="max-w-md mx-auto px-4 py-12 text-center">
+        <div className="w-16 h-16 bg-iron-800 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Activity className="w-8 h-8 text-iron-600" />
         </div>
+        <h2 className="text-xl font-display text-iron-200 mb-2">Workout Not Found</h2>
+        <p className="text-iron-500 mb-6">This workout may have been deleted or doesn't exist.</p>
+        <Link to="/workouts" className="btn-primary">
+          Back to Workouts
+        </Link>
       </div>
     )
   }
 
-  return (
-    <div className="max-w-3xl mx-auto px-4 py-6 pb-24">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <button 
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-iron-400 hover:text-iron-200 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          <span>Back</span>
-        </button>
-        
-        <div className="relative">
-          <button 
-            onClick={() => setShowMenu(!showMenu)}
-            className="p-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-lg transition-colors"
-          >
-            <MoreVertical className="w-5 h-5" />
-          </button>
-          
-          {showMenu && (
-            <>
-              <div 
-                className="fixed inset-0 z-10" 
-                onClick={() => setShowMenu(false)} 
-              />
-              <div className="absolute right-0 top-full mt-2 w-48 bg-iron-800 border border-iron-700 rounded-lg shadow-xl z-20 overflow-hidden">
-                <Link
-                  to={`/workouts/${id}/edit`}
-                  className="flex items-center gap-3 px-4 py-3 text-iron-300 hover:bg-iron-700 transition-colors"
+  const isScheduled = workout.status === 'scheduled'
+  const isCardio = workout.workoutType === 'cardio'
+
+  // Clean View Mode (default)
+  if (!isLogging) {
+    return (
+      <div className="max-w-2xl mx-auto pb-24">
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-4">
+          <div className="flex items-center justify-between">
+            <button 
+              onClick={() => navigate(-1)}
+              className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            
+            <div className="flex items-center gap-1">
+              {/* Status Badge */}
+              {isCardio ? (
+                <span className="px-2 py-1 bg-orange-500/20 text-orange-400 rounded-full text-xs font-medium">
+                  Cardio
+                </span>
+              ) : isScheduled ? (
+                <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-xs font-medium">
+                  Scheduled
+                </span>
+              ) : (
+                <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-medium">
+                  Done
+                </span>
+              )}
+              
+              {/* Menu */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowMenu(!showMenu)}
+                  className="p-2 text-iron-400 hover:text-iron-200 transition-colors"
                 >
-                  <Edit2 className="w-4 h-4" />
-                  Edit Workout
-                </Link>
-                <button
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  {deleting ? 'Deleting...' : 'Delete Workout'}
+                  <MoreVertical className="w-5 h-5" />
                 </button>
+                
+                {showMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+                    <div className="absolute right-0 top-full mt-1 w-44 bg-iron-800 border border-iron-700 rounded-xl shadow-xl z-20 overflow-hidden">
+                      <Link
+                        to={`/workouts/${id}/edit`}
+                        className="flex items-center gap-3 px-4 py-3 text-iron-300 hover:bg-iron-700 transition-colors"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        Edit
+                      </Link>
+                      <button
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        {deleting ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Status Badge */}
-      <div className="mb-4 flex items-center gap-2">
-        {workout.workoutType === 'cardio' ? (
-          <span className="inline-flex items-center gap-2 px-3 py-1 bg-orange-500/20 text-orange-400 rounded-full text-sm font-medium">
-            <Activity className="w-4 h-4" />
-            Cardio
-          </span>
-        ) : isScheduled ? (
-          <span className="inline-flex items-center gap-2 px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm font-medium">
-            <Calendar className="w-4 h-4" />
-            Scheduled
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-2 px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">
-            <CheckCircle2 className="w-4 h-4" />
-            Completed
-          </span>
-        )}
-      </div>
-
-      {/* Workout Info */}
-      <div className="card-steel p-6 mb-6">
-        <h1 className="text-2xl font-display text-iron-100 mb-4">
-          {workout.name || 'Untitled Workout'}
-        </h1>
-        
-        <div className="flex flex-wrap gap-4 text-sm">
-          <div className="flex items-center gap-2 text-iron-400">
-            <Calendar className="w-4 h-4" />
-            <span>{workout.date ? format(getDisplayDate(workout.date), 'EEEE, MMMM d, yyyy') : 'No date'}</span>
+            </div>
           </div>
-          
-          {workout.duration && (
-            <div className="flex items-center gap-2 text-iron-400">
-              <Clock className="w-4 h-4" />
-              <span>{workout.duration} min</span>
-            </div>
-          )}
-          
-          {workout.distance && (
-            <div className="flex items-center gap-2 text-iron-400">
-              <MapPin className="w-4 h-4" />
-              <span>{workout.distance} mi</span>
-            </div>
-          )}
         </div>
-        
-        {workout.notes && (
-          <p className="mt-4 text-iron-400 text-sm leading-relaxed">
-            {workout.notes}
-          </p>
-        )}
 
-        {/* Log Workout Button for Scheduled Workouts */}
-        {isScheduled && !isLogging && workout.workoutType !== 'cardio' && (
-          <button
-            onClick={() => setIsLogging(true)}
-            className="mt-6 btn-primary w-full flex items-center justify-center gap-2"
-          >
-            <Play className="w-5 h-5" />
-            Log This Workout
-          </button>
-        )}
-      </div>
-
-      {/* Cardio Details */}
-      {workout.workoutType === 'cardio' && (
-        <div className="card-steel p-6 mb-6">
-          <h2 className="text-lg font-display text-iron-300 mb-4">Activity Details</h2>
+        {/* Workout Header Card */}
+        <div className="card-steel p-5 mb-4">
+          <h1 className="text-2xl font-display text-iron-50 mb-3">
+            {workout.name || 'Untitled Workout'}
+          </h1>
           
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-iron-800/50 rounded-lg p-4">
-              <p className="text-sm text-iron-500 mb-1">Activity</p>
-              <p className="text-lg font-medium text-iron-100">
-                {ACTIVITY_METS[workout.activityType]?.label || workout.activityType || 'Unknown'}
-              </p>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <div className="flex items-center gap-2 text-iron-400">
+              <Calendar className="w-4 h-4 text-flame-400" />
+              <span>{workout.date ? format(getDisplayDate(workout.date), 'EEE, MMM d') : 'No date'}</span>
             </div>
             
-            <div className="bg-iron-800/50 rounded-lg p-4">
-              <p className="text-sm text-iron-500 mb-1">Duration</p>
-              <p className="text-lg font-medium text-iron-100">{workout.duration} min</p>
-            </div>
-            
-            {workout.estimatedCalories > 0 && (
-              <div className="bg-flame-500/10 rounded-lg p-4">
-                <p className="text-sm text-iron-500 mb-1">Calories Burned</p>
-                <p className="text-lg font-medium text-flame-400 flex items-center gap-2">
-                  <Flame className="w-5 h-5" />
-                  {workout.estimatedCalories}
-                </p>
+            {workout.duration && (
+              <div className="flex items-center gap-2 text-iron-400">
+                <Clock className="w-4 h-4 text-blue-400" />
+                <span>{workout.duration} min</span>
               </div>
             )}
             
             {workout.distance && (
-              <div className="bg-iron-800/50 rounded-lg p-4">
-                <p className="text-sm text-iron-500 mb-1">Distance</p>
-                <p className="text-lg font-medium text-iron-100">{workout.distance} mi</p>
+              <div className="flex items-center gap-2 text-iron-400">
+                <MapPin className="w-4 h-4 text-purple-400" />
+                <span>{workout.distance} mi</span>
               </div>
             )}
           </div>
+          
+          {workout.notes && (
+            <p className="mt-3 text-iron-400 text-sm">{workout.notes}</p>
+          )}
         </div>
-      )}
 
-      {/* Exercises - only show for strength workouts */}
-      {workout.workoutType !== 'cardio' && (
-      <div className="space-y-4">
-        <h2 className="text-lg font-display text-iron-300">Exercises</h2>
-        
-        {(isLogging ? exercises : workout.exercises)?.length > 0 ? (
-          (isLogging ? exercises : workout.exercises).map((exercise, exerciseIndex) => (
-            <div key={exerciseIndex} className="card-steel p-5">
-              <div className="flex items-start justify-between mb-4">
-                <h3 className="text-lg font-semibold text-iron-100">
-                  {exercise.name}
-                </h3>
-              </div>
-              
-              {/* Sets Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-iron-500 text-left">
-                      <th className="pb-2 pr-4 w-12">Set</th>
-                      <th className="pb-2 pr-4">Target</th>
-                      {(!isScheduled || isLogging) && <th className="pb-2 pr-4">Actual</th>}
-                      {(!isScheduled || isLogging) && <th className="pb-2 pr-4">RPE</th>}
-                      {(!isScheduled || isLogging) && <th className="pb-2">Pain</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {exercise.sets?.map((set, setIndex) => (
-                      <tr key={setIndex} className="border-t border-iron-800">
-                        <td className="py-3 pr-4 text-iron-400">{setIndex + 1}</td>
-                        <td className="py-3 pr-4 text-iron-200">
-                          {set.prescribedWeight && `${set.prescribedWeight} lbs`}
-                          {set.prescribedWeight && set.prescribedReps && ' × '}
-                          {set.prescribedReps && `${set.prescribedReps} reps`}
-                          {!set.prescribedWeight && !set.prescribedReps && '—'}
-                        </td>
-                        
-                        {/* Actual Values - Show inputs when logging, values when viewing */}
-                        {isLogging ? (
-                          <>
-                            <td className="py-3 pr-4">
-                              <div className="flex gap-1 items-center">
-                                <input
-                                  type="number"
-                                  value={set.actualWeight || ''}
-                                  onChange={(e) => updateSetActual(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
-                                  placeholder={set.prescribedWeight || 'lbs'}
-                                  className="w-16 input-field text-sm py-1 px-2"
-                                />
-                                <span className="text-iron-600">×</span>
-                                <input
-                                  type="number"
-                                  value={set.actualReps || ''}
-                                  onChange={(e) => updateSetActual(exerciseIndex, setIndex, 'actualReps', e.target.value)}
-                                  placeholder={set.prescribedReps || 'reps'}
-                                  className="w-14 input-field text-sm py-1 px-2"
-                                />
-                              </div>
-                            </td>
-                            <td className="py-3 pr-4">
-                              <select
-                                value={set.rpe || ''}
-                                onChange={(e) => updateSetActual(exerciseIndex, setIndex, 'rpe', e.target.value)}
-                                className="input-field text-sm py-1 px-2 w-16"
-                              >
-                                <option value="">—</option>
-                                {[5, 6, 7, 8, 9, 10].map(v => (
-                                  <option key={v} value={v}>{v}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="py-3">
-                              <select
-                                value={set.painLevel || 0}
-                                onChange={(e) => updateSetActual(exerciseIndex, setIndex, 'painLevel', parseInt(e.target.value))}
-                                className="input-field text-sm py-1 px-2 w-16"
-                              >
-                                {[0,1,2,3,4,5,6,7,8,9,10].map(v => (
-                                  <option key={v} value={v}>{v}</option>
-                                ))}
-                              </select>
-                            </td>
-                          </>
-                        ) : !isScheduled && (
-                          <>
-                            <td className="py-3 pr-4">
-                              {set.actualWeight || set.actualReps ? (
-                                <div>
-                                  <span className="text-flame-400 font-medium">
-                                    {set.actualWeight && `${set.actualWeight} lbs`}
-                                    {set.actualWeight && set.actualReps && ' × '}
-                                    {set.actualReps && `${set.actualReps} reps`}
-                                  </span>
-                                  {set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1 && (
-                                    <span className="ml-2 text-xs text-iron-500">
-                                      e1RM: {calculateE1RM(parseFloat(set.actualWeight), parseInt(set.actualReps))}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-iron-600">—</span>
-                              )}
-                            </td>
-                            <td className="py-3 pr-4">
-                              {set.rpe ? (
-                                <span className={`font-medium ${getRPEColor(set.rpe)}`}>
-                                  {set.rpe}
-                                </span>
-                              ) : (
-                                <span className="text-iron-600">—</span>
-                              )}
-                            </td>
-                            <td className="py-3">
-                              {set.painLevel > 0 ? (
-                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(set.painLevel)}`}>
-                                  {set.painLevel}
-                                </span>
-                              ) : (
-                                <span className="text-iron-600">—</span>
-                              )}
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              
-              {exercise.notes && (
-                <p className="mt-3 text-sm text-iron-500 italic">
-                  {exercise.notes}
+        {/* Cardio Details */}
+        {isCardio && (
+          <div className="card-steel p-5 mb-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-iron-800/50 rounded-xl p-4 text-center">
+                <Activity className="w-6 h-6 text-orange-400 mx-auto mb-2" />
+                <p className="text-lg font-medium text-iron-100">
+                  {ACTIVITY_METS[workout.activityType]?.label || workout.activityType || 'Activity'}
                 </p>
+                <p className="text-xs text-iron-500">Activity</p>
+              </div>
+              
+              {workout.estimatedCalories > 0 && (
+                <div className="bg-flame-500/10 rounded-xl p-4 text-center">
+                  <Flame className="w-6 h-6 text-flame-400 mx-auto mb-2" />
+                  <p className="text-lg font-medium text-flame-400">{workout.estimatedCalories}</p>
+                  <p className="text-xs text-iron-500">Calories</p>
+                </div>
               )}
             </div>
-          ))
-        ) : (
+          </div>
+        )}
+
+        {/* Exercises - Clean Mobile View */}
+        {!isCardio && workout.exercises?.length > 0 && (
+          <div className="space-y-3">
+            {workout.exercises.map((exercise, exerciseIndex) => (
+              <div key={exerciseIndex} className="card-steel overflow-hidden">
+                {/* Exercise Header */}
+                <button
+                  onClick={() => toggleExercise(exerciseIndex)}
+                  className="w-full p-4 flex items-center justify-between text-left"
+                >
+                  <div>
+                    <h3 className="font-semibold text-iron-100">{exercise.name}</h3>
+                    <p className="text-sm text-iron-500">{exercise.sets?.length || 0} sets</p>
+                  </div>
+                  {expandedExercises[exerciseIndex] ? (
+                    <ChevronUp className="w-5 h-5 text-iron-500" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-iron-500" />
+                  )}
+                </button>
+                
+                {/* Sets - Clean Display */}
+                {expandedExercises[exerciseIndex] && (
+                  <div className="border-t border-iron-800">
+                    {exercise.sets?.map((set, setIndex) => {
+                      const hasActual = set.actualWeight || set.actualReps
+                      const e1rm = hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
+                        ? calculateE1RM(parseFloat(set.actualWeight), parseInt(set.actualReps))
+                        : null
+                      
+                      return (
+                        <div 
+                          key={setIndex} 
+                          className={`p-4 flex items-center gap-4 ${setIndex > 0 ? 'border-t border-iron-800/50' : ''}`}
+                        >
+                          {/* Set Number */}
+                          <div className="w-8 h-8 rounded-lg bg-iron-800 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-medium text-iron-400">{setIndex + 1}</span>
+                          </div>
+                          
+                          {/* Set Info */}
+                          <div className="flex-1 min-w-0">
+                            {/* Target */}
+                            <div className="text-sm text-iron-500 mb-1">
+                              Target: {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'}
+                            </div>
+                            
+                            {/* Actual (if exists) */}
+                            {hasActual ? (
+                              <div className="flex items-center gap-3">
+                                <span className="text-lg font-semibold text-flame-400">
+                                  {set.actualWeight || '—'} × {set.actualReps || '—'}
+                                </span>
+                                {e1rm && (
+                                  <span className="text-xs text-iron-500 bg-iron-800 px-2 py-0.5 rounded">
+                                    e1RM: {e1rm}
+                                  </span>
+                                )}
+                              </div>
+                            ) : isScheduled ? (
+                              <span className="text-iron-600 text-sm">Not logged yet</span>
+                            ) : null}
+                          </div>
+                          
+                          {/* RPE & Pain */}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {set.rpe && (
+                              <span className={`text-sm font-medium ${getRPEColor(set.rpe)}`}>
+                                @{set.rpe}
+                              </span>
+                            )}
+                            {set.painLevel > 0 && (
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(set.painLevel)}`}>
+                                P{set.painLevel}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                
+                {exercise.notes && expandedExercises[exerciseIndex] && (
+                  <div className="px-4 pb-4">
+                    <p className="text-sm text-iron-500 italic bg-iron-800/30 rounded-lg p-3">
+                      {exercise.notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* No Exercises */}
+        {!isCardio && (!workout.exercises || workout.exercises.length === 0) && (
           <div className="card-steel p-8 text-center">
-            <p className="text-iron-500">No exercises recorded</p>
+            <Activity className="w-12 h-12 text-iron-700 mx-auto mb-3" />
+            <p className="text-iron-500">No exercises in this workout</p>
+          </div>
+        )}
+
+        {/* Action Button - Fixed at Bottom */}
+        {isScheduled && !isCardio && (
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
+            <button
+              onClick={() => setIsLogging(true)}
+              className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
+            >
+              <Play className="w-5 h-5" />
+              Log This Workout
+            </button>
           </div>
         )}
       </div>
-      )}
+    )
+  }
 
-      {/* Save Button when Logging */}
-      {isLogging && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 border-t border-iron-800 flex gap-3">
-          <button
+  // Logging Mode
+  return (
+    <div className="max-w-2xl mx-auto pb-32">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-4">
+        <div className="flex items-center justify-between">
+          <button 
             onClick={() => setIsLogging(false)}
-            className="btn-secondary flex-1"
+            className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors"
           >
-            Cancel
+            <X className="w-5 h-5" />
           </button>
-          <button
-            onClick={handleCompleteWorkout}
-            disabled={saving}
-            className="btn-primary flex-1 flex items-center justify-center gap-2"
-          >
-            {saving ? (
-              'Saving...'
-            ) : (
-              <>
-                <Check className="w-5 h-5" />
-                Complete Workout
-              </>
-            )}
-          </button>
+          <h1 className="font-display text-lg text-iron-100">Log Workout</h1>
+          <div className="w-9" /> {/* Spacer */}
         </div>
-      )}
+      </div>
+
+      {/* Exercises for Logging */}
+      <div className="space-y-4">
+        {exercises.map((exercise, exerciseIndex) => (
+          <div key={exerciseIndex} className="card-steel p-4">
+            <h3 className="font-semibold text-iron-100 text-lg mb-4">{exercise.name}</h3>
+            
+            <div className="space-y-4">
+              {exercise.sets?.map((set, setIndex) => (
+                <div key={setIndex} className="bg-iron-800/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-medium text-iron-300">Set {setIndex + 1}</span>
+                    <span className="text-xs text-iron-500">
+                      Target: {set.prescribedWeight}lbs × {set.prescribedReps}
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="block text-xs text-flame-400 mb-1">Weight (lbs)</label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={set.actualWeight || ''}
+                        onChange={(e) => updateSetActual(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
+                        placeholder={set.prescribedWeight || '—'}
+                        className="w-full input-field text-lg py-3 px-4 text-center"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-flame-400 mb-1">Reps</label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={set.actualReps || ''}
+                        onChange={(e) => updateSetActual(exerciseIndex, setIndex, 'actualReps', e.target.value)}
+                        placeholder={set.prescribedReps || '—'}
+                        className="w-full input-field text-lg py-3 px-4 text-center"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-iron-500 mb-1">RPE (optional)</label>
+                      <select
+                        value={set.rpe || ''}
+                        onChange={(e) => updateSetActual(exerciseIndex, setIndex, 'rpe', e.target.value)}
+                        className="w-full input-field py-2 px-3"
+                      >
+                        <option value="">—</option>
+                        {[6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-iron-500 mb-1">Pain (optional)</label>
+                      <select
+                        value={set.painLevel || ''}
+                        onChange={(e) => updateSetActual(exerciseIndex, setIndex, 'painLevel', parseInt(e.target.value) || 0)}
+                        className="w-full input-field py-2 px-3"
+                      >
+                        <option value="0">None</option>
+                        {[1,2,3,4,5,6,7,8,9,10].map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Complete Button */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800 flex gap-3">
+        <button
+          onClick={() => setIsLogging(false)}
+          className="btn-secondary flex-1 py-3"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleCompleteWorkout}
+          disabled={saving}
+          className="btn-primary flex-1 py-3 flex items-center justify-center gap-2"
+        >
+          {saving ? 'Saving...' : (
+            <>
+              <Check className="w-5 h-5" />
+              Complete
+            </>
+          )}
+        </button>
+      </div>
     </div>
   )
 }
