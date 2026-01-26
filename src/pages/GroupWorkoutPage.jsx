@@ -11,7 +11,10 @@ import {
   Play,
   Calendar,
   MessageSquare,
-  Pencil
+  Pencil,
+  Plus,
+  Trash2,
+  Settings
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { groupWorkoutService, groupService } from '../services/firestore'
@@ -33,9 +36,10 @@ export default function GroupWorkoutPage() {
   const [group, setGroup] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
+  const [mode, setMode] = useState('view') // 'view', 'log', 'edit'
   const [exercises, setExercises] = useState([])
   const [workoutNotes, setWorkoutNotes] = useState('')
+  const [workoutName, setWorkoutName] = useState('')
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
 
   useEffect(() => {
@@ -48,7 +52,7 @@ export default function GroupWorkoutPage() {
       if (data) {
         setWorkout(data)
         setWorkoutNotes(data.notes || '')
-        // Initialize exercises for editing
+        setWorkoutName(data.name || '')
         if (data.exercises) {
           setExercises(data.exercises.map(ex => ({
             ...ex,
@@ -56,7 +60,6 @@ export default function GroupWorkoutPage() {
             sets: ex.sets?.map(set => ({ ...set })) || []
           })))
         }
-        // Load group info
         const groupData = await groupService.get(data.groupId)
         setGroup(groupData)
       }
@@ -75,6 +78,7 @@ export default function GroupWorkoutPage() {
     }
   }
 
+  // === SET/EXERCISE UPDATE FUNCTIONS ===
   const updateSet = (exerciseIndex, setIndex, field, value) => {
     setExercises(prev => {
       const newExercises = [...prev]
@@ -88,23 +92,87 @@ export default function GroupWorkoutPage() {
     })
   }
 
+  const updateExerciseName = (exerciseIndex, name) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      newExercises[exerciseIndex] = { ...newExercises[exerciseIndex], name }
+      return newExercises
+    })
+  }
+
   const updateExerciseNotes = (exerciseIndex, notes) => {
     setExercises(prev => {
       const newExercises = [...prev]
+      newExercises[exerciseIndex] = { ...newExercises[exerciseIndex], notes }
+      return newExercises
+    })
+  }
+
+  const addExercise = () => {
+    setExercises(prev => [...prev, {
+      name: '',
+      notes: '',
+      sets: [{ prescribedWeight: '', prescribedReps: '' }]
+    }])
+  }
+
+  const removeExercise = (exerciseIndex) => {
+    setExercises(prev => prev.filter((_, i) => i !== exerciseIndex))
+  }
+
+  const addSet = (exerciseIndex) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      const lastSet = newExercises[exerciseIndex].sets.slice(-1)[0] || {}
       newExercises[exerciseIndex] = {
         ...newExercises[exerciseIndex],
-        notes
+        sets: [...newExercises[exerciseIndex].sets, {
+          prescribedWeight: lastSet.prescribedWeight || '',
+          prescribedReps: lastSet.prescribedReps || ''
+        }]
       }
       return newExercises
     })
   }
 
+  const removeSet = (exerciseIndex, setIndex) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      newExercises[exerciseIndex] = {
+        ...newExercises[exerciseIndex],
+        sets: newExercises[exerciseIndex].sets.filter((_, i) => i !== setIndex)
+      }
+      return newExercises
+    })
+  }
+
+  // === SAVE FUNCTIONS ===
   const handleSaveProgress = async () => {
     setSaving(true)
     try {
       await groupWorkoutService.update(id, { exercises, notes: workoutNotes })
       setWorkout(prev => ({ ...prev, exercises, notes: workoutNotes }))
-      setIsEditing(false)
+      setMode('view')
+    } catch (error) {
+      console.error('Error saving workout:', error)
+      alert('Failed to save workout')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSaveStructure = async () => {
+    setSaving(true)
+    try {
+      const cleanExercises = exercises.filter(ex => ex.name.trim())
+      await groupWorkoutService.update(id, { 
+        name: workoutName,
+        exercises: cleanExercises, 
+        notes: workoutNotes 
+      })
+      setWorkout(prev => ({ ...prev, name: workoutName, exercises: cleanExercises, notes: workoutNotes }))
+      setExercises(cleanExercises)
+      setMode('view')
     } catch (error) {
       console.error('Error saving workout:', error)
       alert('Failed to save workout')
@@ -116,7 +184,6 @@ export default function GroupWorkoutPage() {
   const handleComplete = async () => {
     setSaving(true)
     try {
-      // Auto-fill blank fields with prescribed values
       const filledExercises = exercises.map(ex => ({
         ...ex,
         sets: ex.sets.map(set => ({
@@ -125,11 +192,10 @@ export default function GroupWorkoutPage() {
           actualReps: set.actualReps || set.prescribedReps || ''
         }))
       }))
-
       await groupWorkoutService.complete(id, { exercises: filledExercises, notes: workoutNotes })
       setWorkout(prev => ({ ...prev, exercises: filledExercises, notes: workoutNotes, status: 'completed' }))
       setExercises(filledExercises)
-      setIsEditing(false)
+      setMode('view')
     } catch (error) {
       console.error('Error completing workout:', error)
       alert('Failed to complete workout')
@@ -177,9 +243,7 @@ export default function GroupWorkoutPage() {
         </div>
         <h2 className="text-xl font-display text-iron-200 mb-2">Workout Not Found</h2>
         <p className="text-iron-500 mb-6">This workout may have been deleted or you don't have access.</p>
-        <button onClick={handleBack} className="btn-primary">
-          Go Back
-        </button>
+        <button onClick={handleBack} className="btn-primary">Go Back</button>
       </div>
     )
   }
@@ -187,51 +251,38 @@ export default function GroupWorkoutPage() {
   const isCompleted = workout.status === 'completed'
   const isOwner = workout.assignedTo === user?.uid
   const isAdmin = group?.admins?.includes(user?.uid)
-  const canEdit = (isOwner || isAdmin)
+  const canLog = isOwner || isAdmin
+  const canEditStructure = isAdmin
 
   // ============ VIEW MODE ============
-  if (!isEditing) {
+  if (mode === 'view') {
     return (
       <div className="max-w-2xl mx-auto pb-24">
         {/* Header */}
         <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-6">
           <div className="flex items-center justify-between">
-            <button
-              onClick={handleBack}
-              className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors"
-            >
+            <button onClick={handleBack} className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </button>
-
             <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-sm font-medium">
-                Group
-              </span>
+              <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-sm font-medium">Group</span>
               {isCompleted ? (
-                <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">
-                  Completed
-                </span>
+                <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">Completed</span>
               ) : (
-                <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm font-medium">
-                  Assigned
-                </span>
+                <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm font-medium">Assigned</span>
               )}
             </div>
           </div>
         </div>
 
-        {/* Workout Title - Big & Bold */}
+        {/* Workout Title */}
         <div className="mb-6">
-          <h1 className="text-3xl font-display text-iron-50 mb-2">
-            {workout.name}
-          </h1>
-
+          <h1 className="text-3xl font-display text-iron-50 mb-2">{workout.name}</h1>
           <div className="flex flex-wrap gap-4 text-sm">
             <div className="flex items-center gap-2 text-iron-400">
               <Calendar className="w-4 h-4 text-flame-400" />
               <span>{safeFormatDate(workout.date)}</span>
             </div>
-
             <div className="flex items-center gap-2 text-iron-400">
               <Users className="w-4 h-4 text-cyan-400" />
               <span>{group?.name || 'Group Workout'}</span>
@@ -242,88 +293,62 @@ export default function GroupWorkoutPage() {
         {/* Info Messages */}
         {!isOwner && !isAdmin && (
           <div className="card-steel p-4 mb-6 border-iron-700">
-            <p className="text-sm text-iron-400">
-              This workout was assigned to another member. You can view but not edit.
-            </p>
+            <p className="text-sm text-iron-400">This workout was assigned to another member. You can view but not edit.</p>
           </div>
         )}
-
         {!isOwner && isAdmin && (
           <div className="card-steel p-4 mb-6 border-cyan-500/30 bg-cyan-500/5">
-            <p className="text-sm text-cyan-400">
-              You're viewing as admin. You can log this workout on behalf of the member.
-            </p>
+            <p className="text-sm text-cyan-400">You're viewing as admin. You can log or edit this workout.</p>
           </div>
         )}
 
-        {/* Workout Notes */}
         {workout.notes && (
           <div className="card-steel p-4 mb-6">
             <p className="text-iron-300 text-sm">{workout.notes}</p>
           </div>
         )}
 
-        {/* Exercises - Clean View with Big Text */}
+        {/* Exercises */}
         <div className="space-y-4">
           {workout.exercises?.map((exercise, exerciseIndex) => (
             <div key={exerciseIndex} className="card-steel overflow-hidden">
-              {/* Exercise Header */}
               <div className="p-4 border-b border-iron-800">
                 <h3 className="text-xl font-semibold text-iron-50">{exercise.name}</h3>
                 <p className="text-sm text-iron-500 mt-1">{exercise.sets?.length || 0} sets</p>
               </div>
-
-              {/* Sets - Large, Easy to Read */}
               <div className="divide-y divide-iron-800/50">
                 {exercise.sets?.map((set, setIndex) => {
                   const hasActual = set.actualWeight || set.actualReps
                   const e1rm = hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
                     ? calculateE1RM(parseFloat(set.actualWeight), parseInt(set.actualReps))
                     : null
-
                   return (
                     <div key={setIndex} className="p-4">
                       <div className="flex items-center gap-4">
-                        {/* Set Number */}
                         <div className="w-10 h-10 rounded-xl bg-iron-800 flex items-center justify-center flex-shrink-0">
                           <span className="text-lg font-bold text-iron-400">{setIndex + 1}</span>
                         </div>
-
-                        {/* Set Info */}
                         <div className="flex-1">
-                          {/* Target - Always Show */}
                           <div className="text-sm text-iron-500 mb-1">
                             Target: {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'} reps
                           </div>
-
-                          {/* Actual - Big & Bold if exists */}
                           {hasActual ? (
                             <div className="flex items-center gap-3 flex-wrap">
                               <span className="text-2xl font-bold text-flame-400">
                                 {set.actualWeight || '—'} lbs × {set.actualReps || '—'}
                               </span>
                               {e1rm && (
-                                <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded-lg">
-                                  e1RM: {e1rm} lbs
-                                </span>
+                                <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded-lg">e1RM: {e1rm} lbs</span>
                               )}
                             </div>
                           ) : (
                             <span className="text-lg text-iron-600">Not logged</span>
                           )}
                         </div>
-
-                        {/* RPE & Pain */}
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                          {set.rpe && (
-                            <span className={`text-sm font-semibold ${getRPEColor(set.rpe)}`}>
-                              RPE {set.rpe}
-                            </span>
-                          )}
+                          {set.rpe && <span className={`text-sm font-semibold ${getRPEColor(set.rpe)}`}>RPE {set.rpe}</span>}
                           {set.painLevel > 0 && (
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(set.painLevel)}`}>
-                              Pain {set.painLevel}
-                            </span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(set.painLevel)}`}>Pain {set.painLevel}</span>
                           )}
                         </div>
                       </div>
@@ -331,8 +356,6 @@ export default function GroupWorkoutPage() {
                   )
                 })}
               </div>
-
-              {/* Exercise Notes */}
               {exercise.notes && (
                 <div className="px-4 pb-4">
                   <div className="flex items-start gap-2 bg-iron-800/30 rounded-lg p-3">
@@ -345,7 +368,6 @@ export default function GroupWorkoutPage() {
           ))}
         </div>
 
-        {/* No Exercises */}
         {(!workout.exercises || workout.exercises.length === 0) && (
           <div className="card-steel p-8 text-center">
             <Users className="w-12 h-12 text-iron-700 mx-auto mb-3" />
@@ -353,225 +375,308 @@ export default function GroupWorkoutPage() {
           </div>
         )}
 
-        {/* Action Buttons - Fixed at Bottom */}
-        {canEdit && (
+        {/* Action Buttons */}
+        {(canLog || canEditStructure) && (
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
-            {!isCompleted ? (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
-              >
-                <Play className="w-5 h-5" />
-                Log This Workout
-              </button>
-            ) : (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="btn-secondary w-full py-4 text-lg flex items-center justify-center gap-2"
-              >
-                <Pencil className="w-5 h-5" />
-                Edit Logged Data
-              </button>
-            )}
+            <div className="flex gap-3">
+              {canEditStructure && (
+                <button
+                  onClick={() => setMode('edit')}
+                  className="btn-secondary flex-1 py-3 flex items-center justify-center gap-2"
+                >
+                  <Settings className="w-5 h-5" />
+                  Edit Workout
+                </button>
+              )}
+              {canLog && (
+                <button
+                  onClick={() => setMode('log')}
+                  className={`flex-1 py-3 flex items-center justify-center gap-2 ${isCompleted ? 'btn-secondary' : 'btn-primary'}`}
+                >
+                  {isCompleted ? <Pencil className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                  {isCompleted ? 'Edit Log' : 'Log Workout'}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
     )
   }
 
-  // ============ EDIT MODE ============
-  return (
-    <div className="max-w-2xl mx-auto pb-36">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-4">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setIsEditing(false)}
-            className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          <h1 className="font-display text-lg text-iron-100">
-            {isCompleted ? 'Edit Workout' : 'Log Workout'}
-          </h1>
-          <button
-            onClick={() => setRpeModalOpen(true)}
-            className="p-2 text-iron-400 hover:text-iron-200 transition-colors"
-          >
-            <Info className="w-5 h-5" />
-          </button>
+  // ============ LOG MODE ============
+  if (mode === 'log') {
+    return (
+      <div className="max-w-2xl mx-auto pb-36">
+        <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-4">
+          <div className="flex items-center justify-between">
+            <button onClick={() => setMode('view')} className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+            <h1 className="font-display text-lg text-iron-100">{isCompleted ? 'Edit Log' : 'Log Workout'}</h1>
+            <button onClick={() => setRpeModalOpen(true)} className="p-2 text-iron-400 hover:text-iron-200 transition-colors">
+              <Info className="w-5 h-5" />
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Workout Notes */}
-      <div className="card-steel p-4 mb-4">
-        <label className="block text-sm text-iron-400 mb-2">Workout Notes</label>
-        <textarea
-          value={workoutNotes}
-          onChange={(e) => setWorkoutNotes(e.target.value)}
-          placeholder="How did the workout go? Any notes..."
-          rows={2}
-          className="w-full input-field text-sm resize-none"
-        />
-      </div>
+        <div className="card-steel p-4 mb-4">
+          <label className="block text-sm text-iron-400 mb-2">Workout Notes</label>
+          <textarea
+            value={workoutNotes}
+            onChange={(e) => setWorkoutNotes(e.target.value)}
+            placeholder="How did the workout go?"
+            rows={2}
+            className="w-full input-field text-sm resize-none"
+          />
+        </div>
 
-      {/* Exercises for Logging */}
-      <div className="space-y-4">
-        {exercises.map((exercise, exerciseIndex) => (
-          <div key={exerciseIndex} className="card-steel p-4">
-            <h3 className="font-semibold text-iron-100 text-xl mb-4">{exercise.name}</h3>
-
-            <div className="space-y-4">
-              {exercise.sets?.map((set, setIndex) => (
-                <div key={setIndex} className="bg-iron-800/30 rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-lg font-medium text-iron-200">Set {setIndex + 1}</span>
-                    <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded">
-                      Target: {set.prescribedWeight || '—'} × {set.prescribedReps || '—'}
-                    </span>
+        <div className="space-y-4">
+          {exercises.map((exercise, exerciseIndex) => (
+            <div key={exerciseIndex} className="card-steel p-4">
+              <h3 className="font-semibold text-iron-100 text-xl mb-4">{exercise.name}</h3>
+              <div className="space-y-4">
+                {exercise.sets?.map((set, setIndex) => (
+                  <div key={setIndex} className="bg-iron-800/30 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-lg font-medium text-iron-200">Set {setIndex + 1}</span>
+                      <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded">
+                        Target: {set.prescribedWeight || '—'} × {set.prescribedReps || '—'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="block text-xs text-flame-400 mb-1 font-medium">Weight (lbs)</label>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={set.actualWeight || ''}
+                          onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
+                          placeholder={set.prescribedWeight || '—'}
+                          className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={set.actualReps || ''}
+                          onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
+                          placeholder={set.prescribedReps || '—'}
+                          className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-iron-500 mb-1">RPE</label>
+                        <select
+                          value={set.rpe || ''}
+                          onChange={(e) => updateSet(exerciseIndex, setIndex, 'rpe', e.target.value)}
+                          className="w-full input-field py-2 px-3"
+                        >
+                          <option value="">—</option>
+                          {[6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-iron-500 mb-1">Pain Level</label>
+                        <select
+                          value={set.painLevel || 0}
+                          onChange={(e) => updateSet(exerciseIndex, setIndex, 'painLevel', parseInt(e.target.value) || 0)}
+                          className="w-full input-field py-2 px-3"
+                        >
+                          <option value="0">None</option>
+                          {[1,2,3,4,5,6,7,8,9,10].map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      </div>
+                    </div>
                   </div>
+                ))}
+              </div>
+              <div className="mt-4">
+                <label className="block text-xs text-iron-500 mb-1">Notes for {exercise.name}</label>
+                <textarea
+                  value={exercise.notes || ''}
+                  onChange={(e) => updateExerciseNotes(exerciseIndex, e.target.value)}
+                  placeholder="How did this exercise feel?"
+                  rows={2}
+                  className="w-full input-field text-sm resize-none"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
 
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                      <label className="block text-xs text-flame-400 mb-1 font-medium">Weight (lbs)</label>
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
+          <div className="flex gap-3 mb-3">
+            <button onClick={() => setMode('view')} className="btn-secondary flex-1 py-3">Cancel</button>
+            <button onClick={handleSaveProgress} disabled={saving} className="btn-secondary flex-1 py-3">Save Progress</button>
+          </div>
+          <button onClick={handleComplete} disabled={saving} className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2">
+            {saving ? 'Saving...' : <><Check className="w-5 h-5" />{isCompleted ? 'Update' : 'Complete'}</>}
+          </button>
+          <p className="text-xs text-iron-500 text-center mt-2">Empty fields filled with targets</p>
+        </div>
+
+        {rpeModalOpen && (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+            <div className="bg-iron-900 rounded-xl w-full max-w-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-display text-xl text-iron-100">RPE Scale</h3>
+                <button onClick={() => setRpeModalOpen(false)} className="p-2 text-iron-400 hover:text-iron-200"><X className="w-5 h-5" /></button>
+              </div>
+              <p className="text-iron-400 text-sm mb-4">Rate of Perceived Exertion</p>
+              <div className="space-y-2">
+                {[
+                  { value: 10, label: 'Max effort - could not do more' },
+                  { value: 9, label: 'Very hard - 1 rep left' },
+                  { value: 8, label: 'Hard - 2 reps left' },
+                  { value: 7, label: 'Challenging - 3 reps left' },
+                  { value: 6, label: 'Moderate - 4+ reps left' },
+                ].map(({ value, label }) => (
+                  <div key={value} className="flex items-center gap-3 text-sm">
+                    <span className="w-8 h-8 rounded-lg bg-flame-500/20 text-flame-400 flex items-center justify-center font-medium">{value}</span>
+                    <span className="text-iron-300">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ============ EDIT MODE (Admin only) ============
+  if (mode === 'edit') {
+    return (
+      <div className="max-w-2xl mx-auto pb-36">
+        <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-4">
+          <div className="flex items-center justify-between">
+            <button onClick={() => setMode('view')} className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+            <h1 className="font-display text-lg text-iron-100">Edit Workout</h1>
+            <div className="w-9" />
+          </div>
+        </div>
+
+        {/* Workout Name */}
+        <div className="card-steel p-4 mb-4">
+          <label className="block text-sm text-iron-400 mb-2">Workout Name</label>
+          <input
+            type="text"
+            value={workoutName}
+            onChange={(e) => setWorkoutName(e.target.value)}
+            placeholder="e.g., Push Day, Leg Day"
+            className="w-full input-field text-lg"
+          />
+        </div>
+
+        {/* Workout Notes */}
+        <div className="card-steel p-4 mb-4">
+          <label className="block text-sm text-iron-400 mb-2">Notes (optional)</label>
+          <textarea
+            value={workoutNotes}
+            onChange={(e) => setWorkoutNotes(e.target.value)}
+            placeholder="Any instructions or notes..."
+            rows={2}
+            className="w-full input-field text-sm resize-none"
+          />
+        </div>
+
+        {/* Exercises */}
+        <div className="space-y-4 mb-4">
+          {exercises.map((exercise, exerciseIndex) => (
+            <div key={exerciseIndex} className="card-steel p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <input
+                  type="text"
+                  value={exercise.name}
+                  onChange={(e) => updateExerciseName(exerciseIndex, e.target.value)}
+                  placeholder="Exercise name"
+                  className="flex-1 input-field text-lg font-semibold"
+                />
+                <button
+                  onClick={() => removeExercise(exerciseIndex)}
+                  className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {exercise.sets?.map((set, setIndex) => (
+                  <div key={setIndex} className="flex items-center gap-3 bg-iron-800/30 rounded-xl p-3">
+                    <span className="text-sm text-iron-500 w-12">Set {setIndex + 1}</span>
+                    <div className="flex-1 grid grid-cols-2 gap-2">
                       <input
                         type="number"
                         inputMode="decimal"
-                        value={set.actualWeight || ''}
-                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
-                        placeholder={set.prescribedWeight || '—'}
-                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                        value={set.prescribedWeight || ''}
+                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'prescribedWeight', e.target.value)}
+                        placeholder="Weight"
+                        className="input-field py-2 px-3 text-center"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
                       <input
                         type="number"
                         inputMode="numeric"
-                        value={set.actualReps || ''}
-                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
-                        placeholder={set.prescribedReps || '—'}
-                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                        value={set.prescribedReps || ''}
+                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'prescribedReps', e.target.value)}
+                        placeholder="Reps"
+                        className="input-field py-2 px-3 text-center"
                       />
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-iron-500 mb-1">RPE</label>
-                      <select
-                        value={set.rpe || ''}
-                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'rpe', e.target.value)}
-                        className="w-full input-field py-2 px-3"
+                    {exercise.sets.length > 1 && (
+                      <button
+                        onClick={() => removeSet(exerciseIndex, setIndex)}
+                        className="p-1 text-iron-500 hover:text-red-400 transition-colors"
                       >
-                        <option value="">—</option>
-                        {[6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].map(v => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-iron-500 mb-1">Pain Level</label>
-                      <select
-                        value={set.painLevel || 0}
-                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'painLevel', parseInt(e.target.value) || 0)}
-                        className="w-full input-field py-2 px-3"
-                      >
-                        <option value="0">None</option>
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
-                    </div>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
 
-            {/* Exercise Notes */}
-            <div className="mt-4">
-              <label className="block text-xs text-iron-500 mb-1">Notes for {exercise.name}</label>
-              <textarea
-                value={exercise.notes || ''}
-                onChange={(e) => updateExerciseNotes(exerciseIndex, e.target.value)}
-                placeholder="How did this exercise feel? Any adjustments..."
-                rows={2}
-                className="w-full input-field text-sm resize-none"
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Action Buttons */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
-        <div className="flex gap-3 mb-3">
-          <button
-            onClick={() => setIsEditing(false)}
-            className="btn-secondary flex-1 py-3"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSaveProgress}
-            disabled={saving}
-            className="btn-secondary flex-1 py-3"
-          >
-            Save Progress
-          </button>
-        </div>
-        <button
-          onClick={handleComplete}
-          disabled={saving}
-          className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
-        >
-          {saving ? 'Saving...' : (
-            <>
-              <Check className="w-5 h-5" />
-              {isCompleted ? 'Update Workout' : 'Complete Workout'}
-            </>
-          )}
-        </button>
-        <p className="text-xs text-iron-500 text-center mt-2">
-          Empty fields will be filled with target values
-        </p>
-      </div>
-
-      {/* RPE Info Modal */}
-      {rpeModalOpen && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-iron-900 rounded-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-xl text-iron-100">RPE Scale</h3>
               <button
-                onClick={() => setRpeModalOpen(false)}
-                className="p-2 text-iron-400 hover:text-iron-200"
+                onClick={() => addSet(exerciseIndex)}
+                className="w-full mt-3 py-2 text-sm text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-lg transition-colors flex items-center justify-center gap-2"
               >
-                <X className="w-5 h-5" />
+                <Plus className="w-4 h-4" />
+                Add Set
               </button>
             </div>
-            <p className="text-iron-400 text-sm mb-4">
-              Rate of Perceived Exertion - how hard did the set feel?
-            </p>
-            <div className="space-y-2">
-              {[
-                { value: 10, label: 'Max effort - could not do more' },
-                { value: 9, label: 'Very hard - 1 rep left' },
-                { value: 8, label: 'Hard - 2 reps left' },
-                { value: 7, label: 'Challenging - 3 reps left' },
-                { value: 6, label: 'Moderate - 4+ reps left' },
-              ].map(({ value, label }) => (
-                <div key={value} className="flex items-center gap-3 text-sm">
-                  <span className="w-8 h-8 rounded-lg bg-flame-500/20 text-flame-400 flex items-center justify-center font-medium">
-                    {value}
-                  </span>
-                  <span className="text-iron-300">{label}</span>
-                </div>
-              ))}
-            </div>
+          ))}
+        </div>
+
+        {/* Add Exercise Button */}
+        <button
+          onClick={addExercise}
+          className="w-full card-steel p-4 text-iron-400 hover:text-iron-200 hover:border-iron-600 transition-colors flex items-center justify-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
+          Add Exercise
+        </button>
+
+        {/* Save Button */}
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
+          <div className="flex gap-3">
+            <button onClick={() => setMode('view')} className="btn-secondary flex-1 py-3">Cancel</button>
+            <button
+              onClick={handleSaveStructure}
+              disabled={saving || !workoutName.trim()}
+              className="btn-primary flex-1 py-3 flex items-center justify-center gap-2"
+            >
+              {saving ? 'Saving...' : <><Check className="w-5 h-5" />Save Changes</>}
+            </button>
           </div>
         </div>
-      )}
-    </div>
-  )
+      </div>
+    )
+  }
+
+  return null
 }
