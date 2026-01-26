@@ -24,23 +24,13 @@ import {
 } from 'lucide-react'
 import { groupService, workoutService, attendanceService, groupWorkoutService, userService, goalService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
+import { getDisplayDate } from '../utils/dateUtils'
 
 // Helper to safely parse dates from Firestore
 const safeFormatDate = (date, formatStr = 'MMM d, yyyy') => {
   if (!date) return ''
   try {
-    let dateObj
-    if (date?.toDate) {
-      dateObj = date.toDate()
-    } else if (date?.seconds) {
-      dateObj = new Date(date.seconds * 1000)
-    } else if (typeof date === 'string' || typeof date === 'number') {
-      dateObj = new Date(date)
-    } else if (date instanceof Date) {
-      dateObj = date
-    } else {
-      return ''
-    }
+    const dateObj = getDisplayDate(date)
     if (isNaN(dateObj.getTime())) return ''
     return format(dateObj, formatStr)
   } catch {
@@ -95,6 +85,8 @@ export default function GroupDetailPage() {
   const [activeMemberTab, setActiveMemberTab] = useState(null)
   const [creatingWorkout, setCreatingWorkout] = useState(false)
   const [expandedWorkout, setExpandedWorkout] = useState(null)
+  // Editing mode - stores the workout IDs being edited: { memberId: workoutId }
+  const [editingWorkoutIds, setEditingWorkoutIds] = useState(null)
 
   const isAdmin = group?.admins?.includes(user?.uid)
 
@@ -222,6 +214,55 @@ export default function GroupDetailPage() {
     })
     setMemberPrescriptions(initialPrescriptions)
     setActiveMemberTab(allMembers[0] || null)
+    setEditingWorkoutIds(null) // Not editing
+    setShowWorkoutModal(true)
+  }
+
+  const openEditWorkoutModal = (workoutGroup) => {
+    // workoutGroup has: name, date, exercises, assignments: [{ id, memberId, status }]
+    const assignedMemberIds = workoutGroup.assignments.map(a => a.memberId)
+    setSelectedMembers(assignedMemberIds)
+    
+    // Format date
+    const dateObj = getDisplayDate(workoutGroup.date)
+    const year = dateObj.getFullYear()
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0')
+    const day = String(dateObj.getDate()).padStart(2, '0')
+    setWorkoutDate(`${year}-${month}-${day}`)
+    
+    setWorkoutName(workoutGroup.name)
+    
+    // Build member prescriptions from existing exercises
+    // We need to load each member's actual workout to get their specific exercises
+    const initialPrescriptions = {}
+    const workoutIds = {}
+    
+    workoutGroup.assignments.forEach(assignment => {
+      // Find the actual workout data
+      const memberWorkout = groupWorkouts.find(w => w.id === assignment.id)
+      workoutIds[assignment.memberId] = assignment.id
+      
+      if (memberWorkout?.exercises?.length) {
+        initialPrescriptions[assignment.memberId] = {
+          exercises: memberWorkout.exercises.map(ex => ({
+            id: Date.now() + Math.random(),
+            name: ex.name,
+            sets: ex.sets?.map(s => ({
+              weight: s.prescribedWeight || '',
+              reps: s.prescribedReps || ''
+            })) || [{ weight: '', reps: '' }]
+          }))
+        }
+      } else {
+        initialPrescriptions[assignment.memberId] = {
+          exercises: [{ id: Date.now() + Math.random(), name: '', sets: [{ weight: '', reps: '' }] }]
+        }
+      }
+    })
+    
+    setMemberPrescriptions(initialPrescriptions)
+    setActiveMemberTab(assignedMemberIds[0] || null)
+    setEditingWorkoutIds(workoutIds) // Store workout IDs for updating
     setShowWorkoutModal(true)
   }
 
@@ -355,46 +396,87 @@ export default function GroupDetailPage() {
 
     setCreatingWorkout(true)
     try {
-      const memberWorkouts = selectedMembers.map(memberId => {
-        const prescription = memberPrescriptions[memberId]
-        const formattedExercises = (prescription?.exercises || [])
-          .filter(e => e.name.trim())
-          .map(e => ({
-            name: e.name,
-            sets: e.sets.map((s, i) => ({
-              id: Date.now() + i,
-              prescribedWeight: s.weight,
-              prescribedReps: s.reps,
-              actualWeight: '',
-              actualReps: '',
-              rpe: '',
-              painLevel: 0
+      // Create date at noon local time to avoid timezone issues
+      const [year, month, day] = workoutDate.split('-').map(Number)
+      const localDate = new Date(year, month - 1, day, 12, 0, 0)
+
+      if (editingWorkoutIds) {
+        // EDITING MODE - update existing workouts
+        for (const memberId of selectedMembers) {
+          const workoutId = editingWorkoutIds[memberId]
+          if (!workoutId) continue // Skip if member wasn't in original assignment
+          
+          const prescription = memberPrescriptions[memberId]
+          const formattedExercises = (prescription?.exercises || [])
+            .filter(e => e.name.trim())
+            .map(e => ({
+              name: e.name,
+              sets: e.sets.map((s, i) => ({
+                id: Date.now() + i,
+                prescribedWeight: s.weight,
+                prescribedReps: s.reps,
+                actualWeight: '',
+                actualReps: '',
+                rpe: '',
+                painLevel: 0
+              }))
             }))
-          }))
 
-        return {
-          assignedTo: memberId,
-          name: workoutName,
-          exercises: formattedExercises
+          await groupWorkoutService.update(workoutId, {
+            name: workoutName,
+            date: localDate,
+            exercises: formattedExercises
+          })
         }
-      })
+      } else {
+        // CREATE MODE - create new workouts
+        const memberWorkouts = selectedMembers.map(memberId => {
+          const prescription = memberPrescriptions[memberId]
+          const formattedExercises = (prescription?.exercises || [])
+            .filter(e => e.name.trim())
+            .map(e => ({
+              name: e.name,
+              sets: e.sets.map((s, i) => ({
+                id: Date.now() + i,
+                prescribedWeight: s.weight,
+                prescribedReps: s.reps,
+                actualWeight: '',
+                actualReps: '',
+                rpe: '',
+                painLevel: 0
+              }))
+            }))
 
-      await groupWorkoutService.createBatch(
-        id,
-        group.admins,
-        new Date(workoutDate),
-        memberWorkouts
-      )
+          return {
+            assignedTo: memberId,
+            name: workoutName,
+            exercises: formattedExercises
+          }
+        })
+
+        await groupWorkoutService.createBatch(
+          id,
+          group.admins,
+          localDate,
+          memberWorkouts
+        )
+      }
 
       // Refresh workouts list
       const workouts = await groupWorkoutService.getByGroup(id)
       setGroupWorkouts(workouts)
 
       setShowWorkoutModal(false)
-      alert(`Workout assigned to ${selectedMembers.length} member(s)!`)
+      setEditingWorkoutIds(null)
+      
+      if (editingWorkoutIds) {
+        alert('Workout updated!')
+      } else {
+        alert(`Workout assigned to ${selectedMembers.length} member${selectedMembers.length !== 1 ? 's' : ''}!`)
+      }
     } catch (error) {
-      console.error('Error creating group workout:', error)
-      alert('Failed to create workout')
+      console.error('Error saving group workout:', error)
+      alert('Failed to save workout')
     } finally {
       setCreatingWorkout(false)
     }
@@ -705,14 +787,13 @@ export default function GroupDetailPage() {
                           {/* Admin Edit Button */}
                           {isAdmin && (
                             <div className="p-4 border-t border-iron-800">
-                              <Link
-                                to={`/workouts/group/${workoutGroup.assignments[0]?.id}`}
-                                state={{ from: `/groups/${id}`, fromLabel: 'Back to Group', editMode: true }}
+                              <button
+                                onClick={() => openEditWorkoutModal(workoutGroup)}
                                 className="btn-secondary w-full flex items-center justify-center gap-2"
                               >
                                 <Edit2 className="w-4 h-4" />
                                 Edit Workout
-                              </Link>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -937,9 +1018,11 @@ export default function GroupDetailPage() {
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
           <div className="bg-iron-900 rounded-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="bg-iron-900 border-b border-iron-800 p-4 flex items-center justify-between flex-shrink-0">
-              <h2 className="text-xl font-display text-iron-100">Assign Group Workout</h2>
+              <h2 className="text-xl font-display text-iron-100">
+                {editingWorkoutIds ? 'Edit Group Workout' : 'Assign Group Workout'}
+              </h2>
               <button
-                onClick={() => setShowWorkoutModal(false)}
+                onClick={() => { setShowWorkoutModal(false); setEditingWorkoutIds(null); }}
                 className="p-2 text-iron-400 hover:text-iron-200 transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -977,32 +1060,43 @@ export default function GroupDetailPage() {
               {/* Member Selection */}
               <div>
                 <label className="block text-sm font-medium text-iron-300 mb-3">
-                  Assign to Members
+                  {editingWorkoutIds ? 'Assigned Members' : 'Assign to Members'}
                 </label>
+                {editingWorkoutIds && (
+                  <p className="text-xs text-iron-500 mb-2">Members cannot be changed when editing. Create a new workout to assign to different members.</p>
+                )}
                 <div className="flex flex-wrap gap-2">
-                  {members.map(member => (
-                    <button
-                      key={member.uid}
-                      onClick={() => toggleMemberSelection(member.uid)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                        selectedMembers.includes(member.uid)
-                          ? 'bg-flame-500/20 border border-flame-500/50 text-flame-200'
-                          : 'bg-iron-800/50 border border-iron-700 text-iron-400 hover:border-iron-600'
-                      }`}
-                    >
-                      {member.photoURL ? (
-                        <img src={member.photoURL} alt="" className="w-5 h-5 rounded-full" />
-                      ) : (
-                        <div className="w-5 h-5 rounded-full bg-iron-700 flex items-center justify-center text-xs">
-                          {member.displayName?.[0]}
-                        </div>
-                      )}
-                      <span className="text-sm">{member.displayName?.split(' ')[0]}</span>
-                      {selectedMembers.includes(member.uid) && (
-                        <Check className="w-4 h-4" />
-                      )}
-                    </button>
-                  ))}
+                  {members.map(member => {
+                    const isAssigned = selectedMembers.includes(member.uid)
+                    const isDisabled = editingWorkoutIds && !isAssigned
+                    
+                    return (
+                      <button
+                        key={member.uid}
+                        onClick={() => !editingWorkoutIds && toggleMemberSelection(member.uid)}
+                        disabled={editingWorkoutIds}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                          isAssigned
+                            ? 'bg-flame-500/20 border border-flame-500/50 text-flame-200'
+                            : isDisabled
+                              ? 'bg-iron-800/30 border border-iron-800 text-iron-600 cursor-not-allowed'
+                              : 'bg-iron-800/50 border border-iron-700 text-iron-400 hover:border-iron-600'
+                        }`}
+                      >
+                        {member.photoURL ? (
+                          <img src={member.photoURL} alt="" className="w-5 h-5 rounded-full" />
+                        ) : (
+                          <div className="w-5 h-5 rounded-full bg-iron-700 flex items-center justify-center text-xs">
+                            {member.displayName?.[0]}
+                          </div>
+                        )}
+                        <span className="text-sm">{member.displayName?.split(' ')[0]}</span>
+                        {isAssigned && (
+                          <Check className="w-4 h-4" />
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -1162,7 +1256,13 @@ export default function GroupDetailPage() {
                 disabled={creatingWorkout || !workoutName.trim() || selectedMembers.length === 0}
                 className="btn-primary flex-1 disabled:opacity-50"
               >
-                {creatingWorkout ? 'Creating...' : `Assign to ${selectedMembers.length} Member${selectedMembers.length !== 1 ? 's' : ''}`}
+                {creatingWorkout 
+                  ? (editingWorkoutIds ? 'Saving...' : 'Creating...') 
+                  : (editingWorkoutIds 
+                      ? 'Save Changes' 
+                      : `Assign to ${selectedMembers.length} Member${selectedMembers.length !== 1 ? 's' : ''}`
+                    )
+                }
               </button>
             </div>
           </div>
