@@ -257,20 +257,32 @@ export default function GroupWorkoutPage() {
                           <span className="text-lg font-bold text-iron-400">{setIndex + 1}</span>
                         </div>
                         <div className="flex-1">
-                          <div className="text-sm text-iron-500 mb-1">
-                            Target: {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'} reps
-                          </div>
-                          {hasActual ? (
+                          {!isCompleted ? (
+                            /* SCHEDULED: Show target prominently */
                             <div className="flex items-center gap-3 flex-wrap">
-                              <span className="text-2xl font-bold text-flame-400">
-                                {set.actualWeight || '—'} lbs × {set.actualReps || '—'}
+                              <span className="text-2xl font-bold text-iron-100">
+                                {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'}
                               </span>
-                              {e1rm && (
-                                <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded-lg">e1RM: {e1rm} lbs</span>
-                              )}
                             </div>
                           ) : (
-                            <span className="text-lg text-iron-600">Not logged</span>
+                            /* COMPLETED: Show target small, actual big */
+                            <>
+                              <div className="text-sm text-iron-500 mb-1">
+                                Target: {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'} reps
+                              </div>
+                              {hasActual ? (
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <span className="text-2xl font-bold text-flame-400">
+                                    {set.actualWeight || '—'} lbs × {set.actualReps || '—'}
+                                  </span>
+                                  {e1rm && (
+                                    <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded-lg">e1RM: {e1rm} lbs</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-lg text-iron-600">Not logged</span>
+                              )}
+                            </>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">

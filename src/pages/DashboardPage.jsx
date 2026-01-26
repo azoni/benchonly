@@ -8,7 +8,8 @@ import {
   X,
   GripVertical,
   Check,
-  RotateCcw
+  RotateCcw,
+  Dumbbell
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { workoutService, goalService, healthService, scheduleService, userService } from '../services/firestore'
@@ -373,9 +374,9 @@ export default function DashboardPage() {
           >
             <Settings className="w-5 h-5" />
           </button>
-          <Link to="/workouts/new" className="btn-primary flex items-center gap-2">
-            <Plus className="w-5 h-5" />
-            New Workout
+          <Link to="/workouts" className="btn-primary flex items-center gap-2">
+            <Dumbbell className="w-5 h-5" />
+            Workouts
           </Link>
         </div>
       </div>
