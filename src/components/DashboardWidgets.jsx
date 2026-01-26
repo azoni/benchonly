@@ -369,7 +369,7 @@ export function OneRepMaxWidget() {
 // ============ QUICK LINKS WIDGET ============
 export function QuickLinksWidget() {
   const links = [
-    { to: '/workouts/new', label: 'New Workout', icon: Dumbbell, color: 'text-green-400', bgColor: 'bg-green-500/20' },
+    { to: '/workouts', label: 'Workouts', icon: Dumbbell, color: 'text-green-400', bgColor: 'bg-green-500/20' },
     { to: '/goals', label: 'Goals', icon: Target, color: 'text-purple-400', bgColor: 'bg-purple-500/20' },
     { to: '/calendar', label: 'Calendar', icon: Calendar, color: 'text-blue-400', bgColor: 'bg-blue-500/20' },
     { to: '/groups', label: 'Groups', icon: Users, color: 'text-cyan-400', bgColor: 'bg-cyan-500/20' },
