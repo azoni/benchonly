@@ -222,6 +222,7 @@ export default function WorkoutsPage() {
                     >
                       <Link
                         to={workout.isGroupWorkout ? `/workouts/group/${workout.id}` : `/workouts/${workout.id}`}
+                        state={{ from: '/workouts', fromLabel: 'Back to Workouts' }}
                         className="flex items-center gap-4 p-4 pr-12"
                       >
                         <div className={`w-12 h-12 rounded-plate flex items-center justify-center flex-shrink-0 ${

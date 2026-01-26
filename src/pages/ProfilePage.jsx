@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
 import { 
   User, 
@@ -17,11 +17,24 @@ import { feedService } from '../services/feedService'
 export default function ProfilePage() {
   const { userId: handle } = useParams() // Can be username or uid
   const { user: currentUser } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState(null)
   const [recentActivity, setRecentActivity] = useState([])
   const [isOwnProfile, setIsOwnProfile] = useState(false)
+
+  // Smart back navigation
+  const handleBack = () => {
+    if (location.state?.from) {
+      navigate(location.state.from)
+    } else {
+      navigate(-1)
+    }
+  }
+
+  const backLabel = location.state?.fromLabel || 'Back'
 
   useEffect(() => {
     loadProfile()
@@ -147,7 +160,7 @@ export default function ProfilePage() {
         <User className="w-16 h-16 text-iron-600 mx-auto mb-4" />
         <h2 className="text-xl font-display text-iron-200 mb-2">User Not Found</h2>
         <p className="text-iron-500 mb-6">This user doesn't exist or has been deleted.</p>
-        <Link to="/feed" className="btn-primary">Back to Feed</Link>
+        <button onClick={handleBack} className="btn-primary">Go Back</button>
       </div>
     )
   }
@@ -158,7 +171,7 @@ export default function ProfilePage() {
         <Lock className="w-16 h-16 text-iron-600 mx-auto mb-4" />
         <h2 className="text-xl font-display text-iron-200 mb-2">Private Profile</h2>
         <p className="text-iron-500 mb-6">This user has set their profile to private.</p>
-        <Link to="/feed" className="btn-primary">Back to Feed</Link>
+        <button onClick={handleBack} className="btn-primary">Go Back</button>
       </div>
     )
   }
@@ -166,13 +179,13 @@ export default function ProfilePage() {
   return (
     <div className="max-w-2xl mx-auto pb-24">
       {/* Back button */}
-      <Link 
-        to="/feed" 
+      <button 
+        onClick={handleBack}
         className="inline-flex items-center gap-2 text-iron-400 hover:text-iron-200 mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back to Feed
-      </Link>
+        {backLabel}
+      </button>
 
       {/* Profile Header */}
       <div className="card-steel p-6 mb-6">

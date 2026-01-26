@@ -601,6 +601,7 @@ export default function GroupDetailPage() {
                   <Link 
                     key={workout.id} 
                     to={`/workouts/group/${workout.id}`}
+                    state={{ from: `/groups/${id}`, fromLabel: 'Back to Group' }}
                     className="card-steel p-4 block hover:border-iron-600 transition-colors"
                   >
                     <div className="flex items-center justify-between mb-2">
@@ -646,6 +647,7 @@ export default function GroupDetailPage() {
             <Link 
               key={member.uid} 
               to={`/profile/${member.username || member.uid}`}
+              state={{ from: `/groups/${id}`, fromLabel: 'Back to Group' }}
               className="card-steel p-4 flex items-center gap-4 hover:border-iron-600 transition-colors"
             >
               {member.photoURL ? (

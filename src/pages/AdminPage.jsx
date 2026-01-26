@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Users, 
@@ -45,6 +45,7 @@ export default function AdminPage() {
   const [usageData, setUsageData] = useState([])
   const [usageLoading, setUsageLoading] = useState(false)
   const [usageFilter, setUsageFilter] = useState('')
+  const [expandedUsage, setExpandedUsage] = useState(null)
   const [goalForm, setGoalForm] = useState({
     lift: '',
     metricType: 'weight',
@@ -719,11 +720,13 @@ export default function AdminPage() {
 
                     {/* Usage Table */}
                     <div className="card-steel overflow-hidden">
-                      <div className="max-h-[500px] overflow-y-auto">
+                      <div className="max-h-[600px] overflow-y-auto">
                         <table className="w-full text-sm">
                           <thead className="bg-iron-800 sticky top-0">
                             <tr>
+                              <th className="text-left p-3 text-iron-400 w-8"></th>
                               <th className="text-left p-3 text-iron-400">User</th>
+                              <th className="text-left p-3 text-iron-400">Feature</th>
                               <th className="text-left p-3 text-iron-400">Date</th>
                               <th className="text-right p-3 text-iron-400">Tokens</th>
                               <th className="text-right p-3 text-iron-400">Cost</th>
@@ -732,21 +735,81 @@ export default function AdminPage() {
                           <tbody>
                             {filtered.slice(0, 100).map((usage) => {
                               const usageUser = users.find(u => u.uid === usage.userId)
+                              const isExpanded = expandedUsage === usage.id
                               return (
-                                <tr key={usage.id} className="border-t border-iron-800">
-                                  <td className="p-3 text-iron-300">
-                                    {usageUser?.displayName || usage.userId?.slice(0, 8)}
-                                  </td>
-                                  <td className="p-3 text-iron-500">
-                                    {usage.createdAt?.toDate && format(usage.createdAt.toDate(), 'MMM d, h:mm a')}
-                                  </td>
-                                  <td className="p-3 text-right text-iron-300">
-                                    {usage.totalTokens?.toLocaleString()}
-                                  </td>
-                                  <td className="p-3 text-right text-green-400">
-                                    ${usage.estimatedCost?.toFixed(4)}
-                                  </td>
-                                </tr>
+                                <React.Fragment key={usage.id}>
+                                  <tr 
+                                    className={`border-t border-iron-800 cursor-pointer hover:bg-iron-800/50 transition-colors ${isExpanded ? 'bg-iron-800/30' : ''}`}
+                                    onClick={() => setExpandedUsage(isExpanded ? null : usage.id)}
+                                  >
+                                    <td className="p-3 text-iron-500">
+                                      <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                    </td>
+                                    <td className="p-3 text-iron-300">
+                                      {usageUser?.displayName || usage.userId?.slice(0, 8)}
+                                    </td>
+                                    <td className="p-3">
+                                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                        usage.feature === 'ask-assistant' 
+                                          ? 'bg-purple-500/20 text-purple-400'
+                                          : 'bg-blue-500/20 text-blue-400'
+                                      }`}>
+                                        {usage.feature || 'unknown'}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 text-iron-500">
+                                      {usage.createdAt?.toDate && format(usage.createdAt.toDate(), 'MMM d, h:mm a')}
+                                    </td>
+                                    <td className="p-3 text-right text-iron-300">
+                                      {usage.totalTokens?.toLocaleString()}
+                                    </td>
+                                    <td className="p-3 text-right text-green-400">
+                                      ${usage.estimatedCost?.toFixed(4)}
+                                    </td>
+                                  </tr>
+                                  {isExpanded && (
+                                    <tr className="border-t border-iron-800/50">
+                                      <td colSpan={6} className="p-4 bg-iron-800/20">
+                                        <div className="space-y-4 max-w-3xl">
+                                          {/* User Message */}
+                                          {usage.userMessage && (
+                                            <div>
+                                              <p className="text-xs text-iron-500 mb-1 font-medium">USER MESSAGE</p>
+                                              <div className="bg-iron-800 rounded-lg p-3 text-iron-300 text-sm">
+                                                {usage.userMessage}
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          {/* Assistant Response */}
+                                          {usage.assistantResponse && (
+                                            <div>
+                                              <p className="text-xs text-iron-500 mb-1 font-medium">ASSISTANT RESPONSE</p>
+                                              <div className="bg-flame-500/10 border border-flame-500/20 rounded-lg p-3 text-iron-300 text-sm whitespace-pre-wrap">
+                                                {usage.assistantResponse}
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          {/* No message data */}
+                                          {!usage.userMessage && !usage.assistantResponse && (
+                                            <p className="text-iron-500 text-sm italic">
+                                              No message data available (older request or different feature)
+                                            </p>
+                                          )}
+                                          
+                                          {/* Meta info */}
+                                          <div className="flex gap-4 text-xs text-iron-500 pt-2 border-t border-iron-800">
+                                            <span>Model: {usage.model || 'gpt-4o-mini'}</span>
+                                            <span>Prompt: {usage.promptTokens?.toLocaleString()} tokens</span>
+                                            <span>Completion: {usage.completionTokens?.toLocaleString()} tokens</span>
+                                            {usage.responseTimeMs && <span>Response time: {usage.responseTimeMs}ms</span>}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
                               )
                             })}
                           </tbody>

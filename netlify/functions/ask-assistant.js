@@ -118,6 +118,9 @@ ${contextString}`
       }
     }
 
+    // Clean up the message (remove the JSON block for display)
+    const cleanMessage = responseText.replace(/```workout[\s\S]*?```/g, '').trim()
+
     const tokenLog = {
       userId,
       feature: 'ask-assistant',
@@ -126,11 +129,10 @@ ${contextString}`
       completionTokens: usage.completion_tokens,
       totalTokens: usage.total_tokens,
       responseTimeMs: responseTime,
+      userMessage: message,
+      assistantResponse: cleanMessage,
       createdAt: new Date().toISOString()
     }
-
-    // Clean up the message (remove the JSON block for display)
-    const cleanMessage = responseText.replace(/```workout[\s\S]*?```/g, '').trim()
 
     return {
       statusCode: 200,

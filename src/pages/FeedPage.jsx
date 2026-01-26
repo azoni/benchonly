@@ -262,6 +262,7 @@ export default function FeedPage() {
               <div className="flex items-start gap-3">
                 <Link 
                   to={profileLink}
+                  state={{ from: '/feed', fromLabel: 'Back to Feed' }}
                   className="w-10 h-10 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 hover:bg-iron-700 transition-colors"
                 >
                   {itemUser?.photoURL ? (

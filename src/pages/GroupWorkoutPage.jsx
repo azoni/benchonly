@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { format } from 'date-fns'
 import {
   ArrowLeft,
@@ -10,9 +10,8 @@ import {
   X,
   Play,
   Calendar,
-  ChevronDown,
-  ChevronUp,
-  Save
+  MessageSquare,
+  Pencil
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { groupWorkoutService, groupService } from '../services/firestore'
@@ -28,6 +27,7 @@ const calculateE1RM = (weight, reps) => {
 export default function GroupWorkoutPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
   const [workout, setWorkout] = useState(null)
   const [group, setGroup] = useState(null)
@@ -35,7 +35,7 @@ export default function GroupWorkoutPage() {
   const [saving, setSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [exercises, setExercises] = useState([])
-  const [expandedExercises, setExpandedExercises] = useState({})
+  const [workoutNotes, setWorkoutNotes] = useState('')
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
 
   useEffect(() => {
@@ -47,16 +47,14 @@ export default function GroupWorkoutPage() {
       const data = await groupWorkoutService.get(id)
       if (data) {
         setWorkout(data)
+        setWorkoutNotes(data.notes || '')
         // Initialize exercises for editing
         if (data.exercises) {
           setExercises(data.exercises.map(ex => ({
             ...ex,
+            notes: ex.notes || '',
             sets: ex.sets?.map(set => ({ ...set })) || []
           })))
-          // Expand all exercises by default
-          const expanded = {}
-          data.exercises.forEach((_, i) => expanded[i] = true)
-          setExpandedExercises(expanded)
         }
         // Load group info
         const groupData = await groupService.get(data.groupId)
@@ -66,6 +64,14 @@ export default function GroupWorkoutPage() {
       console.error('Error loading workout:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleBack = () => {
+    if (location.state?.from) {
+      navigate(location.state.from)
+    } else {
+      navigate(-1)
     }
   }
 
@@ -82,11 +88,22 @@ export default function GroupWorkoutPage() {
     })
   }
 
+  const updateExerciseNotes = (exerciseIndex, notes) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      newExercises[exerciseIndex] = {
+        ...newExercises[exerciseIndex],
+        notes
+      }
+      return newExercises
+    })
+  }
+
   const handleSaveProgress = async () => {
     setSaving(true)
     try {
-      await groupWorkoutService.update(id, { exercises })
-      setWorkout(prev => ({ ...prev, exercises }))
+      await groupWorkoutService.update(id, { exercises, notes: workoutNotes })
+      setWorkout(prev => ({ ...prev, exercises, notes: workoutNotes }))
       setIsEditing(false)
     } catch (error) {
       console.error('Error saving workout:', error)
@@ -99,8 +116,19 @@ export default function GroupWorkoutPage() {
   const handleComplete = async () => {
     setSaving(true)
     try {
-      await groupWorkoutService.complete(id, { exercises })
-      setWorkout(prev => ({ ...prev, exercises, status: 'completed' }))
+      // Auto-fill blank fields with prescribed values
+      const filledExercises = exercises.map(ex => ({
+        ...ex,
+        sets: ex.sets.map(set => ({
+          ...set,
+          actualWeight: set.actualWeight || set.prescribedWeight || '',
+          actualReps: set.actualReps || set.prescribedReps || ''
+        }))
+      }))
+
+      await groupWorkoutService.complete(id, { exercises: filledExercises, notes: workoutNotes })
+      setWorkout(prev => ({ ...prev, exercises: filledExercises, notes: workoutNotes, status: 'completed' }))
+      setExercises(filledExercises)
       setIsEditing(false)
     } catch (error) {
       console.error('Error completing workout:', error)
@@ -110,19 +138,12 @@ export default function GroupWorkoutPage() {
     }
   }
 
-  const toggleExercise = (index) => {
-    setExpandedExercises(prev => ({
-      ...prev,
-      [index]: !prev[index]
-    }))
-  }
-
   const safeFormatDate = (date) => {
     if (!date) return ''
     try {
       const dateObj = date?.toDate ? date.toDate() : new Date(date)
       if (isNaN(dateObj.getTime())) return ''
-      return format(dateObj, 'EEE, MMM d')
+      return format(dateObj, 'EEEE, MMM d')
     } catch {
       return ''
     }
@@ -156,7 +177,7 @@ export default function GroupWorkoutPage() {
         </div>
         <h2 className="text-xl font-display text-iron-200 mb-2">Workout Not Found</h2>
         <p className="text-iron-500 mb-6">This workout may have been deleted or you don't have access.</p>
-        <button onClick={() => navigate(-1)} className="btn-primary">
+        <button onClick={handleBack} className="btn-primary">
           Go Back
         </button>
       </div>
@@ -165,33 +186,33 @@ export default function GroupWorkoutPage() {
 
   const isCompleted = workout.status === 'completed'
   const isOwner = workout.assignedTo === user?.uid
-  const isAdmin = workout.groupAdmins?.includes(user?.uid)
-  const canEdit = (isOwner || isAdmin) && !isCompleted
+  const isAdmin = group?.admins?.includes(user?.uid)
+  const canEdit = (isOwner || isAdmin)
 
   // ============ VIEW MODE ============
   if (!isEditing) {
     return (
       <div className="max-w-2xl mx-auto pb-24">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-4">
+        <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-6">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => navigate(-1)}
+              onClick={handleBack}
               className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
 
             <div className="flex items-center gap-2">
-              <span className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-xs font-medium">
+              <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-sm font-medium">
                 Group
               </span>
               {isCompleted ? (
-                <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-medium">
-                  Done
+                <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">
+                  Completed
                 </span>
               ) : (
-                <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-xs font-medium">
+                <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm font-medium">
                   Assigned
                 </span>
               )}
@@ -199,13 +220,13 @@ export default function GroupWorkoutPage() {
           </div>
         </div>
 
-        {/* Workout Header Card */}
-        <div className="card-steel p-5 mb-4">
-          <h1 className="text-2xl font-display text-iron-50 mb-3">
+        {/* Workout Title - Big & Bold */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-display text-iron-50 mb-2">
             {workout.name}
           </h1>
 
-          <div className="flex flex-wrap gap-3 text-sm">
+          <div className="flex flex-wrap gap-4 text-sm">
             <div className="flex items-center gap-2 text-iron-400">
               <Calendar className="w-4 h-4 text-flame-400" />
               <span>{safeFormatDate(workout.date)}</span>
@@ -216,99 +237,108 @@ export default function GroupWorkoutPage() {
               <span>{group?.name || 'Group Workout'}</span>
             </div>
           </div>
-
-          {!isOwner && !isAdmin && (
-            <p className="mt-3 text-sm text-iron-500 bg-iron-800/50 rounded-lg p-3">
-              This workout was assigned to another member. You can view but not edit.
-            </p>
-          )}
-          
-          {!isOwner && isAdmin && (
-            <p className="mt-3 text-sm text-cyan-400/80 bg-cyan-500/10 rounded-lg p-3">
-              You're viewing as admin. You can log this workout on behalf of the member.
-            </p>
-          )}
         </div>
 
-        {/* Exercises - Clean View */}
-        <div className="space-y-3">
+        {/* Info Messages */}
+        {!isOwner && !isAdmin && (
+          <div className="card-steel p-4 mb-6 border-iron-700">
+            <p className="text-sm text-iron-400">
+              This workout was assigned to another member. You can view but not edit.
+            </p>
+          </div>
+        )}
+
+        {!isOwner && isAdmin && (
+          <div className="card-steel p-4 mb-6 border-cyan-500/30 bg-cyan-500/5">
+            <p className="text-sm text-cyan-400">
+              You're viewing as admin. You can log this workout on behalf of the member.
+            </p>
+          </div>
+        )}
+
+        {/* Workout Notes */}
+        {workout.notes && (
+          <div className="card-steel p-4 mb-6">
+            <p className="text-iron-300 text-sm">{workout.notes}</p>
+          </div>
+        )}
+
+        {/* Exercises - Clean View with Big Text */}
+        <div className="space-y-4">
           {workout.exercises?.map((exercise, exerciseIndex) => (
             <div key={exerciseIndex} className="card-steel overflow-hidden">
               {/* Exercise Header */}
-              <button
-                onClick={() => toggleExercise(exerciseIndex)}
-                className="w-full p-4 flex items-center justify-between text-left"
-              >
-                <div>
-                  <h3 className="font-semibold text-iron-100">{exercise.name}</h3>
-                  <p className="text-sm text-iron-500">{exercise.sets?.length || 0} sets</p>
-                </div>
-                {expandedExercises[exerciseIndex] ? (
-                  <ChevronUp className="w-5 h-5 text-iron-500" />
-                ) : (
-                  <ChevronDown className="w-5 h-5 text-iron-500" />
-                )}
-              </button>
+              <div className="p-4 border-b border-iron-800">
+                <h3 className="text-xl font-semibold text-iron-50">{exercise.name}</h3>
+                <p className="text-sm text-iron-500 mt-1">{exercise.sets?.length || 0} sets</p>
+              </div>
 
-              {/* Sets - Clean Display */}
-              {expandedExercises[exerciseIndex] && (
-                <div className="border-t border-iron-800">
-                  {exercise.sets?.map((set, setIndex) => {
-                    const hasActual = set.actualWeight || set.actualReps
-                    const e1rm = hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
-                      ? calculateE1RM(parseFloat(set.actualWeight), parseInt(set.actualReps))
-                      : null
+              {/* Sets - Large, Easy to Read */}
+              <div className="divide-y divide-iron-800/50">
+                {exercise.sets?.map((set, setIndex) => {
+                  const hasActual = set.actualWeight || set.actualReps
+                  const e1rm = hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
+                    ? calculateE1RM(parseFloat(set.actualWeight), parseInt(set.actualReps))
+                    : null
 
-                    return (
-                      <div
-                        key={setIndex}
-                        className={`p-4 flex items-center gap-4 ${setIndex > 0 ? 'border-t border-iron-800/50' : ''}`}
-                      >
+                  return (
+                    <div key={setIndex} className="p-4">
+                      <div className="flex items-center gap-4">
                         {/* Set Number */}
-                        <div className="w-8 h-8 rounded-lg bg-iron-800 flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm font-medium text-iron-400">{setIndex + 1}</span>
+                        <div className="w-10 h-10 rounded-xl bg-iron-800 flex items-center justify-center flex-shrink-0">
+                          <span className="text-lg font-bold text-iron-400">{setIndex + 1}</span>
                         </div>
 
                         {/* Set Info */}
-                        <div className="flex-1 min-w-0">
-                          {/* Target */}
+                        <div className="flex-1">
+                          {/* Target - Always Show */}
                           <div className="text-sm text-iron-500 mb-1">
-                            Target: {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'}
+                            Target: {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'} reps
                           </div>
 
-                          {/* Actual (if exists) */}
+                          {/* Actual - Big & Bold if exists */}
                           {hasActual ? (
-                            <div className="flex items-center gap-3">
-                              <span className="text-lg font-semibold text-flame-400">
-                                {set.actualWeight || '—'} × {set.actualReps || '—'}
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <span className="text-2xl font-bold text-flame-400">
+                                {set.actualWeight || '—'} lbs × {set.actualReps || '—'}
                               </span>
                               {e1rm && (
-                                <span className="text-xs text-iron-500 bg-iron-800 px-2 py-0.5 rounded">
-                                  e1RM: {e1rm}
+                                <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded-lg">
+                                  e1RM: {e1rm} lbs
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <span className="text-iron-600 text-sm">Not logged yet</span>
+                            <span className="text-lg text-iron-600">Not logged</span>
                           )}
                         </div>
 
                         {/* RPE & Pain */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
                           {set.rpe && (
-                            <span className={`text-sm font-medium ${getRPEColor(set.rpe)}`}>
-                              @{set.rpe}
+                            <span className={`text-sm font-semibold ${getRPEColor(set.rpe)}`}>
+                              RPE {set.rpe}
                             </span>
                           )}
                           {set.painLevel > 0 && (
                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(set.painLevel)}`}>
-                              P{set.painLevel}
+                              Pain {set.painLevel}
                             </span>
                           )}
                         </div>
                       </div>
-                    )
-                  })}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Exercise Notes */}
+              {exercise.notes && (
+                <div className="px-4 pb-4">
+                  <div className="flex items-start gap-2 bg-iron-800/30 rounded-lg p-3">
+                    <MessageSquare className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-iron-400">{exercise.notes}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -323,16 +353,26 @@ export default function GroupWorkoutPage() {
           </div>
         )}
 
-        {/* Action Button - Fixed at Bottom */}
+        {/* Action Buttons - Fixed at Bottom */}
         {canEdit && (
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
-            <button
-              onClick={() => setIsEditing(true)}
-              className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
-            >
-              <Play className="w-5 h-5" />
-              Log This Workout
-            </button>
+            {!isCompleted ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
+              >
+                <Play className="w-5 h-5" />
+                Log This Workout
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="btn-secondary w-full py-4 text-lg flex items-center justify-center gap-2"
+              >
+                <Pencil className="w-5 h-5" />
+                Edit Logged Data
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -341,7 +381,7 @@ export default function GroupWorkoutPage() {
 
   // ============ EDIT MODE ============
   return (
-    <div className="max-w-2xl mx-auto pb-32">
+    <div className="max-w-2xl mx-auto pb-36">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-4">
         <div className="flex items-center justify-between">
@@ -351,7 +391,9 @@ export default function GroupWorkoutPage() {
           >
             <X className="w-5 h-5" />
           </button>
-          <h1 className="font-display text-lg text-iron-100">Log Workout</h1>
+          <h1 className="font-display text-lg text-iron-100">
+            {isCompleted ? 'Edit Workout' : 'Log Workout'}
+          </h1>
           <button
             onClick={() => setRpeModalOpen(true)}
             className="p-2 text-iron-400 hover:text-iron-200 transition-colors"
@@ -361,43 +403,55 @@ export default function GroupWorkoutPage() {
         </div>
       </div>
 
+      {/* Workout Notes */}
+      <div className="card-steel p-4 mb-4">
+        <label className="block text-sm text-iron-400 mb-2">Workout Notes</label>
+        <textarea
+          value={workoutNotes}
+          onChange={(e) => setWorkoutNotes(e.target.value)}
+          placeholder="How did the workout go? Any notes..."
+          rows={2}
+          className="w-full input-field text-sm resize-none"
+        />
+      </div>
+
       {/* Exercises for Logging */}
       <div className="space-y-4">
         {exercises.map((exercise, exerciseIndex) => (
           <div key={exerciseIndex} className="card-steel p-4">
-            <h3 className="font-semibold text-iron-100 text-lg mb-4">{exercise.name}</h3>
+            <h3 className="font-semibold text-iron-100 text-xl mb-4">{exercise.name}</h3>
 
             <div className="space-y-4">
               {exercise.sets?.map((set, setIndex) => (
                 <div key={setIndex} className="bg-iron-800/30 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="font-medium text-iron-300">Set {setIndex + 1}</span>
-                    <span className="text-xs text-iron-500">
-                      Target: {set.prescribedWeight}lbs × {set.prescribedReps}
+                    <span className="text-lg font-medium text-iron-200">Set {setIndex + 1}</span>
+                    <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded">
+                      Target: {set.prescribedWeight || '—'} × {set.prescribedReps || '—'}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <div>
-                      <label className="block text-xs text-flame-400 mb-1">Weight (lbs)</label>
+                      <label className="block text-xs text-flame-400 mb-1 font-medium">Weight (lbs)</label>
                       <input
                         type="number"
                         inputMode="decimal"
                         value={set.actualWeight || ''}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
                         placeholder={set.prescribedWeight || '—'}
-                        className="w-full input-field text-lg py-3 px-4 text-center"
+                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-flame-400 mb-1">Reps</label>
+                      <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
                       <input
                         type="number"
                         inputMode="numeric"
                         value={set.actualReps || ''}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
                         placeholder={set.prescribedReps || '—'}
-                        className="w-full input-field text-lg py-3 px-4 text-center"
+                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
                       />
                     </div>
                   </div>
@@ -417,7 +471,7 @@ export default function GroupWorkoutPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-iron-500 mb-1">Pain</label>
+                      <label className="block text-xs text-iron-500 mb-1">Pain Level</label>
                       <select
                         value={set.painLevel || 0}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'painLevel', parseInt(e.target.value) || 0)}
@@ -432,6 +486,18 @@ export default function GroupWorkoutPage() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Exercise Notes */}
+            <div className="mt-4">
+              <label className="block text-xs text-iron-500 mb-1">Notes for {exercise.name}</label>
+              <textarea
+                value={exercise.notes || ''}
+                onChange={(e) => updateExerciseNotes(exerciseIndex, e.target.value)}
+                placeholder="How did this exercise feel? Any adjustments..."
+                rows={2}
+                className="w-full input-field text-sm resize-none"
+              />
             </div>
           </div>
         ))}
@@ -449,24 +515,26 @@ export default function GroupWorkoutPage() {
           <button
             onClick={handleSaveProgress}
             disabled={saving}
-            className="btn-secondary flex-1 py-3 flex items-center justify-center gap-2"
+            className="btn-secondary flex-1 py-3"
           >
-            <Save className="w-4 h-4" />
             Save Progress
           </button>
         </div>
         <button
           onClick={handleComplete}
           disabled={saving}
-          className="btn-primary w-full py-3 flex items-center justify-center gap-2"
+          className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
         >
           {saving ? 'Saving...' : (
             <>
               <Check className="w-5 h-5" />
-              Complete Workout
+              {isCompleted ? 'Update Workout' : 'Complete Workout'}
             </>
           )}
         </button>
+        <p className="text-xs text-iron-500 text-center mt-2">
+          Empty fields will be filled with target values
+        </p>
       </div>
 
       {/* RPE Info Modal */}
