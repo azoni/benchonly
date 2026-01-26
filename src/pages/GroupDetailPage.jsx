@@ -94,6 +94,7 @@ export default function GroupDetailPage() {
   const [memberPrescriptions, setMemberPrescriptions] = useState({})
   const [activeMemberTab, setActiveMemberTab] = useState(null)
   const [creatingWorkout, setCreatingWorkout] = useState(false)
+  const [expandedWorkout, setExpandedWorkout] = useState(null)
 
   const isAdmin = group?.admins?.includes(user?.uid)
 
@@ -595,46 +596,131 @@ export default function GroupDetailPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {groupWorkouts.map(workout => {
-                const assignedMember = members.find(m => m.uid === workout.assignedTo)
-                return (
-                  <Link 
-                    key={workout.id} 
-                    to={`/workouts/group/${workout.id}`}
-                    state={{ from: `/groups/${id}`, fromLabel: 'Back to Group' }}
-                    className="card-steel p-4 block hover:border-iron-600 transition-colors"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-medium text-iron-100">{workout.name}</h3>
-                      <span className="text-sm text-iron-500">
-                        {safeFormatDate(workout.date, 'MMM d')}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {assignedMember?.photoURL ? (
-                        <img 
-                          src={assignedMember.photoURL} 
-                          alt=""
-                          className="w-5 h-5 rounded-full"
-                        />
-                      ) : (
-                        <div className="w-5 h-5 rounded-full bg-iron-700 flex items-center justify-center">
-                          <span className="text-xs text-iron-400">
-                            {assignedMember?.displayName?.[0] || '?'}
-                          </span>
+              {/* Group workouts by name + date */}
+              {(() => {
+                // Create unique workout groups
+                const workoutGroups = {}
+                groupWorkouts.forEach(workout => {
+                  const dateStr = safeFormatDate(workout.date, 'yyyy-MM-dd')
+                  const key = `${workout.name}-${dateStr}`
+                  if (!workoutGroups[key]) {
+                    workoutGroups[key] = {
+                      name: workout.name,
+                      date: workout.date,
+                      exercises: workout.exercises,
+                      assignments: []
+                    }
+                  }
+                  workoutGroups[key].assignments.push({
+                    id: workout.id,
+                    memberId: workout.assignedTo,
+                    status: workout.status
+                  })
+                })
+
+                return Object.entries(workoutGroups).map(([key, workoutGroup]) => {
+                  const isExpanded = expandedWorkout === key
+                  const completedCount = workoutGroup.assignments.filter(a => a.status === 'completed').length
+                  const totalCount = workoutGroup.assignments.length
+                  
+                  return (
+                    <div key={key} className="card-steel overflow-hidden">
+                      {/* Workout Header - Click to expand */}
+                      <button
+                        onClick={() => setExpandedWorkout(isExpanded ? null : key)}
+                        className="w-full p-4 flex items-center gap-4 text-left hover:bg-iron-800/30 transition-colors"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-flame-500/10 flex items-center justify-center flex-shrink-0">
+                          <Dumbbell className="w-5 h-5 text-flame-400" />
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-iron-100">{workoutGroup.name}</h3>
+                          <div className="flex items-center gap-2 text-sm text-iron-500">
+                            <span>{safeFormatDate(workoutGroup.date, 'EEE, MMM d')}</span>
+                            <span>·</span>
+                            <span>{workoutGroup.exercises?.length || 0} exercises</span>
+                            <span>·</span>
+                            <span className={completedCount === totalCount ? 'text-green-400' : ''}>
+                              {completedCount}/{totalCount} done
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {isExpanded ? (
+                          <ChevronDown className="w-5 h-5 text-iron-500" />
+                        ) : (
+                          <ChevronRight className="w-5 h-5 text-iron-500" />
+                        )}
+                      </button>
+                      
+                      {/* Expanded Content */}
+                      {isExpanded && (
+                        <div className="border-t border-iron-800">
+                          {/* Exercise Summary */}
+                          <div className="p-4 bg-iron-800/20 border-b border-iron-800">
+                            <p className="text-xs text-iron-500 uppercase tracking-wide mb-2">Exercises</p>
+                            <div className="flex flex-wrap gap-2">
+                              {workoutGroup.exercises?.map((ex, i) => (
+                                <span key={i} className="px-2 py-1 bg-iron-800 rounded text-sm text-iron-300">
+                                  {ex.name} ({ex.sets?.length || 0}×)
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          {/* Member Assignments */}
+                          <div className="p-4">
+                            <p className="text-xs text-iron-500 uppercase tracking-wide mb-3">Assigned Members</p>
+                            <div className="space-y-2">
+                              {workoutGroup.assignments.map(assignment => {
+                                const member = members.find(m => m.uid === assignment.memberId)
+                                return (
+                                  <Link
+                                    key={assignment.id}
+                                    to={`/workouts/group/${assignment.id}`}
+                                    state={{ from: `/groups/${id}`, fromLabel: 'Back to Group' }}
+                                    className="flex items-center gap-3 p-3 rounded-lg bg-iron-800/30 hover:bg-iron-800/50 transition-colors"
+                                  >
+                                    {member?.photoURL ? (
+                                      <img src={member.photoURL} alt="" className="w-8 h-8 rounded-full" />
+                                    ) : (
+                                      <div className="w-8 h-8 rounded-full bg-iron-700 flex items-center justify-center">
+                                        <span className="text-sm text-iron-400">{member?.displayName?.[0] || '?'}</span>
+                                      </div>
+                                    )}
+                                    <span className="flex-1 text-iron-200">{member?.displayName || 'Unknown'}</span>
+                                    {assignment.status === 'completed' ? (
+                                      <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium">Done</span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs font-medium">Pending</span>
+                                    )}
+                                    <ChevronRight className="w-4 h-4 text-iron-600" />
+                                  </Link>
+                                )
+                              })}
+                            </div>
+                          </div>
+                          
+                          {/* Admin Edit Button */}
+                          {isAdmin && (
+                            <div className="p-4 border-t border-iron-800">
+                              <Link
+                                to={`/workouts/group/${workoutGroup.assignments[0]?.id}`}
+                                state={{ from: `/groups/${id}`, fromLabel: 'Back to Group', editMode: true }}
+                                className="btn-secondary w-full flex items-center justify-center gap-2"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                                Edit Workout
+                              </Link>
+                            </div>
+                          )}
                         </div>
                       )}
-                      <span className="text-sm text-iron-400">
-                        {assignedMember?.displayName || 'Unknown'}
-                      </span>
-                      <span className="text-iron-600 mx-1">·</span>
-                      <span className="text-sm text-iron-500">
-                        {workout.exercises?.length || 0} exercises
-                      </span>
                     </div>
-                  </Link>
-                )
-              })}
+                  )
+                })
+              })()}
             </div>
           )}
         </div>

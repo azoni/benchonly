@@ -46,6 +46,13 @@ export default function GroupWorkoutPage() {
     loadWorkout()
   }, [id])
 
+  // Check for editMode in location state
+  useEffect(() => {
+    if (location.state?.editMode && group?.admins?.includes(user?.uid)) {
+      setMode('edit')
+    }
+  }, [location.state, group, user])
+
   const loadWorkout = async () => {
     try {
       const data = await groupWorkoutService.get(id)
@@ -551,6 +558,9 @@ export default function GroupWorkoutPage() {
 
   // ============ EDIT MODE (Admin only) ============
   if (mode === 'edit') {
+    // Find the assigned member
+    const assignedMember = group?.members?.find(m => m === workout?.assignedTo)
+    
     return (
       <div className="max-w-2xl mx-auto pb-36">
         <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-4">
@@ -561,6 +571,13 @@ export default function GroupWorkoutPage() {
             <h1 className="font-display text-lg text-iron-100">Edit Workout</h1>
             <div className="w-9" />
           </div>
+        </div>
+
+        {/* Info Notice */}
+        <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4 mb-4">
+          <p className="text-sm text-cyan-400">
+            Editing workout structure. Changes apply to this assignment only.
+          </p>
         </div>
 
         {/* Workout Name */}
