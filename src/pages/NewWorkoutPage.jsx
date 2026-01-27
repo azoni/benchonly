@@ -62,11 +62,29 @@ const COMMON_EXERCISES = [
   'Lateral Raise',
 ];
 
+const TIME_EXERCISES = [
+  'Dead Hang',
+  'Plank',
+  'Wall Sit',
+  'L-Sit',
+  'Farmers Carry',
+  'Static Hold',
+];
+
+const BODYWEIGHT_EXERCISES = [
+  'Pull-ups',
+  'Push-ups',
+  'Dips',
+  'Chin-ups',
+  'Muscle-ups',
+  'Bodyweight Squats',
+];
+
 export default function NewWorkoutPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { id: editId } = useParams(); // For edit mode
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!!editId);
   const [rpeModalOpen, setRpeModalOpen] = useState(false);
@@ -76,6 +94,12 @@ export default function NewWorkoutPage() {
   const targetUserId = searchParams.get('userId') || user?.uid;
   const isAdminCreating = searchParams.get('userId') && searchParams.get('userId') !== user?.uid;
   const isEditMode = !!editId;
+
+  // Merge default exercises with custom exercises from user profile
+  const customExercises = userProfile?.customExercises || {}
+  const allWeightExercises = [...COMMON_EXERCISES, ...(customExercises.weight || [])]
+  const allBodyweightExercises = [...BODYWEIGHT_EXERCISES, ...(customExercises.bodyweight || [])]
+  const allTimeExercises = [...TIME_EXERCISES, ...(customExercises.time || [])]
 
   const [workout, setWorkout] = useState({
     name: '',
@@ -123,26 +147,39 @@ export default function NewWorkoutPage() {
     loadWorkout();
   }, [editId, user]);
 
-  function createEmptyExercise() {
+  function createEmptyExercise(type = 'weight') {
     return {
       id: Date.now(),
       name: '',
-      sets: [createEmptySet()],
+      type: type, // 'weight', 'bodyweight', 'time'
+      sets: [createEmptySet(type)],
       notes: '',
       expanded: true,
     };
   }
 
-  function createEmptySet() {
-    return {
-      id: Date.now(),
-      prescribedWeight: '',
-      prescribedReps: '',
-      actualWeight: '',
-      actualReps: '',
+  function createEmptySet(type = 'weight') {
+    const base = {
+      id: Date.now() + Math.random(),
       rpe: '',
       painLevel: 0,
       completed: false,
+    };
+    
+    if (type === 'time') {
+      return {
+        ...base,
+        prescribedTime: '', // in seconds
+        actualTime: '',
+      };
+    }
+    
+    return {
+      ...base,
+      prescribedWeight: type === 'bodyweight' ? '' : '',
+      prescribedReps: '',
+      actualWeight: type === 'bodyweight' ? '' : '',
+      actualReps: '',
     };
   }
 
@@ -179,7 +216,7 @@ export default function NewWorkoutPage() {
       ...prev,
       exercises: prev.exercises.map((e) =>
         e.id === exerciseId
-          ? { ...e, sets: [...e.sets, { ...createEmptySet(), id: Date.now() }] }
+          ? { ...e, sets: [...e.sets, createEmptySet(e.type || 'weight')] }
           : e
       ),
     }));
@@ -359,47 +396,83 @@ export default function NewWorkoutPage() {
               className="card-steel rounded-xl overflow-hidden"
             >
               {/* Exercise Header */}
-              <div className="flex items-center gap-3 p-4 border-b border-iron-800">
-                <div className="w-8 h-8 rounded-plate bg-flame-500/10 flex items-center justify-center text-flame-400 font-semibold text-sm">
-                  {exerciseIndex + 1}
+              <div className="p-4 border-b border-iron-800">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-8 h-8 rounded-plate bg-flame-500/10 flex items-center justify-center text-flame-400 font-semibold text-sm">
+                    {exerciseIndex + 1}
+                  </div>
+                  
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={exercise.name}
+                      onChange={(e) => updateExercise(exercise.id, { name: e.target.value })}
+                      placeholder="Exercise name"
+                      list={`exercises-${exercise.id}`}
+                      className="w-full bg-transparent text-iron-100 font-medium
+                        border-none focus:outline-none placeholder:text-iron-500"
+                    />
+                    <datalist id={`exercises-${exercise.id}`}>
+                      {(exercise.type === 'time' ? allTimeExercises : 
+                        exercise.type === 'bodyweight' ? allBodyweightExercises : 
+                        allWeightExercises).map((name) => (
+                        <option key={name} value={name} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <button
+                    onClick={() => updateExercise(exercise.id, { expanded: !exercise.expanded })}
+                    className="p-2 text-iron-500 hover:text-iron-300 transition-colors"
+                  >
+                    {exercise.expanded ? (
+                      <ChevronUp className="w-5 h-5" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5" />
+                    )}
+                  </button>
+                  
+                  {workout.exercises.length > 1 && (
+                    <button
+                      onClick={() => removeExercise(exercise.id)}
+                      className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
                 
-                <div className="flex-1">
-                  <input
-                    type="text"
-                    value={exercise.name}
-                    onChange={(e) => updateExercise(exercise.id, { name: e.target.value })}
-                    placeholder="Exercise name"
-                    list={`exercises-${exercise.id}`}
-                    className="w-full bg-transparent text-iron-100 font-medium
-                      border-none focus:outline-none placeholder:text-iron-500"
-                  />
-                  <datalist id={`exercises-${exercise.id}`}>
-                    {COMMON_EXERCISES.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
+                {/* Exercise Type Selector */}
+                <div className="flex gap-2">
+                  {[
+                    { type: 'weight', label: 'Weight' },
+                    { type: 'bodyweight', label: 'Bodyweight' },
+                    { type: 'time', label: 'Time' },
+                  ].map(({ type, label }) => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        // Update exercise type and reset sets to match new type
+                        updateExercise(exercise.id, { 
+                          type,
+                          sets: exercise.sets.map(s => ({
+                            ...createEmptySet(type),
+                            id: s.id,
+                            rpe: s.rpe,
+                            painLevel: s.painLevel,
+                          }))
+                        });
+                      }}
+                      className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+                        (exercise.type || 'weight') === type
+                          ? 'bg-flame-500 text-white'
+                          : 'bg-iron-800 text-iron-400 hover:text-iron-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
-
-                <button
-                  onClick={() => updateExercise(exercise.id, { expanded: !exercise.expanded })}
-                  className="p-2 text-iron-500 hover:text-iron-300 transition-colors"
-                >
-                  {exercise.expanded ? (
-                    <ChevronUp className="w-5 h-5" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5" />
-                  )}
-                </button>
-
-                {workout.exercises.length > 1 && (
-                  <button
-                    onClick={() => removeExercise(exercise.id)}
-                    className="p-2 text-iron-500 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
               </div>
 
               {/* Sets */}
@@ -450,68 +523,139 @@ export default function NewWorkoutPage() {
                               </button>
                             </div>
                             
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-xs text-iron-500 mb-1">Target Weight</label>
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  value={set.prescribedWeight}
-                                  onChange={(e) =>
-                                    updateSet(exercise.id, set.id, {
-                                      prescribedWeight: e.target.value,
-                                    })
-                                  }
-                                  placeholder="lbs"
-                                  className="w-full input-field text-base py-3 px-4"
-                                />
+                            {/* Time-based exercise */}
+                            {exercise.type === 'time' ? (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs text-iron-500 mb-1">Target (sec)</label>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={set.prescribedTime || ''}
+                                    onChange={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        prescribedTime: e.target.value,
+                                      })
+                                    }
+                                    placeholder="seconds"
+                                    className="w-full input-field text-base py-3 px-4"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-flame-400 mb-1">Actual (sec)</label>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={set.actualTime || ''}
+                                    onChange={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        actualTime: e.target.value,
+                                      })
+                                    }
+                                    placeholder="seconds"
+                                    className="w-full input-field text-base py-3 px-4 border-flame-500/30"
+                                  />
+                                </div>
                               </div>
-                              <div>
-                                <label className="block text-xs text-iron-500 mb-1">Target Reps</label>
-                                <input
-                                  type="number"
-                                  inputMode="numeric"
-                                  value={set.prescribedReps}
-                                  onChange={(e) =>
-                                    updateSet(exercise.id, set.id, {
-                                      prescribedReps: e.target.value,
-                                    })
-                                  }
-                                  placeholder="reps"
-                                  className="w-full input-field text-base py-3 px-4"
-                                />
+                            ) : exercise.type === 'bodyweight' ? (
+                              /* Bodyweight exercise - reps only */
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs text-iron-500 mb-1">Target Reps</label>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={set.prescribedReps || ''}
+                                    onChange={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        prescribedReps: e.target.value,
+                                      })
+                                    }
+                                    placeholder="reps"
+                                    className="w-full input-field text-base py-3 px-4"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-flame-400 mb-1">Actual Reps</label>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={set.actualReps || ''}
+                                    onChange={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        actualReps: e.target.value,
+                                      })
+                                    }
+                                    placeholder="reps"
+                                    className="w-full input-field text-base py-3 px-4 border-flame-500/30"
+                                  />
+                                </div>
                               </div>
-                              <div>
-                                <label className="block text-xs text-flame-400 mb-1">Actual Weight</label>
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  value={set.actualWeight}
-                                  onChange={(e) =>
-                                    updateSet(exercise.id, set.id, {
-                                      actualWeight: e.target.value,
-                                    })
-                                  }
-                                  placeholder="lbs"
-                                  className="w-full input-field text-base py-3 px-4 border-flame-500/30"
-                                />
+                            ) : (
+                              /* Weight exercise - weight + reps */
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs text-iron-500 mb-1">Target Weight</label>
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    value={set.prescribedWeight || ''}
+                                    onChange={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        prescribedWeight: e.target.value,
+                                      })
+                                    }
+                                    placeholder="lbs"
+                                    className="w-full input-field text-base py-3 px-4"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-iron-500 mb-1">Target Reps</label>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={set.prescribedReps || ''}
+                                    onChange={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        prescribedReps: e.target.value,
+                                      })
+                                    }
+                                    placeholder="reps"
+                                    className="w-full input-field text-base py-3 px-4"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-flame-400 mb-1">Actual Weight</label>
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    value={set.actualWeight || ''}
+                                    onChange={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        actualWeight: e.target.value,
+                                      })
+                                    }
+                                    placeholder="lbs"
+                                    className="w-full input-field text-base py-3 px-4 border-flame-500/30"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-flame-400 mb-1">Actual Reps</label>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={set.actualReps || ''}
+                                    onChange={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        actualReps: e.target.value,
+                                      })
+                                    }
+                                    placeholder="reps"
+                                    className="w-full input-field text-base py-3 px-4 border-flame-500/30"
+                                  />
+                                </div>
                               </div>
-                              <div>
-                                <label className="block text-xs text-flame-400 mb-1">Actual Reps</label>
-                                <input
-                                  type="number"
-                                  inputMode="numeric"
-                                  value={set.actualReps}
-                                  onChange={(e) =>
-                                    updateSet(exercise.id, set.id, {
-                                      actualReps: e.target.value,
-                                    })
-                                  }
-                                  placeholder="reps"
-                                  className="w-full input-field text-base py-3 px-4 border-flame-500/30"
-                                />
-                              </div>
-                            </div>
+                            )}
                             
                             <div className="grid grid-cols-2 gap-3">
                               <div>

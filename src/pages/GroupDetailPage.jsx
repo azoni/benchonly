@@ -53,16 +53,40 @@ const COMMON_EXERCISES = [
   'Lateral Raise',
 ]
 
+const TIME_EXERCISES = [
+  'Dead Hang',
+  'Plank',
+  'Wall Sit',
+  'L-Sit',
+  'Farmers Carry',
+  'Static Hold',
+]
+
+const BODYWEIGHT_EXERCISES = [
+  'Pull-ups',
+  'Push-ups',
+  'Dips',
+  'Chin-ups',
+  'Muscle-ups',
+  'Bodyweight Squats',
+]
+
 export default function GroupDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, userProfile } = useAuth()
   const [group, setGroup] = useState(null)
   const [members, setMembers] = useState([])
   const [memberGoals, setMemberGoals] = useState({})
   const [attendance, setAttendance] = useState({})
   const [groupWorkouts, setGroupWorkouts] = useState([])
   const [loading, setLoading] = useState(true)
+  
+  // Merge default exercises with custom exercises from user profile
+  const customExercises = userProfile?.customExercises || {}
+  const allWeightExercises = [...COMMON_EXERCISES, ...(customExercises.weight || [])]
+  const allBodyweightExercises = [...BODYWEIGHT_EXERCISES, ...(customExercises.bodyweight || [])]
+  const allTimeExercises = [...TIME_EXERCISES, ...(customExercises.time || [])]
   const [showMenu, setShowMenu] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [activeTab, setActiveTab] = useState('members')
@@ -244,18 +268,27 @@ export default function GroupDetailPage() {
       
       if (memberWorkout?.exercises?.length) {
         initialPrescriptions[assignment.memberId] = {
-          exercises: memberWorkout.exercises.map(ex => ({
-            id: Date.now() + Math.random(),
-            name: ex.name,
-            sets: ex.sets?.map(s => ({
-              weight: s.prescribedWeight || '',
-              reps: s.prescribedReps || ''
-            })) || [{ weight: '', reps: '' }]
-          }))
+          exercises: memberWorkout.exercises.map(ex => {
+            const type = ex.type || (ex.sets?.[0]?.prescribedTime ? 'time' : 'weight')
+            return {
+              id: Date.now() + Math.random(),
+              name: ex.name,
+              type: type,
+              sets: ex.sets?.map(s => {
+                if (type === 'time') {
+                  return { time: s.prescribedTime || '' }
+                } else if (type === 'bodyweight') {
+                  return { reps: s.prescribedReps || '' }
+                } else {
+                  return { weight: s.prescribedWeight || '', reps: s.prescribedReps || '' }
+                }
+              }) || [{ weight: '', reps: '' }]
+            }
+          })
         }
       } else {
         initialPrescriptions[assignment.memberId] = {
-          exercises: [{ id: Date.now() + Math.random(), name: '', sets: [{ weight: '', reps: '' }] }]
+          exercises: [{ id: Date.now() + Math.random(), name: '', type: 'weight', sets: [{ weight: '', reps: '' }] }]
         }
       }
     })
@@ -273,7 +306,7 @@ export default function GroupDetailPage() {
         ...prev[memberId],
         exercises: [
           ...(prev[memberId]?.exercises || []),
-          { id: Date.now() + Math.random(), name: '', sets: [{ weight: '', reps: '' }] }
+          { id: Date.now() + Math.random(), name: '', type: 'weight', sets: [{ weight: '', reps: '' }] }
         ]
       }
     }))
@@ -290,15 +323,35 @@ export default function GroupDetailPage() {
   }
 
   const updateExerciseForMember = (memberId, exerciseId, field, value) => {
-    setMemberPrescriptions(prev => ({
-      ...prev,
-      [memberId]: {
-        ...prev[memberId],
-        exercises: prev[memberId].exercises.map(e =>
-          e.id === exerciseId ? { ...e, [field]: value } : e
-        )
-      }
-    }))
+    setMemberPrescriptions(prev => {
+      const updated = { ...prev }
+      const exercises = updated[memberId].exercises.map(e => {
+        if (e.id !== exerciseId) return e
+        
+        const updatedExercise = { ...e, [field]: value }
+        
+        // If name changed, detect exercise type
+        if (field === 'name') {
+          const isTime = allTimeExercises.includes(value)
+          const isBodyweight = allBodyweightExercises.includes(value) && !allWeightExercises.includes(value)
+          
+          if (isTime && e.type !== 'time') {
+            updatedExercise.type = 'time'
+            updatedExercise.sets = e.sets.map(s => ({ time: s.time || '' }))
+          } else if (isBodyweight && e.type !== 'bodyweight') {
+            updatedExercise.type = 'bodyweight'
+            updatedExercise.sets = e.sets.map(s => ({ reps: s.reps || '' }))
+          } else if (!isTime && !isBodyweight && e.type !== 'weight') {
+            updatedExercise.type = 'weight'
+            updatedExercise.sets = e.sets.map(s => ({ weight: s.weight || '', reps: s.reps || '' }))
+          }
+        }
+        
+        return updatedExercise
+      })
+      updated[memberId] = { ...updated[memberId], exercises }
+      return updated
+    })
   }
 
   const addSetForExercise = (memberId, exerciseId) => {
@@ -306,11 +359,15 @@ export default function GroupDetailPage() {
       ...prev,
       [memberId]: {
         ...prev[memberId],
-        exercises: prev[memberId].exercises.map(e =>
-          e.id === exerciseId
-            ? { ...e, sets: [...e.sets, { weight: '', reps: '' }] }
-            : e
-        )
+        exercises: prev[memberId].exercises.map(e => {
+          if (e.id !== exerciseId) return e
+          const newSet = e.type === 'time' 
+            ? { time: '' } 
+            : e.type === 'bodyweight' 
+              ? { reps: '' }
+              : { weight: '', reps: '' }
+          return { ...e, sets: [...e.sets, newSet] }
+        })
       }
     }))
   }
@@ -400,6 +457,44 @@ export default function GroupDetailPage() {
       const [year, month, day] = workoutDate.split('-').map(Number)
       const localDate = new Date(year, month - 1, day, 12, 0, 0)
 
+      // Helper to format exercises based on type
+      const formatExercises = (prescription) => {
+        return (prescription?.exercises || [])
+          .filter(e => e.name.trim())
+          .map(e => ({
+            name: e.name,
+            type: e.type || 'weight',
+            sets: e.sets.map((s, i) => {
+              const baseSet = {
+                id: Date.now() + i,
+                rpe: '',
+                painLevel: 0
+              }
+              if (e.type === 'time') {
+                return {
+                  ...baseSet,
+                  prescribedTime: s.time || '',
+                  actualTime: ''
+                }
+              } else if (e.type === 'bodyweight') {
+                return {
+                  ...baseSet,
+                  prescribedReps: s.reps || '',
+                  actualReps: ''
+                }
+              } else {
+                return {
+                  ...baseSet,
+                  prescribedWeight: s.weight || '',
+                  prescribedReps: s.reps || '',
+                  actualWeight: '',
+                  actualReps: ''
+                }
+              }
+            })
+          }))
+      }
+
       if (editingWorkoutIds) {
         // EDITING MODE - update existing workouts
         for (const memberId of selectedMembers) {
@@ -407,20 +502,7 @@ export default function GroupDetailPage() {
           if (!workoutId) continue // Skip if member wasn't in original assignment
           
           const prescription = memberPrescriptions[memberId]
-          const formattedExercises = (prescription?.exercises || [])
-            .filter(e => e.name.trim())
-            .map(e => ({
-              name: e.name,
-              sets: e.sets.map((s, i) => ({
-                id: Date.now() + i,
-                prescribedWeight: s.weight,
-                prescribedReps: s.reps,
-                actualWeight: '',
-                actualReps: '',
-                rpe: '',
-                painLevel: 0
-              }))
-            }))
+          const formattedExercises = formatExercises(prescription)
 
           await groupWorkoutService.update(workoutId, {
             name: workoutName,
@@ -432,20 +514,7 @@ export default function GroupDetailPage() {
         // CREATE MODE - create new workouts
         const memberWorkouts = selectedMembers.map(memberId => {
           const prescription = memberPrescriptions[memberId]
-          const formattedExercises = (prescription?.exercises || [])
-            .filter(e => e.name.trim())
-            .map(e => ({
-              name: e.name,
-              sets: e.sets.map((s, i) => ({
-                id: Date.now() + i,
-                prescribedWeight: s.weight,
-                prescribedReps: s.reps,
-                actualWeight: '',
-                actualReps: '',
-                rpe: '',
-                painLevel: 0
-              }))
-            }))
+          const formattedExercises = formatExercises(prescription)
 
           return {
             assignedTo: memberId,
@@ -1160,9 +1229,21 @@ export default function GroupDetailPage() {
                               className="input-field flex-1 text-base py-2"
                             >
                               <option value="">Select exercise</option>
-                              {COMMON_EXERCISES.map(ex => (
-                                <option key={ex} value={ex}>{ex}</option>
-                              ))}
+                              <optgroup label="Weight Exercises">
+                                {allWeightExercises.map(ex => (
+                                  <option key={ex} value={ex}>{ex}</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Bodyweight">
+                                {allBodyweightExercises.map(ex => (
+                                  <option key={`bw-${ex}`} value={ex}>{ex}</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Time-Based">
+                                {allTimeExercises.map(ex => (
+                                  <option key={`t-${ex}`} value={ex}>{ex}</option>
+                                ))}
+                              </optgroup>
                             </select>
                             {memberPrescriptions[activeMemberTab].exercises.length > 1 && (
                               <button
@@ -1176,49 +1257,126 @@ export default function GroupDetailPage() {
 
                           {/* Sets */}
                           <div className="space-y-2">
-                            <div className="grid grid-cols-12 gap-2 text-xs text-iron-500 px-1">
-                              <div className="col-span-2">Set</div>
-                              <div className="col-span-4">Weight (lbs)</div>
-                              <div className="col-span-4">Reps</div>
-                              <div className="col-span-2"></div>
-                            </div>
-                            {exercise.sets.map((set, setIndex) => (
-                              <div key={setIndex} className="grid grid-cols-12 gap-2 items-center">
-                                <div className="col-span-2">
-                                  <span className="text-iron-400 text-sm font-medium pl-1">{setIndex + 1}</span>
+                            {exercise.type === 'time' ? (
+                              /* Time-based exercise */
+                              <>
+                                <div className="grid grid-cols-12 gap-2 text-xs text-iron-500 px-1">
+                                  <div className="col-span-2">Set</div>
+                                  <div className="col-span-8">Time (seconds)</div>
+                                  <div className="col-span-2"></div>
                                 </div>
-                                <div className="col-span-4">
-                                  <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    value={set.weight}
-                                    onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'weight', e.target.value)}
-                                    placeholder="135"
-                                    className="input-field w-full text-base py-2 px-3"
-                                  />
+                                {exercise.sets.map((set, setIndex) => (
+                                  <div key={setIndex} className="grid grid-cols-12 gap-2 items-center">
+                                    <div className="col-span-2">
+                                      <span className="text-iron-400 text-sm font-medium pl-1">{setIndex + 1}</span>
+                                    </div>
+                                    <div className="col-span-8">
+                                      <input
+                                        type="number"
+                                        inputMode="numeric"
+                                        value={set.time || ''}
+                                        onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'time', e.target.value)}
+                                        placeholder="60"
+                                        className="input-field w-full text-base py-2 px-3"
+                                      />
+                                    </div>
+                                    <div className="col-span-2 flex justify-end">
+                                      {exercise.sets.length > 1 && (
+                                        <button
+                                          onClick={() => removeSetForExercise(activeMemberTab, exercise.id, setIndex)}
+                                          className="p-1 text-iron-600 hover:text-red-400 transition-colors"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </>
+                            ) : exercise.type === 'bodyweight' ? (
+                              /* Bodyweight exercise - reps only */
+                              <>
+                                <div className="grid grid-cols-12 gap-2 text-xs text-iron-500 px-1">
+                                  <div className="col-span-2">Set</div>
+                                  <div className="col-span-8">Reps</div>
+                                  <div className="col-span-2"></div>
                                 </div>
-                                <div className="col-span-4">
-                                  <input
-                                    type="number"
-                                    inputMode="numeric"
-                                    value={set.reps}
-                                    onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'reps', e.target.value)}
-                                    placeholder="8"
-                                    className="input-field w-full text-base py-2 px-3"
-                                  />
+                                {exercise.sets.map((set, setIndex) => (
+                                  <div key={setIndex} className="grid grid-cols-12 gap-2 items-center">
+                                    <div className="col-span-2">
+                                      <span className="text-iron-400 text-sm font-medium pl-1">{setIndex + 1}</span>
+                                    </div>
+                                    <div className="col-span-8">
+                                      <input
+                                        type="number"
+                                        inputMode="numeric"
+                                        value={set.reps || ''}
+                                        onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'reps', e.target.value)}
+                                        placeholder="10"
+                                        className="input-field w-full text-base py-2 px-3"
+                                      />
+                                    </div>
+                                    <div className="col-span-2 flex justify-end">
+                                      {exercise.sets.length > 1 && (
+                                        <button
+                                          onClick={() => removeSetForExercise(activeMemberTab, exercise.id, setIndex)}
+                                          className="p-1 text-iron-600 hover:text-red-400 transition-colors"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </>
+                            ) : (
+                              /* Weight exercise - weight + reps */
+                              <>
+                                <div className="grid grid-cols-12 gap-2 text-xs text-iron-500 px-1">
+                                  <div className="col-span-2">Set</div>
+                                  <div className="col-span-4">Weight (lbs)</div>
+                                  <div className="col-span-4">Reps</div>
+                                  <div className="col-span-2"></div>
                                 </div>
-                                <div className="col-span-2 flex justify-end">
-                                  {exercise.sets.length > 1 && (
-                                    <button
-                                      onClick={() => removeSetForExercise(activeMemberTab, exercise.id, setIndex)}
-                                      className="p-1 text-iron-600 hover:text-red-400 transition-colors"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
+                                {exercise.sets.map((set, setIndex) => (
+                                  <div key={setIndex} className="grid grid-cols-12 gap-2 items-center">
+                                    <div className="col-span-2">
+                                      <span className="text-iron-400 text-sm font-medium pl-1">{setIndex + 1}</span>
+                                    </div>
+                                    <div className="col-span-4">
+                                      <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        value={set.weight || ''}
+                                        onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'weight', e.target.value)}
+                                        placeholder="135"
+                                        className="input-field w-full text-base py-2 px-3"
+                                      />
+                                    </div>
+                                    <div className="col-span-4">
+                                      <input
+                                        type="number"
+                                        inputMode="numeric"
+                                        value={set.reps || ''}
+                                        onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'reps', e.target.value)}
+                                        placeholder="8"
+                                        className="input-field w-full text-base py-2 px-3"
+                                      />
+                                    </div>
+                                    <div className="col-span-2 flex justify-end">
+                                      {exercise.sets.length > 1 && (
+                                        <button
+                                          onClick={() => removeSetForExercise(activeMemberTab, exercise.id, setIndex)}
+                                          className="p-1 text-iron-600 hover:text-red-400 transition-colors"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </>
+                            )}
                             <button
                               onClick={() => addSetForExercise(activeMemberTab, exercise.id)}
                               className="w-full py-2 text-xs text-iron-500 hover:text-iron-300 flex items-center justify-center gap-1"

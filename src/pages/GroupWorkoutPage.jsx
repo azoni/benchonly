@@ -115,11 +115,20 @@ export default function GroupWorkoutPage() {
       // Auto-fill blank fields with prescribed values
       const filledExercises = exercises.map(ex => ({
         ...ex,
-        sets: ex.sets.map(set => ({
-          ...set,
-          actualWeight: set.actualWeight || set.prescribedWeight || '',
-          actualReps: set.actualReps || set.prescribedReps || ''
-        }))
+        sets: ex.sets.map(set => {
+          const isTimeExercise = ex.type === 'time' || set.prescribedTime || set.actualTime
+          if (isTimeExercise) {
+            return {
+              ...set,
+              actualTime: set.actualTime || set.prescribedTime || ''
+            }
+          }
+          return {
+            ...set,
+            actualWeight: set.actualWeight || set.prescribedWeight || '',
+            actualReps: set.actualReps || set.prescribedReps || ''
+          }
+        })
       }))
       await groupWorkoutService.complete(id, { exercises: filledExercises, notes: workoutNotes })
       setWorkout(prev => ({ ...prev, exercises: filledExercises, notes: workoutNotes, status: 'completed' }))
@@ -238,16 +247,24 @@ export default function GroupWorkoutPage() {
 
         {/* Exercises */}
         <div className="space-y-4">
-          {workout.exercises?.map((exercise, exerciseIndex) => (
+          {workout.exercises?.map((exercise, exerciseIndex) => {
+            const isTimeExercise = exercise.type === 'time' || exercise.sets?.some(s => s.prescribedTime || s.actualTime)
+            
+            return (
             <div key={exerciseIndex} className="card-steel overflow-hidden">
               <div className="p-4 border-b border-iron-800">
-                <h3 className="text-xl font-semibold text-iron-50">{exercise.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-semibold text-iron-50">{exercise.name}</h3>
+                  {isTimeExercise && (
+                    <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded">Time</span>
+                  )}
+                </div>
                 <p className="text-sm text-iron-500 mt-1">{exercise.sets?.length || 0} sets</p>
               </div>
               <div className="divide-y divide-iron-800/50">
                 {exercise.sets?.map((set, setIndex) => {
-                  const hasActual = set.actualWeight || set.actualReps
-                  const e1rm = hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
+                  const hasActual = isTimeExercise ? set.actualTime : (set.actualWeight || set.actualReps)
+                  const e1rm = !isTimeExercise && hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
                     ? calculateE1RM(parseFloat(set.actualWeight), parseInt(set.actualReps))
                     : null
                   return (
@@ -257,7 +274,27 @@ export default function GroupWorkoutPage() {
                           <span className="text-lg font-bold text-iron-400">{setIndex + 1}</span>
                         </div>
                         <div className="flex-1">
-                          {!isCompleted ? (
+                          {isTimeExercise ? (
+                            /* TIME EXERCISE */
+                            !isCompleted ? (
+                              <div className="text-2xl font-bold text-iron-100">
+                                {set.prescribedTime || '—'} seconds
+                              </div>
+                            ) : (
+                              <>
+                                <div className="text-sm text-iron-500 mb-1">
+                                  Target: {set.prescribedTime || '—'}s
+                                </div>
+                                {hasActual ? (
+                                  <span className="text-2xl font-bold text-flame-400">
+                                    {set.actualTime || '—'} seconds
+                                  </span>
+                                ) : (
+                                  <span className="text-lg text-iron-600">Not logged</span>
+                                )}
+                              </>
+                            )
+                          ) : !isCompleted ? (
                             /* SCHEDULED: Show target prominently */
                             <div className="flex items-center gap-3 flex-wrap">
                               <span className="text-2xl font-bold text-iron-100">
@@ -305,7 +342,7 @@ export default function GroupWorkoutPage() {
                 </div>
               )}
             </div>
-          ))}
+          )})}
         </div>
 
         {(!workout.exercises || workout.exercises.length === 0) && (
@@ -358,7 +395,10 @@ export default function GroupWorkoutPage() {
       </div>
 
       <div className="space-y-4">
-        {exercises.map((exercise, exerciseIndex) => (
+        {exercises.map((exercise, exerciseIndex) => {
+          const isTimeExercise = exercise.type === 'time' || exercise.sets?.some(s => s.prescribedTime || s.actualTime)
+          
+          return (
           <div key={exerciseIndex} className="card-steel p-4">
             <h3 className="font-semibold text-iron-100 text-xl mb-4">{exercise.name}</h3>
             <div className="space-y-4">
@@ -367,33 +407,50 @@ export default function GroupWorkoutPage() {
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-lg font-medium text-iron-200">Set {setIndex + 1}</span>
                     <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded">
-                      Target: {set.prescribedWeight || '—'} × {set.prescribedReps || '—'}
+                      Target: {isTimeExercise 
+                        ? `${set.prescribedTime || '—'}s`
+                        : `${set.prescribedWeight || '—'} × ${set.prescribedReps || '—'}`
+                      }
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                      <label className="block text-xs text-flame-400 mb-1 font-medium">Weight (lbs)</label>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={set.actualWeight || ''}
-                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
-                        placeholder={set.prescribedWeight || '—'}
-                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
+                  {isTimeExercise ? (
+                    <div className="mb-3">
+                      <label className="block text-xs text-flame-400 mb-1 font-medium">Time (seconds)</label>
                       <input
                         type="number"
                         inputMode="numeric"
-                        value={set.actualReps || ''}
-                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
-                        placeholder={set.prescribedReps || '—'}
+                        value={set.actualTime || ''}
+                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualTime', e.target.value)}
+                        placeholder={set.prescribedTime || '—'}
                         className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
                       />
                     </div>
-                  </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="block text-xs text-flame-400 mb-1 font-medium">Weight (lbs)</label>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={set.actualWeight || ''}
+                          onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
+                          placeholder={set.prescribedWeight || '—'}
+                          className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={set.actualReps || ''}
+                          onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
+                          placeholder={set.prescribedReps || '—'}
+                          className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                        />
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs text-iron-500 mb-1">RPE</label>
@@ -432,7 +489,7 @@ export default function GroupWorkoutPage() {
               />
             </div>
           </div>
-        ))}
+        )})}
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">

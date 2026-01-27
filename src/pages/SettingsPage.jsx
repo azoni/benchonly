@@ -21,7 +21,11 @@ import {
   EyeOff,
   BarChart3,
   AtSign,
-  AlertCircle
+  AlertCircle,
+  Dumbbell,
+  Plus,
+  X,
+  Timer
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
@@ -36,6 +40,17 @@ export default function SettingsPage() {
   const [photoURL, setPhotoURL] = useState(userProfile?.photoURL || user?.photoURL)
   const fileInputRef = useRef(null)
   const [showProfileSection, setShowProfileSection] = useState(false)
+  const [showExercisesSection, setShowExercisesSection] = useState(false)
+  
+  // Custom exercises state
+  const [customExercises, setCustomExercises] = useState({
+    weight: userProfile?.customExercises?.weight || [],
+    bodyweight: userProfile?.customExercises?.bodyweight || [],
+    time: userProfile?.customExercises?.time || []
+  })
+  const [newExercise, setNewExercise] = useState('')
+  const [newExerciseType, setNewExerciseType] = useState('weight')
+  const [savingExercises, setSavingExercises] = useState(false)
   
   // Username state
   const [username, setUsername] = useState(userProfile?.username || '')
@@ -72,6 +87,11 @@ export default function SettingsPage() {
         activityLevel: userProfile.activityLevel || 'light'
       })
       setUsername(userProfile.username || '')
+      setCustomExercises({
+        weight: userProfile.customExercises?.weight || [],
+        bodyweight: userProfile.customExercises?.bodyweight || [],
+        time: userProfile.customExercises?.time || []
+      })
     }
   }, [userProfile])
 
@@ -209,6 +229,51 @@ export default function SettingsPage() {
       })
     } catch (error) {
       console.error('Error updating week start:', error)
+    }
+  }
+
+  const handleAddExercise = async () => {
+    if (!newExercise.trim()) return
+    
+    const exerciseName = newExercise.trim()
+    
+    // Check if already exists
+    if (customExercises[newExerciseType].includes(exerciseName)) {
+      alert('This exercise already exists')
+      return
+    }
+    
+    setSavingExercises(true)
+    try {
+      const updated = {
+        ...customExercises,
+        [newExerciseType]: [...customExercises[newExerciseType], exerciseName]
+      }
+      setCustomExercises(updated)
+      await updateProfile({ customExercises: updated })
+      setNewExercise('')
+    } catch (error) {
+      console.error('Error adding exercise:', error)
+      alert('Failed to add exercise')
+    } finally {
+      setSavingExercises(false)
+    }
+  }
+
+  const handleRemoveExercise = async (type, exerciseName) => {
+    setSavingExercises(true)
+    try {
+      const updated = {
+        ...customExercises,
+        [type]: customExercises[type].filter(e => e !== exerciseName)
+      }
+      setCustomExercises(updated)
+      await updateProfile({ customExercises: updated })
+    } catch (error) {
+      console.error('Error removing exercise:', error)
+      alert('Failed to remove exercise')
+    } finally {
+      setSavingExercises(false)
     }
   }
 
@@ -520,6 +585,140 @@ export default function SettingsPage() {
 
               <p className="text-xs text-iron-500 text-center">
                 This info is used to estimate calories burned. All fields are optional.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Custom Exercises Section */}
+      <div className="space-y-3 mb-6">
+        <h3 className="text-sm font-medium text-iron-400 px-1">Custom Exercises</h3>
+        
+        <div className="card-steel overflow-hidden">
+          <button
+            onClick={() => setShowExercisesSection(!showExercisesSection)}
+            className="w-full p-4 flex items-center gap-4"
+          >
+            <div className="w-10 h-10 rounded-lg bg-flame-500/20 flex items-center justify-center">
+              <Dumbbell className="w-5 h-5 text-flame-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium text-iron-200">Manage Exercises</p>
+              <p className="text-sm text-iron-500">
+                {(customExercises.weight.length + customExercises.bodyweight.length + customExercises.time.length) || 'No'} custom exercises added
+              </p>
+            </div>
+            <ChevronDown className={`w-5 h-5 text-iron-500 transition-transform ${showExercisesSection ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showExercisesSection && (
+            <div className="px-4 pb-4 space-y-4 border-t border-iron-800 pt-4">
+              {/* Add New Exercise */}
+              <div className="space-y-3">
+                <label className="text-sm text-iron-400 block">Add New Exercise</label>
+                <div className="flex gap-2">
+                  <select
+                    value={newExerciseType}
+                    onChange={(e) => setNewExerciseType(e.target.value)}
+                    className="input-field w-32"
+                  >
+                    <option value="weight">Weight</option>
+                    <option value="bodyweight">Bodyweight</option>
+                    <option value="time">Time</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={newExercise}
+                    onChange={(e) => setNewExercise(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddExercise()}
+                    placeholder="Exercise name"
+                    className="input-field flex-1"
+                  />
+                  <button
+                    onClick={handleAddExercise}
+                    disabled={!newExercise.trim() || savingExercises}
+                    className="btn-primary px-4 disabled:opacity-50"
+                  >
+                    {savingExercises ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Weight Exercises */}
+              {customExercises.weight.length > 0 && (
+                <div>
+                  <label className="text-xs text-iron-500 mb-2 block flex items-center gap-2">
+                    <Dumbbell className="w-3 h-3" /> Weight Exercises
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {customExercises.weight.map(ex => (
+                      <div key={ex} className="flex items-center gap-1 bg-iron-800 rounded-lg px-3 py-1.5">
+                        <span className="text-sm text-iron-200">{ex}</span>
+                        <button
+                          onClick={() => handleRemoveExercise('weight', ex)}
+                          className="p-1 text-iron-500 hover:text-red-400 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bodyweight Exercises */}
+              {customExercises.bodyweight.length > 0 && (
+                <div>
+                  <label className="text-xs text-iron-500 mb-2 block flex items-center gap-2">
+                    <User className="w-3 h-3" /> Bodyweight Exercises
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {customExercises.bodyweight.map(ex => (
+                      <div key={ex} className="flex items-center gap-1 bg-iron-800 rounded-lg px-3 py-1.5">
+                        <span className="text-sm text-iron-200">{ex}</span>
+                        <button
+                          onClick={() => handleRemoveExercise('bodyweight', ex)}
+                          className="p-1 text-iron-500 hover:text-red-400 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Time Exercises */}
+              {customExercises.time.length > 0 && (
+                <div>
+                  <label className="text-xs text-iron-500 mb-2 block flex items-center gap-2">
+                    <Timer className="w-3 h-3" /> Time-Based Exercises
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {customExercises.time.map(ex => (
+                      <div key={ex} className="flex items-center gap-1 bg-iron-800 rounded-lg px-3 py-1.5">
+                        <span className="text-sm text-iron-200">{ex}</span>
+                        <button
+                          onClick={() => handleRemoveExercise('time', ex)}
+                          className="p-1 text-iron-500 hover:text-red-400 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {customExercises.weight.length === 0 && customExercises.bodyweight.length === 0 && customExercises.time.length === 0 && (
+                <p className="text-sm text-iron-500 text-center py-4">
+                  No custom exercises added yet. Add your favorites above!
+                </p>
+              )}
+
+              <p className="text-xs text-iron-500 text-center">
+                Custom exercises will appear in autocomplete when creating workouts
               </p>
             </div>
           )}
