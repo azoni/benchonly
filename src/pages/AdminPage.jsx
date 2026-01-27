@@ -160,12 +160,16 @@ export default function AdminPage() {
         currentValue: currentVal,
         startValue: currentVal,
         targetValue: parseInt(goalForm.targetValue),
-        currentWeight: goalForm.metricType === 'weight' ? currentVal : undefined,
-        startWeight: goalForm.metricType === 'weight' ? currentVal : undefined,
-        targetWeight: goalForm.metricType === 'weight' ? parseInt(goalForm.targetValue) : undefined,
         targetDate: goalForm.targetDate,
-        notes: goalForm.notes,
+        notes: goalForm.notes || '',
         status: 'active'
+      }
+      
+      // Only add weight fields for weight-type goals
+      if (goalForm.metricType === 'weight') {
+        goalData.currentWeight = currentVal
+        goalData.startWeight = currentVal
+        goalData.targetWeight = parseInt(goalForm.targetValue)
       }
 
       if (editingGoal) {
