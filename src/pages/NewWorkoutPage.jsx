@@ -215,11 +215,38 @@ export default function NewWorkoutPage() {
   const addSet = (exerciseId) => {
     setWorkout((prev) => ({
       ...prev,
-      exercises: prev.exercises.map((e) =>
-        e.id === exerciseId
-          ? { ...e, sets: [...e.sets, createEmptySet(e.type || 'weight')] }
-          : e
-      ),
+      exercises: prev.exercises.map((e) => {
+        if (e.id !== exerciseId) return e
+        
+        const lastSet = e.sets[e.sets.length - 1]
+        const type = e.type || 'weight'
+        
+        // Create new set with copied prescribed values from last set
+        let newSet = {
+          id: Date.now() + Math.random(),
+          rpe: '',
+          painLevel: 0,
+          completed: false,
+        }
+        
+        if (type === 'time') {
+          newSet = {
+            ...newSet,
+            prescribedTime: lastSet?.prescribedTime || '',
+            actualTime: '',
+          }
+        } else {
+          newSet = {
+            ...newSet,
+            prescribedWeight: lastSet?.prescribedWeight || '',
+            prescribedReps: lastSet?.prescribedReps || '',
+            actualWeight: '',
+            actualReps: '',
+          }
+        }
+        
+        return { ...e, sets: [...e.sets, newSet] }
+      }),
     }));
   };
 

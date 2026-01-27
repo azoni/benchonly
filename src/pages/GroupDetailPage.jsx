@@ -362,11 +362,21 @@ export default function GroupDetailPage() {
         ...prev[memberId],
         exercises: prev[memberId].exercises.map(e => {
           if (e.id !== exerciseId) return e
-          const newSet = e.type === 'time' 
-            ? { time: '' } 
-            : e.type === 'bodyweight' 
-              ? { reps: '' }
-              : { weight: '', reps: '' }
+          
+          const lastSet = e.sets[e.sets.length - 1]
+          let newSet
+          
+          if (e.type === 'time') {
+            newSet = { time: lastSet?.time || '' }
+          } else if (e.type === 'bodyweight') {
+            newSet = { reps: lastSet?.reps || '' }
+          } else {
+            newSet = { 
+              weight: lastSet?.weight || '', 
+              reps: lastSet?.reps || '' 
+            }
+          }
+          
           return { ...e, sets: [...e.sets, newSet] }
         })
       }
