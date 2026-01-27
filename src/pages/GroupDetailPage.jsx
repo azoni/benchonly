@@ -1334,7 +1334,7 @@ export default function GroupDetailPage() {
                               <>
                                 <div className="grid grid-cols-12 gap-2 text-xs text-iron-500 px-1">
                                   <div className="col-span-2">Set</div>
-                                  <div className="col-span-4">Weight (lbs)</div>
+                                  <div className="col-span-4">Weight</div>
                                   <div className="col-span-4">Reps</div>
                                   <div className="col-span-2"></div>
                                 </div>
@@ -1345,11 +1345,10 @@ export default function GroupDetailPage() {
                                     </div>
                                     <div className="col-span-4">
                                       <input
-                                        type="number"
-                                        inputMode="decimal"
+                                        type="text"
                                         value={set.weight || ''}
                                         onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'weight', e.target.value)}
-                                        placeholder="135"
+                                        placeholder="lbs"
                                         className="input-field w-full text-base py-2 px-3"
                                       />
                                     </div>

@@ -428,13 +428,12 @@ export default function GroupWorkoutPage() {
                   ) : (
                     <div className="grid grid-cols-2 gap-3 mb-3">
                       <div>
-                        <label className="block text-xs text-flame-400 mb-1 font-medium">Weight (lbs)</label>
+                        <label className="block text-xs text-flame-400 mb-1 font-medium">Weight</label>
                         <input
-                          type="number"
-                          inputMode="decimal"
+                          type="text"
                           value={set.actualWeight || ''}
                           onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
-                          placeholder={set.prescribedWeight || '—'}
+                          placeholder={set.prescribedWeight || 'lbs'}
                           className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
                         />
                       </div>
