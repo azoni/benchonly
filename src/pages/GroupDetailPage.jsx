@@ -25,6 +25,7 @@ import {
 import { groupService, workoutService, attendanceService, groupWorkoutService, userService, goalService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
 import { getDisplayDate } from '../utils/dateUtils'
+import { normalizeRepRange } from '../utils/workoutUtils'
 
 // Helper to safely parse dates from Firestore
 const safeFormatDate = (date, formatStr = 'MMM d, yyyy') => {
@@ -1308,11 +1309,12 @@ export default function GroupDetailPage() {
                                     </div>
                                     <div className="col-span-8">
                                       <input
-                                        type="number"
+                                        type="text"
                                         inputMode="numeric"
                                         value={set.reps || ''}
                                         onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'reps', e.target.value)}
-                                        placeholder="10"
+                                        onBlur={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'reps', normalizeRepRange(e.target.value))}
+                                        placeholder="e.g. 10 or 8-12"
                                         className="input-field w-full text-base py-2 px-3"
                                       />
                                     </div>
@@ -1354,11 +1356,12 @@ export default function GroupDetailPage() {
                                     </div>
                                     <div className="col-span-4">
                                       <input
-                                        type="number"
+                                        type="text"
                                         inputMode="numeric"
                                         value={set.reps || ''}
                                         onChange={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'reps', e.target.value)}
-                                        placeholder="8"
+                                        onBlur={(e) => updateSetForExercise(activeMemberTab, exercise.id, setIndex, 'reps', normalizeRepRange(e.target.value))}
+                                        placeholder="e.g. 8 or 6-8"
                                         className="input-field w-full text-base py-2 px-3"
                                       />
                                     </div>

@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { workoutService } from '../services/firestore';
 import CardioForm from '../components/CardioForm';
 import { getTodayString, parseLocalDate, toDateString } from '../utils/dateUtils';
+import { normalizeRepRange } from '../utils/workoutUtils';
 
 const RPE_INFO = {
   title: 'Rate of Perceived Exertion (RPE)',
@@ -563,7 +564,7 @@ export default function NewWorkoutPage() {
                                 <div>
                                   <label className="block text-xs text-iron-500 mb-1">Target Reps</label>
                                   <input
-                                    type="number"
+                                    type="text"
                                     inputMode="numeric"
                                     value={set.prescribedReps || ''}
                                     onChange={(e) =>
@@ -571,7 +572,12 @@ export default function NewWorkoutPage() {
                                         prescribedReps: e.target.value,
                                       })
                                     }
-                                    placeholder="reps"
+                                    onBlur={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        prescribedReps: normalizeRepRange(e.target.value),
+                                      })
+                                    }
+                                    placeholder="e.g. 8 or 6-8"
                                     className="w-full input-field text-base py-3 px-4"
                                   />
                                 </div>
@@ -611,7 +617,7 @@ export default function NewWorkoutPage() {
                                 <div>
                                   <label className="block text-xs text-iron-500 mb-1">Target Reps</label>
                                   <input
-                                    type="number"
+                                    type="text"
                                     inputMode="numeric"
                                     value={set.prescribedReps || ''}
                                     onChange={(e) =>
@@ -619,7 +625,12 @@ export default function NewWorkoutPage() {
                                         prescribedReps: e.target.value,
                                       })
                                     }
-                                    placeholder="reps"
+                                    onBlur={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        prescribedReps: normalizeRepRange(e.target.value),
+                                      })
+                                    }
+                                    placeholder="e.g. 8 or 6-8"
                                     className="w-full input-field text-base py-3 px-4"
                                   />
                                 </div>
@@ -745,7 +756,7 @@ export default function NewWorkoutPage() {
                               <>
                                 <div className="col-span-3">
                                   <input
-                                    type="number"
+                                    type="text"
                                     inputMode="numeric"
                                     value={set.prescribedReps || ''}
                                     onChange={(e) =>
@@ -753,7 +764,12 @@ export default function NewWorkoutPage() {
                                         prescribedReps: e.target.value,
                                       })
                                     }
-                                    placeholder="reps"
+                                    onBlur={(e) =>
+                                      updateSet(exercise.id, set.id, {
+                                        prescribedReps: normalizeRepRange(e.target.value),
+                                      })
+                                    }
+                                    placeholder="e.g. 8 or 6-8"
                                     className="w-full input-field text-sm py-2 px-3"
                                   />
                                 </div>
@@ -790,12 +806,17 @@ export default function NewWorkoutPage() {
                                     />
                                     <span className="text-iron-600">×</span>
                                     <input
-                                      type="number"
+                                      type="text"
                                       inputMode="numeric"
                                       value={set.prescribedReps || ''}
                                       onChange={(e) =>
                                         updateSet(exercise.id, set.id, {
                                           prescribedReps: e.target.value,
+                                        })
+                                      }
+                                      onBlur={(e) =>
+                                        updateSet(exercise.id, set.id, {
+                                          prescribedReps: normalizeRepRange(e.target.value),
                                         })
                                       }
                                       placeholder="reps"
