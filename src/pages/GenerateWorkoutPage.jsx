@@ -17,7 +17,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { workoutService, goalService } from '../services/firestore';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db } from '../services/firebase';
 
 export default function GenerateWorkoutPage() {
   const navigate = useNavigate();
