@@ -45,68 +45,90 @@ const STORAGE_KEY_LAYOUT = 'dashboard_layout'
 // Default grid layout for widgets
 // Grid has 2 columns, rowHeight is 50px
 // w: 1 = half width, w: 2 = full width
-// Sizes are calibrated to actual widget content - minH=1 allows very compact sizing
+// Sizes calibrated to actual widget content
 const DEFAULT_LAYOUTS = {
-  profile: { w: 1, h: 2, minH: 1, maxH: 4 },
-  stats: { w: 1, h: 2, minH: 1, maxH: 4 },
-  recentWorkouts: { w: 1, h: 5, minH: 2, maxH: 10 },
-  goals: { w: 1, h: 3, minH: 2, maxH: 8 },
-  calendar: { w: 1, h: 8, minH: 5, maxH: 12 },
-  health: { w: 1, h: 3, minH: 1, maxH: 6 },
-  feed: { w: 1, h: 4, minH: 2, maxH: 8 },
-  calories: { w: 1, h: 2, minH: 1, maxH: 5 },
-  healthChart: { w: 1, h: 4, minH: 2, maxH: 8 },
-  oneRepMax: { w: 1, h: 3, minH: 2, maxH: 8 },
-  quickLinks: { w: 2, h: 3, minH: 2, maxH: 5 },
+  profile: { w: 1, h: 3, minH: 2, maxH: 5 },
+  stats: { w: 1, h: 3, minH: 2, maxH: 5 },
+  recentWorkouts: { w: 1, h: 6, minH: 3, maxH: 10 },
+  goals: { w: 1, h: 4, minH: 2, maxH: 8 },
+  calendar: { w: 1, h: 11, minH: 8, maxH: 14 },
+  health: { w: 1, h: 4, minH: 2, maxH: 6 },
+  feed: { w: 1, h: 5, minH: 3, maxH: 8 },
+  calories: { w: 1, h: 3, minH: 2, maxH: 5 },
+  healthChart: { w: 1, h: 5, minH: 3, maxH: 8 },
+  oneRepMax: { w: 1, h: 4, minH: 3, maxH: 8 },
+  quickLinks: { w: 1, h: 5, minH: 3, maxH: 7 },
 }
 
-// Generate initial layout from widget order
+// Default layout positions for the initial dashboard
+const getDefaultLayout = () => [
+  { i: 'profile', x: 0, y: 0, ...DEFAULT_LAYOUTS.profile },
+  { i: 'quickLinks', x: 1, y: 0, ...DEFAULT_LAYOUTS.quickLinks },
+  { i: 'goals', x: 0, y: 3, ...DEFAULT_LAYOUTS.goals },
+  { i: 'calendar', x: 1, y: 5, ...DEFAULT_LAYOUTS.calendar },
+]
+
+// Generate layout - uses saved layout if available, otherwise generates fresh
 const generateLayout = (enabledWidgets, savedLayout = null) => {
+  // If we have a saved layout, use it (filtering to only enabled widgets)
   if (savedLayout && savedLayout.length > 0) {
-    // Use saved layout but filter to only enabled widgets
     const layoutMap = {}
     savedLayout.forEach(item => { layoutMap[item.i] = item })
     
     const result = []
-    let maxY = 0
+    let col0Y = 0
+    let col1Y = 0
     
+    // First pass: add widgets that exist in saved layout
     enabledWidgets.forEach(widgetId => {
       if (layoutMap[widgetId]) {
         result.push(layoutMap[widgetId])
-        const itemBottom = layoutMap[widgetId].y + layoutMap[widgetId].h
-        if (itemBottom > maxY) maxY = itemBottom
-      } else {
-        // New widget not in saved layout, add at bottom
-        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 3, minH: 1, maxH: 8 }
-        result.push({ 
-          i: widgetId, 
-          x: 0, 
-          y: maxY,
-          ...defaults 
-        })
-        maxY += defaults.h
+        const item = layoutMap[widgetId]
+        if (item.x === 0) col0Y = Math.max(col0Y, item.y + item.h)
+        else col1Y = Math.max(col1Y, item.y + item.h)
+      }
+    })
+    
+    // Second pass: add new widgets not in saved layout
+    enabledWidgets.forEach(widgetId => {
+      if (!layoutMap[widgetId]) {
+        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 8 }
+        if (col0Y <= col1Y) {
+          result.push({ i: widgetId, x: 0, y: col0Y, ...defaults })
+          col0Y += defaults.h
+        } else {
+          result.push({ i: widgetId, x: 1, y: col1Y, ...defaults })
+          col1Y += defaults.h
+        }
       }
     })
     
     return result
   }
   
+  // Check if this is the default widget set - use predefined layout
+  const defaultSet = ['profile', 'quickLinks', 'goals', 'calendar']
+  const isDefaultSet = enabledWidgets.length === defaultSet.length && 
+    defaultSet.every(w => enabledWidgets.includes(w))
+  
+  if (isDefaultSet) {
+    return getDefaultLayout()
+  }
+  
   // Generate fresh layout - pack widgets efficiently
   const layout = []
-  let col0Y = 0 // Track Y position for column 0
-  let col1Y = 0 // Track Y position for column 1
+  let col0Y = 0
+  let col1Y = 0
   
   enabledWidgets.forEach(widgetId => {
-    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 3, minH: 1, maxH: 8 }
+    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 8 }
     
     if (defaults.w === 2) {
-      // Full width - place at the max of both columns
       const y = Math.max(col0Y, col1Y)
       layout.push({ i: widgetId, x: 0, y, ...defaults })
       col0Y = y + defaults.h
       col1Y = y + defaults.h
     } else {
-      // Half width - place in shorter column
       if (col0Y <= col1Y) {
         layout.push({ i: widgetId, x: 0, y: col0Y, ...defaults })
         col0Y += defaults.h
@@ -457,6 +479,34 @@ export default function DashboardPage() {
     }
   }
 
+  // Save config immediately (used when exiting edit mode)
+  const saveConfigNow = useCallback(async () => {
+    // Save to localStorage
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(widgetOrder))
+    localStorage.setItem(STORAGE_KEY + '_enabled', JSON.stringify(enabledWidgets))
+    if (layout) {
+      localStorage.setItem(STORAGE_KEY_LAYOUT, JSON.stringify(layout))
+    }
+    
+    // Save to Firestore
+    if (user && !isGuest) {
+      try {
+        await userService.saveDashboardConfig(user.uid, {
+          widgetOrder,
+          enabledWidgets,
+          layout
+        })
+      } catch (error) {
+        console.error('Error saving dashboard config:', error)
+      }
+    }
+  }, [widgetOrder, enabledWidgets, layout, user, isGuest])
+
+  const finishEditing = async () => {
+    await saveConfigNow()
+    setCustomizeMode(false)
+  }
+
   const resetToDefaults = async () => {
     setWidgetOrder(DEFAULT_WIDGET_ORDER)
     setEnabledWidgets(DEFAULT_WIDGET_ORDER)
@@ -605,7 +655,7 @@ export default function DashboardPage() {
                 Reset
               </button>
               <button
-                onClick={() => setCustomizeMode(false)}
+                onClick={finishEditing}
                 className="flex items-center gap-1 px-4 py-1.5 bg-flame-500 text-white rounded-lg text-sm font-medium"
               >
                 <Check className="w-4 h-4" />
@@ -645,33 +695,35 @@ export default function DashboardPage() {
       )}
 
       {/* Grid Layout */}
-      <div 
-        ref={(node) => {
-          if (node && node.offsetWidth !== containerWidth) {
-            setContainerWidth(node.offsetWidth)
-          }
-        }}
-      >
-        <GridLayout
-          className="layout"
-          layout={generateLayout(visibleWidgets, layout)}
-          cols={2}
-          rowHeight={50}
-          width={containerWidth}
-          margin={[16, 16]}
-          containerPadding={[0, 0]}
-          isDraggable={customizeMode}
-          isResizable={customizeMode}
-          compactType="vertical"
-          preventCollision={false}
-          onLayoutChange={(newLayout) => {
-            if (customizeMode) {
-              setLayout(newLayout)
+      {configLoaded && (
+        <div 
+          ref={(node) => {
+            if (node && node.offsetWidth !== containerWidth) {
+              setContainerWidth(node.offsetWidth)
             }
           }}
-          draggableHandle=".widget-drag-handle"
-          resizeHandles={['se']}
+          className={customizeMode ? 'editing-dashboard' : ''}
         >
+          <GridLayout
+            className="layout"
+            layout={generateLayout(visibleWidgets, layout)}
+            cols={2}
+            rowHeight={50}
+            width={containerWidth}
+            margin={[16, 16]}
+            containerPadding={[0, 0]}
+            isDraggable={customizeMode}
+            isResizable={customizeMode}
+            compactType="vertical"
+            preventCollision={false}
+            onLayoutChange={(newLayout) => {
+              if (customizeMode) {
+                setLayout(newLayout)
+              }
+            }}
+            draggableHandle=".widget-drag-handle"
+            resizeHandles={customizeMode ? ['se'] : []}
+          >
           {visibleWidgets.map((widgetId) => {
             const config = WIDGET_REGISTRY[widgetId]
             if (!config) return null
@@ -706,9 +758,17 @@ export default function DashboardPage() {
           })}
         </GridLayout>
       </div>
+      )}
+      
+      {/* Loading state */}
+      {!configLoaded && (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-2 border-flame-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
 
       {/* Add widget button when not customizing */}
-      {!customizeMode && Object.keys(WIDGET_REGISTRY).filter(id => !enabledWidgets.includes(id) && !WIDGET_REGISTRY[id].isSpecial).length > 0 && (
+      {configLoaded && !customizeMode && Object.keys(WIDGET_REGISTRY).filter(id => !enabledWidgets.includes(id) && !WIDGET_REGISTRY[id].isSpecial).length > 0 && (
         <button
           onClick={() => setCustomizeMode(true)}
           className="mt-4 w-full card-steel p-4 border-2 border-dashed border-iron-700 hover:border-flame-500/50 transition-colors group"

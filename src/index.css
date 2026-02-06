@@ -196,6 +196,8 @@
 .react-grid-item {
   transition: all 200ms ease;
   transition-property: left, top, width, height;
+  overflow: hidden;
+  border-radius: 12px;
 }
 
 .react-grid-item.cssTransforms {
@@ -205,12 +207,16 @@
 .react-grid-item.resizing {
   z-index: 1;
   will-change: width, height;
+  opacity: 0.9;
+  transition: none;
 }
 
 .react-grid-item.react-draggable-dragging {
   transition: none;
   z-index: 3;
   will-change: transform;
+  opacity: 0.9;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
 
 .react-grid-item.dropping {
@@ -226,30 +232,38 @@
   border: 2px dashed rgb(234, 88, 12);
 }
 
+/* Hide resize handles when not in edit mode */
 .react-grid-item > .react-resizable-handle {
-  position: absolute;
-  width: 20px;
-  height: 20px;
+  display: none;
 }
 
-.react-grid-item > .react-resizable-handle::after {
+.editing-dashboard .react-grid-item > .react-resizable-handle {
+  display: block;
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background: rgba(234, 88, 12, 0.3);
+  border-radius: 4px;
+}
+
+.editing-dashboard .react-grid-item > .react-resizable-handle::after {
   content: "";
   position: absolute;
-  right: 4px;
-  bottom: 4px;
+  right: 6px;
+  bottom: 6px;
   width: 8px;
   height: 8px;
-  border-right: 2px solid rgba(255, 255, 255, 0.4);
-  border-bottom: 2px solid rgba(255, 255, 255, 0.4);
+  border-right: 2px solid rgb(234, 88, 12);
+  border-bottom: 2px solid rgb(234, 88, 12);
   border-radius: 0 0 2px 0;
 }
 
-.react-grid-item > .react-resizable-handle.react-resizable-handle-se {
-  bottom: 0;
-  right: 0;
+.editing-dashboard .react-grid-item > .react-resizable-handle.react-resizable-handle-se {
+  bottom: 4px;
+  right: 4px;
   cursor: se-resize;
 }
 
-.react-grid-item:hover > .react-resizable-handle::after {
-  border-color: rgb(234, 88, 12);
+.editing-dashboard .react-grid-item:hover > .react-resizable-handle {
+  background: rgba(234, 88, 12, 0.5);
 }

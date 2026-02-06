@@ -381,19 +381,19 @@ export function QuickLinksWidget() {
   ]
 
   return (
-    <div className="card-steel p-6">
-      <h3 className="font-display text-lg text-iron-100 mb-4">Quick Access</h3>
-      <div className="grid grid-cols-4 gap-3">
+    <div className="card-steel p-4 h-full">
+      <h3 className="font-display text-lg text-iron-100 mb-3">Quick Access</h3>
+      <div className="grid grid-cols-4 gap-2">
         {links.map(({ to, label, icon: Icon, color, bgColor }) => (
           <Link
             key={to}
             to={to}
-            className="flex flex-col items-center p-3 rounded-lg bg-iron-800/50 hover:bg-iron-800 transition-colors"
+            className="flex flex-col items-center p-2 rounded-lg bg-iron-800/50 hover:bg-iron-800 transition-colors"
           >
-            <div className={`w-10 h-10 rounded-lg ${bgColor} flex items-center justify-center mb-2`}>
-              <Icon className={`w-5 h-5 ${color}`} />
+            <div className={`w-9 h-9 rounded-lg ${bgColor} flex items-center justify-center mb-1`}>
+              <Icon className={`w-4 h-4 ${color}`} />
             </div>
-            <span className="text-xs text-iron-400">{label}</span>
+            <span className="text-[10px] text-iron-400 text-center leading-tight">{label}</span>
           </Link>
         ))}
       </div>
@@ -793,7 +793,7 @@ export const WIDGET_REGISTRY = {
     icon: ChevronRight,
     component: QuickLinksWidget,
     defaultEnabled: true,
-    size: 'full'
+    size: 'half'
   },
   addWidget: {
     id: 'addWidget',
@@ -806,7 +806,7 @@ export const WIDGET_REGISTRY = {
   }
 }
 
-export const DEFAULT_WIDGET_ORDER = ['profile', 'stats', 'recentWorkouts', 'goals', 'quickLinks', 'addWidget']
+export const DEFAULT_WIDGET_ORDER = ['profile', 'quickLinks', 'goals', 'calendar']
 
 // ============ ADD WIDGET CARD ============
 export function AddWidgetCard({ onCustomize, availableCount }) {
