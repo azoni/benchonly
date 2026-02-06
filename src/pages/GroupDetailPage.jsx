@@ -1601,7 +1601,7 @@ export default function GroupDetailPage() {
         isOpen={showAIGenerateModal}
         onClose={() => setShowAIGenerateModal(false)}
         group={group}
-        athletes={members.filter(m => !group.admins?.includes(m.uid))}
+        athletes={members}
         coachId={user.uid}
         onSuccess={() => {
           // Refresh workouts list

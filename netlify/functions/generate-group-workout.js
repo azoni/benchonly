@@ -31,22 +31,48 @@ export async function handler(event) {
       workoutDate,
     } = JSON.parse(event.body);
 
+    console.log('Generate group workout request:', { coachId, groupId, athleteIds, prompt, workoutDate });
+
     if (!groupId || !athleteIds?.length) {
       return {
         statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ error: 'Missing groupId or athleteIds' }),
       };
     }
 
-    // Gather context for each athlete
-    const athleteContexts = await Promise.all(
-      athleteIds.map(async (athleteId) => {
-        return await gatherAthleteContext(athleteId);
-      })
-    );
+    // Gather context for each athlete with error handling
+    const athleteContexts = [];
+    for (const athleteId of athleteIds) {
+      try {
+        const ctx = await gatherAthleteContext(athleteId);
+        athleteContexts.push(ctx);
+      } catch (err) {
+        console.error(`Error gathering context for athlete ${athleteId}:`, err);
+        // Add minimal context if we can't get full data
+        athleteContexts.push({
+          id: athleteId,
+          name: 'Unknown',
+          recentWorkouts: [],
+          maxLifts: {},
+          painHistory: {},
+          rpeAverages: {},
+          goals: [],
+        });
+      }
+    }
+
+    if (athleteContexts.length === 0) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Could not gather athlete context' }),
+      };
+    }
 
     // Build combined context for AI
     const combinedContext = buildGroupContext(athleteContexts, prompt);
+    console.log('Combined context length:', combinedContext.length);
 
     const systemPrompt = `You are an expert strength training coach generating workouts for a group of athletes. Each athlete has different strength levels, pain history, and RPE patterns.
 
@@ -59,6 +85,7 @@ PERSONALIZATION RULES:
 - If an athlete has pain history on an exercise, suggest an alternative for ONLY that athlete
 - Consider each athlete's typical RPE - if they usually rate things high, be slightly conservative
 - Keep the same exercise order and structure, just adjust the numbers
+- If no max data exists for an athlete, use conservative weights like "135" for bench or "bodyweight" for pulls
 
 OUTPUT FORMAT (JSON):
 {
@@ -119,23 +146,45 @@ Create a workout that works for all athletes with personalized weights based on 
 
     const responseTime = Date.now() - startTime;
     const usage = completion.usage;
+    console.log('OpenAI response time:', responseTime, 'ms');
 
     const result = JSON.parse(completion.choices[0].message.content);
 
+    // Validate result has expected structure
+    if (!result.athleteWorkouts || Object.keys(result.athleteWorkouts).length === 0) {
+      console.error('AI returned invalid structure:', result);
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'AI returned invalid workout structure' }),
+      };
+    }
+
+    // Parse workout date
+    let parsedDate;
+    if (workoutDate) {
+      // Create date at noon to avoid timezone issues
+      const [year, month, day] = workoutDate.split('-').map(Number);
+      parsedDate = new Date(year, month - 1, day, 12, 0, 0);
+    } else {
+      parsedDate = new Date();
+    }
+
     // Create individual workout documents for each athlete
-    const workoutPromises = Object.entries(result.athleteWorkouts).map(
-      async ([athleteId, athleteWorkout]) => {
+    const createdWorkouts = [];
+    for (const [athleteId, athleteWorkout] of Object.entries(result.athleteWorkouts)) {
+      try {
         const workoutData = {
-          name: result.name,
-          description: result.description,
-          exercises: athleteWorkout.exercises.map((ex, index) => ({
+          name: result.name || 'AI Generated Workout',
+          description: result.description || '',
+          exercises: (athleteWorkout.exercises || []).map((ex, index) => ({
             id: Date.now() + index,
             name: ex.substitution?.replacement || ex.name,
             type: ex.type || 'weight',
-            sets: ex.sets.map((set, setIndex) => ({
+            sets: (ex.sets || []).map((set, setIndex) => ({
               id: Date.now() + index * 100 + setIndex,
-              prescribedWeight: set.prescribedWeight?.toString() || '',
-              prescribedReps: set.prescribedReps?.toString() || '',
+              prescribedWeight: String(set.prescribedWeight || ''),
+              prescribedReps: String(set.prescribedReps || ''),
               actualWeight: '',
               actualReps: '',
               rpe: '',
@@ -146,7 +195,7 @@ Create a workout that works for all athletes with personalized weights based on 
             expanded: true,
           })),
           status: 'scheduled',
-          date: workoutDate ? new Date(workoutDate) : new Date(),
+          date: parsedDate,
           assignedTo: athleteId,
           assignedBy: coachId,
           groupId: groupId,
@@ -156,11 +205,20 @@ Create a workout that works for all athletes with personalized weights based on 
         };
 
         const docRef = await db.collection('groupWorkouts').add(workoutData);
-        return { athleteId, workoutId: docRef.id };
+        createdWorkouts.push({ athleteId, workoutId: docRef.id });
+        console.log(`Created workout ${docRef.id} for athlete ${athleteId}`);
+      } catch (err) {
+        console.error(`Error creating workout for athlete ${athleteId}:`, err);
       }
-    );
+    }
 
-    const createdWorkouts = await Promise.all(workoutPromises);
+    if (createdWorkouts.length === 0) {
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Failed to create any workouts' }),
+      };
+    }
 
     return {
       statusCode: 200,
@@ -192,7 +250,11 @@ Create a workout that works for all athletes with personalized weights based on 
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify({ error: 'Failed to generate group workout', details: error.message }),
+      body: JSON.stringify({ 
+        error: 'Failed to generate group workout', 
+        details: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      }),
     };
   }
 }
@@ -200,31 +262,53 @@ Create a workout that works for all athletes with personalized weights based on 
 async function gatherAthleteContext(athleteId) {
   // Get user profile
   const userDoc = await db.collection('users').doc(athleteId).get();
-  const userData = userDoc.data() || {};
+  const userData = userDoc.exists ? userDoc.data() : {};
 
-  // Get recent workouts
-  const personalWorkouts = await db.collection('workouts')
-    .where('userId', '==', athleteId)
-    .where('status', '==', 'completed')
-    .orderBy('date', 'desc')
-    .limit(10)
-    .get();
+  // Get recent workouts - using simpler queries without compound indexes
+  let allWorkouts = [];
 
-  const groupWorkouts = await db.collection('groupWorkouts')
-    .where('assignedTo', '==', athleteId)
-    .where('status', '==', 'completed')
-    .orderBy('date', 'desc')
-    .limit(10)
-    .get();
+  try {
+    // Personal workouts
+    const personalWorkouts = await db.collection('workouts')
+      .where('userId', '==', athleteId)
+      .limit(20)
+      .get();
 
-  const allWorkouts = [
-    ...personalWorkouts.docs.map(d => ({ id: d.id, ...d.data() })),
-    ...groupWorkouts.docs.map(d => ({ id: d.id, ...d.data() })),
-  ].sort((a, b) => {
-    const dateA = a.date?.toDate?.() || new Date(a.date);
-    const dateB = b.date?.toDate?.() || new Date(b.date);
+    personalWorkouts.docs.forEach(d => {
+      const data = d.data();
+      if (data.status === 'completed') {
+        allWorkouts.push({ id: d.id, ...data });
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching personal workouts:', err.message);
+  }
+
+  try {
+    // Group workouts
+    const groupWorkouts = await db.collection('groupWorkouts')
+      .where('assignedTo', '==', athleteId)
+      .limit(20)
+      .get();
+
+    groupWorkouts.docs.forEach(d => {
+      const data = d.data();
+      if (data.status === 'completed') {
+        allWorkouts.push({ id: d.id, ...data });
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching group workouts:', err.message);
+  }
+
+  // Sort by date (most recent first)
+  allWorkouts.sort((a, b) => {
+    const dateA = a.date?.toDate?.() || (a.date ? new Date(a.date) : new Date(0));
+    const dateB = b.date?.toDate?.() || (b.date ? new Date(b.date) : new Date(0));
     return dateB - dateA;
-  }).slice(0, 10);
+  });
+  
+  allWorkouts = allWorkouts.slice(0, 10);
 
   // Calculate maxes, pain, RPE from workouts
   const maxLifts = {};
@@ -234,6 +318,7 @@ async function gatherAthleteContext(athleteId) {
   allWorkouts.forEach(workout => {
     (workout.exercises || []).forEach(exercise => {
       const name = exercise.name;
+      if (!name) return;
 
       (exercise.sets || []).forEach(set => {
         const weight = parseFloat(set.actualWeight) || parseFloat(set.prescribedWeight) || 0;
@@ -277,12 +362,19 @@ async function gatherAthleteContext(athleteId) {
   });
 
   // Get goals
-  const goalsSnapshot = await db.collection('goals')
-    .where('userId', '==', athleteId)
-    .where('status', '==', 'active')
-    .get();
+  let goals = [];
+  try {
+    const goalsSnapshot = await db.collection('goals')
+      .where('userId', '==', athleteId)
+      .limit(10)
+      .get();
 
-  const goals = goalsSnapshot.docs.map(d => d.data());
+    goals = goalsSnapshot.docs
+      .map(d => d.data())
+      .filter(g => g.status === 'active');
+  } catch (err) {
+    console.error('Error fetching goals:', err.message);
+  }
 
   return {
     id: athleteId,
@@ -302,20 +394,24 @@ function buildGroupContext(athleteContexts, prompt) {
     context += `--- ATHLETE ${index + 1}: ${athlete.name} (ID: ${athlete.id}) ---\n`;
 
     // Max lifts
-    if (Object.keys(athlete.maxLifts).length > 0) {
+    const maxLiftEntries = Object.entries(athlete.maxLifts || {});
+    if (maxLiftEntries.length > 0) {
       context += 'Max Lifts:\n';
-      Object.entries(athlete.maxLifts)
+      maxLiftEntries
         .sort((a, b) => b[1].e1rm - a[1].e1rm)
         .slice(0, 8)
         .forEach(([name, data]) => {
           context += `  ${name}: ${data.e1rm} lbs (${data.weight}x${data.reps})\n`;
         });
+    } else {
+      context += 'Max Lifts: No data available\n';
     }
 
     // Pain history
-    if (Object.keys(athlete.painHistory).length > 0) {
+    const painEntries = Object.entries(athlete.painHistory || {});
+    if (painEntries.length > 0) {
       context += '⚠️ Pain History:\n';
-      Object.entries(athlete.painHistory).forEach(([name, data]) => {
+      painEntries.forEach(([name, data]) => {
         context += `  ${name}: pain ${data.maxPain}/10 (${data.count}x)\n`;
       });
     }
@@ -324,15 +420,19 @@ function buildGroupContext(athleteContexts, prompt) {
     if (athlete.goals?.length > 0) {
       context += 'Goals:\n';
       athlete.goals.forEach(goal => {
-        context += `  ${goal.lift}: ${goal.currentWeight || goal.currentValue} → ${goal.targetWeight || goal.targetValue}\n`;
+        context += `  ${goal.lift}: ${goal.currentWeight || goal.currentValue || 0} → ${goal.targetWeight || goal.targetValue}\n`;
       });
     }
 
     // Recent workout summary
     if (athlete.recentWorkouts?.length > 0) {
       const lastWorkout = athlete.recentWorkouts[0];
-      const date = lastWorkout.date?.toDate?.()?.toISOString().split('T')[0] || lastWorkout.date;
-      context += `Last workout: ${date} - ${lastWorkout.name || 'Workout'}\n`;
+      let dateStr = 'Unknown';
+      try {
+        const workoutDate = lastWorkout.date?.toDate?.() || new Date(lastWorkout.date);
+        dateStr = workoutDate.toISOString().split('T')[0];
+      } catch (e) {}
+      context += `Last workout: ${dateStr} - ${lastWorkout.name || 'Workout'}\n`;
     }
 
     context += '\n';

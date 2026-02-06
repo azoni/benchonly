@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -24,13 +24,18 @@ export default function GenerateGroupWorkoutModal({
 }) {
   const [prompt, setPrompt] = useState('');
   const [workoutDate, setWorkoutDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [selectedAthletes, setSelectedAthletes] = useState(
-    athletes?.map(a => a.id) || []
-  );
+  const [selectedAthletes, setSelectedAthletes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+
+  // Initialize selected athletes when modal opens or athletes change
+  useEffect(() => {
+    if (isOpen && athletes?.length > 0) {
+      setSelectedAthletes(athletes.map(a => a.uid));
+    }
+  }, [isOpen, athletes]);
 
   const handleGenerate = async () => {
     if (selectedAthletes.length === 0) {
@@ -55,7 +60,7 @@ export default function GenerateGroupWorkoutModal({
       });
 
       if (!response.ok) {
-        const errData = await response.json();
+        const errData = await response.json().catch(() => ({}));
         throw new Error(errData.error || 'Failed to generate');
       }
 
@@ -76,11 +81,11 @@ export default function GenerateGroupWorkoutModal({
     onClose();
   };
 
-  const toggleAthlete = (athleteId) => {
+  const toggleAthlete = (athleteUid) => {
     setSelectedAthletes(prev => 
-      prev.includes(athleteId)
-        ? prev.filter(id => id !== athleteId)
-        : [...prev, athleteId]
+      prev.includes(athleteUid)
+        ? prev.filter(uid => uid !== athleteUid)
+        : [...prev, athleteUid]
     );
   };
 
@@ -88,8 +93,17 @@ export default function GenerateGroupWorkoutModal({
     if (selectedAthletes.length === athletes.length) {
       setSelectedAthletes([]);
     } else {
-      setSelectedAthletes(athletes.map(a => a.id));
+      setSelectedAthletes(athletes.map(a => a.uid));
     }
+  };
+
+  // Reset state when modal closes
+  const handleClose = () => {
+    setPrompt('');
+    setResult(null);
+    setError(null);
+    setShowPreview(false);
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -101,7 +115,7 @@ export default function GenerateGroupWorkoutModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
-        onClick={onClose}
+        onClick={handleClose}
       >
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
@@ -113,19 +127,19 @@ export default function GenerateGroupWorkoutModal({
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-iron-800">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-plate bg-flame-500/10 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-flame-500/10 flex items-center justify-center">
                 <Sparkles className="w-5 h-5 text-flame-400" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-iron-100">
                   AI Generate Group Workout
                 </h2>
-                <p className="text-sm text-iron-500">{group.name}</p>
+                <p className="text-sm text-iron-500">{group?.name}</p>
               </div>
             </div>
             <button
-              onClick={onClose}
-              className="p-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-plate transition-colors"
+              onClick={handleClose}
+              className="p-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-xl transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -144,7 +158,7 @@ export default function GenerateGroupWorkoutModal({
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="e.g., 'Same as Monday Heavy but adjust the weights' or 'Upper body focus, moderate intensity, 45 minutes'"
-                    className="input-field min-h-[100px] resize-none"
+                    className="input-field w-full min-h-[100px] resize-none"
                   />
                   <p className="text-xs text-iron-500 mt-1">
                     AI will personalize weights for each athlete based on their max lifts and avoid exercises that caused pain.
@@ -161,7 +175,7 @@ export default function GenerateGroupWorkoutModal({
                     type="date"
                     value={workoutDate}
                     onChange={(e) => setWorkoutDate(e.target.value)}
-                    className="input-field"
+                    className="input-field w-full"
                   />
                 </div>
 
@@ -170,36 +184,43 @@ export default function GenerateGroupWorkoutModal({
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-sm text-iron-400 flex items-center gap-1">
                       <Users className="w-4 h-4" />
-                      Athletes ({selectedAthletes.length}/{athletes.length})
+                      Athletes ({selectedAthletes.length}/{athletes?.length || 0})
                     </label>
                     <button
                       onClick={toggleAll}
                       className="text-xs text-flame-400 hover:text-flame-300"
                     >
-                      {selectedAthletes.length === athletes.length ? 'Deselect All' : 'Select All'}
+                      {selectedAthletes.length === athletes?.length ? 'Deselect All' : 'Select All'}
                     </button>
                   </div>
                   <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                    {athletes.map((athlete) => (
+                    {athletes?.map((athlete) => (
                       <button
-                        key={athlete.id}
-                        onClick={() => toggleAthlete(athlete.id)}
+                        key={athlete.uid}
+                        onClick={() => toggleAthlete(athlete.uid)}
                         className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors
-                          ${selectedAthletes.includes(athlete.id)
+                          ${selectedAthletes.includes(athlete.uid)
                             ? 'border-flame-500 bg-flame-500/10'
                             : 'border-iron-700 bg-iron-800/50 hover:border-iron-600'
                           }`}
                       >
                         <div className={`w-5 h-5 rounded border flex items-center justify-center
-                          ${selectedAthletes.includes(athlete.id)
+                          ${selectedAthletes.includes(athlete.uid)
                             ? 'border-flame-500 bg-flame-500'
                             : 'border-iron-600'
                           }`}
                         >
-                          {selectedAthletes.includes(athlete.id) && (
+                          {selectedAthletes.includes(athlete.uid) && (
                             <Check className="w-3 h-3 text-white" />
                           )}
                         </div>
+                        {athlete.photoURL ? (
+                          <img src={athlete.photoURL} alt="" className="w-6 h-6 rounded-full" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-iron-700 flex items-center justify-center text-xs text-iron-400">
+                            {athlete.displayName?.[0]}
+                          </div>
+                        )}
                         <span className="text-iron-200">{athlete.displayName || athlete.name}</span>
                         {athlete.painFlags > 0 && (
                           <span className="ml-auto text-xs text-amber-400 flex items-center gap-1">
@@ -227,15 +248,15 @@ export default function GenerateGroupWorkoutModal({
                     Workouts generated successfully!
                   </p>
                   <p className="text-sm text-iron-400 mt-1">
-                    Created {result.createdWorkouts?.length} personalized workouts
+                    Created {result?.createdWorkouts?.length || 0} personalized workouts
                   </p>
                 </div>
 
                 {/* Workout summary */}
                 <div className="p-4 bg-iron-800/50 rounded-lg">
-                  <h3 className="font-medium text-iron-100 mb-2">{result.workoutName}</h3>
+                  <h3 className="font-medium text-iron-100 mb-2">{result?.workoutName}</h3>
                   <div className="space-y-1">
-                    {result.baseExercises?.map((ex, i) => (
+                    {result?.baseExercises?.map((ex, i) => (
                       <div key={i} className="flex items-center gap-2 text-sm text-iron-400">
                         <Dumbbell className="w-4 h-4" />
                         <span>{ex.name}</span>
@@ -249,16 +270,10 @@ export default function GenerateGroupWorkoutModal({
 
                 {/* Per-athlete breakdown */}
                 <div>
-                  <button
-                    onClick={() => setShowPreview(prev => !prev)}
-                    className="flex items-center gap-2 text-sm text-iron-400 hover:text-iron-300 mb-2"
-                  >
-                    {showPreview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    View athlete details
-                  </button>
+                  <p className="text-sm text-iron-400 mb-2">Athlete Workouts</p>
                   
                   <div className="space-y-3">
-                    {Object.entries(result.athleteWorkouts || {}).map(([athleteId, workout]) => (
+                    {Object.entries(result?.athleteWorkouts || {}).map(([athleteId, workout]) => (
                       <div key={athleteId} className="p-3 bg-iron-800/30 rounded-lg">
                         <h4 className="font-medium text-iron-200 mb-2">{workout.athleteName}</h4>
                         <div className="space-y-1">
@@ -291,7 +306,7 @@ export default function GenerateGroupWorkoutModal({
                   </div>
                 </div>
 
-                {result.generalNotes && (
+                {result?.generalNotes && (
                   <div className="p-3 bg-iron-800/30 rounded-lg">
                     <p className="text-sm text-iron-400">{result.generalNotes}</p>
                   </div>
@@ -304,7 +319,7 @@ export default function GenerateGroupWorkoutModal({
           <div className="p-4 border-t border-iron-800 flex gap-3">
             {!showPreview ? (
               <>
-                <button onClick={onClose} className="btn-secondary flex-1">
+                <button onClick={handleClose} className="btn-secondary flex-1">
                   Cancel
                 </button>
                 <button
@@ -320,7 +335,7 @@ export default function GenerateGroupWorkoutModal({
                   ) : (
                     <>
                       <Sparkles className="w-5 h-5" />
-                      Generate for {selectedAthletes.length} Athletes
+                      Generate for {selectedAthletes.length} Athlete{selectedAthletes.length !== 1 ? 's' : ''}
                     </>
                   )}
                 </button>
