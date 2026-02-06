@@ -15,7 +15,7 @@ import {
   Calendar as CalendarIcon
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { userService, workoutService, goalService } from '../services/firestore'
+import { userService, workoutService, goalService, groupWorkoutService } from '../services/firestore'
 import { feedService, FEED_TYPES } from '../services/feedService'
 import { toDateString } from '../utils/dateUtils'
 
@@ -90,15 +90,23 @@ export default function ProfilePage() {
 
       setProfile(userData)
 
-      // Load workouts to calculate maxes
-      const workoutsData = await workoutService.getByUser(targetUserId, 500)
-      const completedWorkouts = workoutsData.filter(w => w.status === 'completed')
-      setWorkouts(workoutsData)
+      // Load workouts (personal + group) to calculate stats
+      const [workoutsData, groupWorkoutsData] = await Promise.all([
+        workoutService.getByUser(targetUserId, 500),
+        groupWorkoutService.getByUser(targetUserId)
+      ])
+      
+      const completedPersonal = workoutsData.filter(w => w.status === 'completed')
+      const completedGroup = groupWorkoutsData.filter(w => w.status === 'completed')
+      const allCompletedWorkouts = [...completedPersonal, ...completedGroup]
+      
+      // Store all workouts for calendar (both scheduled and completed)
+      setWorkouts([...workoutsData, ...groupWorkoutsData])
 
       // Calculate maxes from workout history
       const maxes = { bench: 0, squat: 0, deadlift: 0 }
       
-      completedWorkouts.forEach(workout => {
+      allCompletedWorkouts.forEach(workout => {
         if (workout.exercises) {
           workout.exercises.forEach(exercise => {
             const name = exercise.name?.toLowerCase() || ''
@@ -124,7 +132,7 @@ export default function ProfilePage() {
       })
 
       setStats({
-        totalWorkouts: completedWorkouts.length,
+        totalWorkouts: allCompletedWorkouts.length,
         bench: maxes.bench,
         squat: maxes.squat,
         deadlift: maxes.deadlift,

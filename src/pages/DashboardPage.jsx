@@ -12,7 +12,7 @@ import {
   Dumbbell
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { workoutService, goalService, healthService, scheduleService, userService } from '../services/firestore'
+import { workoutService, goalService, healthService, scheduleService, userService, groupWorkoutService } from '../services/firestore'
 import { format, startOfWeek, endOfWeek, subDays } from 'date-fns'
 import OnboardingModal, { useOnboarding } from '../components/OnboardingModal'
 import ProfileSetupModal, { useProfileSetup } from '../components/ProfileSetupModal'
@@ -155,11 +155,19 @@ export default function DashboardPage() {
       }
 
       // Load all data in parallel
-      const [workouts, userGoals, health] = await Promise.all([
+      const [personalWorkouts, groupWorkouts, userGoals, health] = await Promise.all([
         workoutService.getByUser(user.uid, 60),
+        groupWorkoutService.getByUser(user.uid),
         goalService.getByUser(user.uid),
         healthService.getByUser(user.uid, 14).catch(() => []), // Don't fail if health errors
       ])
+      
+      // Merge personal and group workouts, sort by date
+      const workouts = [...personalWorkouts, ...groupWorkouts].sort((a, b) => {
+        const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date)
+        const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date)
+        return dateB - dateA
+      })
       
       setRecentWorkouts(workouts.slice(0, 5))
       setGoals(userGoals.slice(0, 3))
