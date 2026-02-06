@@ -1,257 +1,230 @@
 import OpenAI from 'openai';
+import admin from 'firebase-admin';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+  if (projectId && clientEmail && privateKey) {
+    admin.initializeApp({
+      credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+    });
+  }
+}
+
+const db = admin.apps.length ? admin.firestore() : null;
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function handler(event) {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' },
+      body: '',
+    };
+  }
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
   try {
-    const { 
-      userId, 
-      prompt, 
-      workoutFocus, 
-      intensity, 
-      context 
-    } = JSON.parse(event.body);
+    const { userId, prompt, workoutFocus, intensity, context } = JSON.parse(event.body);
 
-    const { recentWorkouts, goals, maxLifts, painHistory, rpeAverages } = context || {};
+    if (!userId) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'userId required' }),
+      };
+    }
 
-    // Build context summary for AI
-    const contextSummary = buildContextSummary({
-      recentWorkouts,
-      goals,
-      maxLifts,
-      painHistory,
-      rpeAverages,
-      workoutFocus,
-      intensity,
-    });
+    if (!db) {
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'Firebase not configured. Add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY to Netlify.' }),
+      };
+    }
 
-    const systemPrompt = `You are an expert strength training coach creating personalized workout programs. You have access to the athlete's training history, goals, and any pain/injury data.
+    const contextStr = buildContext(context, workoutFocus, intensity);
 
-Your job is to generate a workout that:
-1. Progresses appropriately from their recent training
-2. Respects their pain history (avoid or modify exercises that caused pain)
-3. Targets their RPE sweet spot based on the requested intensity
-4. Works toward their active goals
-5. Follows intelligent programming patterns (not the same workout twice in a row)
+    const systemPrompt = `You are an expert strength coach. Create a personalized workout considering:
+- Max lifts (use 70-85% of e1RM for working sets)
+- Pain history (AVOID or SUBSTITUTE those exercises)
+- RPE patterns (adjust intensity accordingly)
+- Goals (prioritize goal lifts)
+- Recent workout history (build on what they've been doing)
 
-INTENSITY GUIDELINES:
-- Light (RPE 5-6): Recovery/deload, ~60-70% of working weights, higher reps
-- Moderate (RPE 7-8): Standard training, ~75-85% of max, moderate reps
-- Heavy (RPE 8-9): Strength focus, ~85-92% of max, lower reps
-- Max Effort (RPE 9-10): Test day, ~95%+ of max, singles/doubles
-
-PROGRAMMING PATTERNS:
-- If they did heavy compounds recently, consider accessory work or different movement patterns
-- Monday = typically heavy, Thursday = typically volume/hypertrophy (if following standard split)
-- Vary rep ranges: strength (1-5), hypertrophy (6-12), endurance (12+)
-
-PAIN AVOIDANCE:
-- If an exercise has pain history, suggest an alternative that works the same muscles
-- For shoulder pain: avoid overhead pressing, suggest landmine press or floor press
-- For lower back pain: avoid conventional deadlift, suggest trap bar or RDL
-- For knee pain: avoid deep squats, suggest box squats or leg press
-
-Format your response as a JSON object:
+OUTPUT JSON:
 {
-  "name": "Workout name (descriptive, like 'Upper Body Strength' or 'Heavy Bench Day')",
-  "description": "Brief description of the workout focus and goals",
-  "estimatedDuration": 60,
+  "name": "Workout Name",
+  "description": "Brief description",
+  "estimatedDuration": 45,
+  "notes": "Coaching notes explaining workout design and any modifications for pain/RPE.",
   "exercises": [
     {
-      "name": "Exercise name",
-      "type": "weight|bodyweight|time",
-      "sets": [
-        { 
-          "prescribedReps": 8, 
-          "prescribedWeight": 185,
-          "targetRpe": 7
-        }
-      ],
-      "notes": "Form cues or modification notes",
-      "restSeconds": 90
+      "name": "Exercise Name",
+      "type": "weight",
+      "sets": [{ "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 }],
+      "restSeconds": 90,
+      "notes": "Form cues"
     }
-  ],
-  "notes": "General workout notes, warmup suggestions, etc."
-}
+  ]
+}`;
 
-Be specific with weights based on their max lifts. If you don't have data for an exercise, prescribe conservative weights or leave weight blank for them to fill in.`;
-
-    const userPrompt = `Generate a personalized workout with this context:
-
-${contextSummary}
-
-${prompt ? `USER REQUEST: ${prompt}` : ''}
-
-Generate an appropriate ${workoutFocus !== 'auto' ? workoutFocus + ' focused' : ''} workout at ${intensity} intensity.`;
+    const userPrompt = `Create a workout:\n\n${contextStr}\n\n${prompt ? `USER REQUEST: ${prompt}` : ''}`;
 
     const startTime = Date.now();
-
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
       response_format: { type: 'json_object' },
       temperature: 0.7,
-      max_tokens: 2500,
+      max_tokens: 2000,
     });
 
     const responseTime = Date.now() - startTime;
     const usage = completion.usage;
 
-    const tokenLog = {
+    let workout;
+    try {
+      workout = JSON.parse(completion.choices[0].message.content);
+    } catch {
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'AI returned invalid JSON' }),
+      };
+    }
+
+    // Save to Firestore
+    const workoutData = {
+      name: workout.name || 'AI Workout',
+      description: workout.description || '',
+      notes: workout.notes || '',
+      estimatedDuration: workout.estimatedDuration || null,
+      exercises: (workout.exercises || []).map((ex, i) => ({
+        id: Date.now() + i,
+        name: ex.name,
+        type: ex.type || 'weight',
+        sets: (ex.sets || []).map((s, j) => ({
+          id: Date.now() + i * 100 + j,
+          prescribedWeight: String(s.prescribedWeight || ''),
+          prescribedReps: String(s.prescribedReps || ''),
+          targetRpe: s.targetRpe || null,
+          actualWeight: '',
+          actualReps: '',
+          rpe: '',
+          painLevel: 0,
+          completed: false,
+        })),
+        restSeconds: ex.restSeconds || 90,
+        notes: ex.notes || '',
+        expanded: true,
+      })),
+      status: 'scheduled',
+      date: new Date(),
       userId,
-      feature: 'generate-workout',
-      model: 'gpt-4-turbo-preview',
-      promptTokens: usage.prompt_tokens,
-      completionTokens: usage.completion_tokens,
-      totalTokens: usage.total_tokens,
-      responseTimeMs: responseTime,
-      createdAt: new Date().toISOString(),
+      generatedByAI: true,
+      aiModel: 'gpt-4o-mini',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    const workout = JSON.parse(completion.choices[0].message.content);
+    const docRef = await db.collection('workouts').add(workoutData);
+    const cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60;
 
     return {
       statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
-        workout,
-        usage: tokenLog,
+        success: true,
+        workoutId: docRef.id,
+        workout: { ...workout, id: docRef.id },
+        usage: {
+          model: 'gpt-4o-mini',
+          tokens: usage.total_tokens,
+          responseMs: responseTime,
+          cost: `$${cost.toFixed(6)}`,
+        },
       }),
     };
   } catch (error) {
-    console.error('Generate workout error:', error);
+    console.error('Error:', error);
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Failed to generate workout', details: error.message }),
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: error.message }),
     };
   }
 }
 
-function buildContextSummary({ recentWorkouts, goals, maxLifts, painHistory, rpeAverages, workoutFocus, intensity }) {
-  let summary = '';
+function buildContext(ctx, focus, intensity) {
+  let s = '';
+  if (focus && focus !== 'auto') s += `FOCUS: ${focus}\n`;
+  
+  const intMap = { light: 'Light (RPE 5-6)', moderate: 'Moderate (RPE 7-8)', heavy: 'Heavy (RPE 8-9)', max: 'Max (RPE 9-10)' };
+  s += `INTENSITY: ${intMap[intensity] || 'Moderate'}\n\n`;
 
-  // Recent workouts summary
-  if (recentWorkouts?.length > 0) {
-    summary += '=== RECENT TRAINING (last 2 weeks) ===\n';
-    recentWorkouts.slice(0, 7).forEach((workout) => {
-      const exercises = workout.exercises?.map((e) => {
-        const topSet = e.sets?.reduce((best, set) => {
-          const weight = parseFloat(set.actualWeight) || parseFloat(set.prescribedWeight) || 0;
-          return weight > (best?.weight || 0) ? { weight, reps: set.actualReps || set.prescribedReps } : best;
-        }, null);
-        return topSet ? `${e.name} (${topSet.weight}x${topSet.reps})` : e.name;
-      }).join(', ');
-      summary += `${workout.date}: ${workout.name || 'Workout'} - ${exercises || 'no exercises'}\n`;
+  const lifts = Object.entries(ctx?.maxLifts || {});
+  if (lifts.length) {
+    s += 'MAX LIFTS (use 70-85% for working sets):\n';
+    lifts.sort((a, b) => b[1].e1rm - a[1].e1rm).slice(0, 10).forEach(([n, d]) => {
+      s += `  ${n}: ${d.e1rm}lb e1RM (best: ${d.weight}lb x ${d.reps})\n`;
     });
-    summary += '\n';
+    s += '\n';
+  } else {
+    s += 'MAX LIFTS: No data - use conservative weights\n\n';
   }
 
-  // Max lifts
-  if (maxLifts && Object.keys(maxLifts).length > 0) {
-    summary += '=== CURRENT MAXES (estimated 1RM) ===\n';
-    const sortedLifts = Object.entries(maxLifts)
-      .sort((a, b) => b[1].e1rm - a[1].e1rm)
-      .slice(0, 15);
-    sortedLifts.forEach(([name, data]) => {
-      summary += `${name}: ${data.e1rm} lbs (best: ${data.weight}x${data.reps})\n`;
+  const pain = Object.entries(ctx?.painHistory || {});
+  if (pain.length) {
+    s += 'PAIN HISTORY [MUST AVOID OR SUBSTITUTE]:\n';
+    pain.forEach(([n, d]) => { 
+      s += `  ${n}: ${d.maxPain}/10 pain (${d.count}x)\n`; 
     });
-    summary += '\n';
+    s += '\n';
   }
 
-  // Goals
-  if (goals?.length > 0) {
-    summary += '=== ACTIVE GOALS ===\n';
-    goals.forEach((goal) => {
-      const current = goal.currentWeight || goal.currentValue || 0;
-      const target = goal.targetWeight || goal.targetValue || 0;
-      summary += `${goal.lift}: ${current} → ${target} lbs\n`;
+  const rpe = Object.entries(ctx?.rpeAverages || {});
+  if (rpe.length) {
+    const avgAll = rpe.reduce((sum, [_, v]) => sum + v, 0) / rpe.length;
+    s += `RPE PATTERNS (overall avg: ${avgAll.toFixed(1)}):\n`;
+    rpe.slice(0, 6).forEach(([n, v]) => {
+      let note = '';
+      if (v > 8.5) note = ' [rates hard - be conservative]';
+      else if (v < 6) note = ' [can push more]';
+      s += `  ${n}: ${v}${note}\n`;
     });
-    summary += '\n';
+    s += '\n';
   }
 
-  // Pain history - CRITICAL for safety
-  if (painHistory && Object.keys(painHistory).length > 0) {
-    summary += '=== ⚠️ PAIN HISTORY (AVOID OR MODIFY) ===\n';
-    Object.entries(painHistory).forEach(([name, data]) => {
-      summary += `${name}: Pain level ${data.maxPain}/10 logged ${data.count} time(s)\n`;
+  if (ctx?.goals?.length) {
+    s += 'GOALS:\n';
+    ctx.goals.slice(0, 4).forEach(g => {
+      s += `  ${g.lift}: ${g.currentWeight || g.currentValue || '?'} -> ${g.targetWeight || g.targetValue}\n`;
     });
-    summary += 'IMPORTANT: Suggest alternative exercises for anything with pain history.\n\n';
+    s += '\n';
   }
 
-  // RPE patterns
-  if (rpeAverages && Object.keys(rpeAverages).length > 0) {
-    summary += '=== TYPICAL RPE BY EXERCISE ===\n';
-    const sorted = Object.entries(rpeAverages)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10);
-    sorted.forEach(([name, avg]) => {
-      summary += `${name}: avg RPE ${avg}\n`;
+  if (ctx?.recentWorkouts?.length) {
+    s += `RECENT WORKOUTS (${ctx.recentWorkouts.length}):\n`;
+    ctx.recentWorkouts.slice(0, 5).forEach(w => {
+      s += `  ${w.date || 'Recent'}: ${w.name || 'Workout'}\n`;
+      (w.exercises || []).slice(0, 4).forEach(ex => {
+        const sets = ex.sets || [];
+        const wt = sets[0]?.actualWeight || sets[0]?.prescribedWeight;
+        const rp = sets[0]?.actualReps || sets[0]?.prescribedReps;
+        if (wt || rp) s += `    ${ex.name}: ${wt || '?'}lb x ${rp || '?'} (${sets.length} sets)\n`;
+      });
     });
-    summary += '\n';
+    s += '\n';
   }
 
-  // Day pattern analysis
-  if (recentWorkouts?.length >= 3) {
-    const dayPatterns = analyzeDayPatterns(recentWorkouts);
-    if (dayPatterns) {
-      summary += '=== TRAINING PATTERN ===\n';
-      summary += dayPatterns + '\n\n';
-    }
-  }
-
-  return summary;
-}
-
-function analyzeDayPatterns(workouts) {
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const dayData = {};
-
-  workouts.forEach((workout) => {
-    const date = new Date(workout.date);
-    const dayName = dayNames[date.getDay()];
-    
-    if (!dayData[dayName]) {
-      dayData[dayName] = { count: 0, types: [] };
-    }
-    dayData[dayName].count++;
-    
-    // Try to determine workout type
-    const exerciseNames = workout.exercises?.map((e) => e.name.toLowerCase()).join(' ') || '';
-    if (exerciseNames.includes('bench') || exerciseNames.includes('press') || exerciseNames.includes('push')) {
-      dayData[dayName].types.push('push');
-    }
-    if (exerciseNames.includes('row') || exerciseNames.includes('pull') || exerciseNames.includes('curl')) {
-      dayData[dayName].types.push('pull');
-    }
-    if (exerciseNames.includes('squat') || exerciseNames.includes('deadlift') || exerciseNames.includes('leg')) {
-      dayData[dayName].types.push('legs');
-    }
-  });
-
-  const patterns = Object.entries(dayData)
-    .filter(([_, data]) => data.count >= 2)
-    .map(([day, data]) => {
-      const commonType = data.types.length > 0
-        ? [...new Set(data.types)].join('/')
-        : 'mixed';
-      return `${day}: typically ${commonType}`;
-    });
-
-  return patterns.length > 0 ? patterns.join(', ') : null;
+  return s;
 }
