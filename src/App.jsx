@@ -19,6 +19,7 @@ import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import FeedPage from './pages/FeedPage'
 import ProfilePage from './pages/ProfilePage'
+import GenerateWorkoutPage from './pages/GenerateWorkoutPage'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -109,6 +110,7 @@ export default function App() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="workouts" element={<WorkoutsPage />} />
         <Route path="workouts/new" element={<NewWorkoutPage />} />
+        <Route path="workouts/generate" element={<GenerateWorkoutPage />} /> 
         <Route path="workouts/:id" element={<WorkoutDetailPage />} />
         <Route path="workouts/:id/edit" element={<NewWorkoutPage />} />
         <Route path="workouts/group/:id" element={<GroupWorkoutPage />} />
