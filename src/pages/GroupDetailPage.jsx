@@ -20,12 +20,14 @@ import {
   ChevronDown,
   ChevronRight,
   Edit2,
-  Search
+  Search,
+  Sparkles
 } from 'lucide-react'
 import { groupService, workoutService, attendanceService, groupWorkoutService, userService, goalService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
 import { getDisplayDate } from '../utils/dateUtils'
 import { normalizeRepRange } from '../utils/workoutUtils'
+import GenerateGroupWorkoutModal from '../components/GenerateGroupWorkoutModal'
 
 // Helper to safely parse dates from Firestore
 const safeFormatDate = (date, formatStr = 'MMM d, yyyy') => {
@@ -112,6 +114,9 @@ export default function GroupDetailPage() {
   const [expandedWorkout, setExpandedWorkout] = useState(null)
   // Editing mode - stores the workout IDs being edited: { memberId: workoutId }
   const [editingWorkoutIds, setEditingWorkoutIds] = useState(null)
+  
+  // AI Generate modal state
+  const [showAIGenerateModal, setShowAIGenerateModal] = useState(false)
 
   const isAdmin = group?.admins?.includes(user?.uid)
 
@@ -737,13 +742,22 @@ export default function GroupDetailPage() {
       {activeTab === 'workouts' && (
         <div className="space-y-4">
           {isAdmin && (
-            <button
-              onClick={openWorkoutModal}
-              className="btn-primary w-full flex items-center justify-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              Create Workout for Group
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowAIGenerateModal(true)}
+                className="btn-secondary flex-1 flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-5 h-5" />
+                AI Generate
+              </button>
+              <button
+                onClick={openWorkoutModal}
+                className="btn-primary flex-1 flex items-center justify-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Manual
+              </button>
+            </div>
           )}
           
           {groupWorkouts.length === 0 ? (
@@ -1581,6 +1595,19 @@ export default function GroupDetailPage() {
           </div>
         </div>
       )}
+
+      {/* AI Generate Group Workout Modal */}
+      <GenerateGroupWorkoutModal
+        isOpen={showAIGenerateModal}
+        onClose={() => setShowAIGenerateModal(false)}
+        group={group}
+        athletes={members.filter(m => !group.admins?.includes(m.uid))}
+        coachId={user.uid}
+        onSuccess={() => {
+          // Refresh workouts list
+          groupWorkoutService.getByGroup(id).then(setGroupWorkouts)
+        }}
+      />
     </div>
   )
 }
