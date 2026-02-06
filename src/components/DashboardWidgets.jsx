@@ -6,6 +6,7 @@ import {
   Target,
   Dumbbell,
   ChevronRight,
+  ChevronLeft,
   Moon,
   Droplets,
   Beef,
@@ -20,7 +21,7 @@ import {
   Settings,
   User
 } from 'lucide-react'
-import { format, subDays, startOfWeek, endOfWeek } from 'date-fns'
+import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths } from 'date-fns'
 import {
   LineChart,
   Line,
@@ -587,6 +588,125 @@ export function FeedWidget({ feedItems = [], users = {} }) {
   )
 }
 
+// ============ CALENDAR WIDGET ============
+export function CalendarWidget({ workouts = [], goals = [] }) {
+  const [currentMonth, setCurrentMonth] = useState(new Date())
+  
+  const getDaysInMonth = () => {
+    const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 1 })
+    const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 1 })
+    return eachDayOfInterval({ start, end })
+  }
+
+  const toDateString = (date) => {
+    if (!date) return ''
+    const d = date?.toDate ? date.toDate() : new Date(date)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  const getWorkoutsForDay = (date) => {
+    const dateStr = toDateString(date)
+    return workouts.filter(w => {
+      const workoutDate = w.date?.toDate ? w.date.toDate() : new Date(w.date)
+      return toDateString(workoutDate) === dateStr
+    })
+  }
+
+  const getGoalDeadline = (date) => {
+    const dateStr = toDateString(date)
+    return goals.find(g => toDateString(g.targetDate) === dateStr)
+  }
+
+  return (
+    <div className="card-steel p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-display text-iron-100 flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-flame-400" />
+          Calendar
+        </h3>
+        <Link to="/calendar" className="text-xs text-flame-400 hover:text-flame-300">
+          View full →
+        </Link>
+      </div>
+
+      {/* Month navigation */}
+      <div className="flex items-center justify-between mb-3">
+        <button 
+          onClick={() => setCurrentMonth(prev => subMonths(prev, 1))}
+          className="p-1 text-iron-500 hover:text-iron-300"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="text-sm font-medium text-iron-300">
+          {format(currentMonth, 'MMMM yyyy')}
+        </span>
+        <button 
+          onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}
+          className="p-1 text-iron-500 hover:text-iron-300"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 gap-0.5 mb-1">
+        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
+          <div key={i} className="text-center text-[10px] text-iron-500 py-0.5">
+            {day}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-0.5">
+        {getDaysInMonth().map((day, i) => {
+          const dayWorkouts = getWorkoutsForDay(day)
+          const hasWorkout = dayWorkouts.length > 0
+          const hasCompleted = dayWorkouts.some(w => w.status === 'completed')
+          const goalDeadline = getGoalDeadline(day)
+          const isCurrentMonth = isSameMonth(day, currentMonth)
+          const isTodayDate = isToday(day)
+
+          return (
+            <Link
+              to={`/calendar?date=${toDateString(day)}`}
+              key={i}
+              className={`
+                relative aspect-square flex items-center justify-center text-[10px] rounded
+                transition-colors hover:bg-iron-700
+                ${isCurrentMonth ? 'text-iron-300' : 'text-iron-600'}
+                ${isTodayDate ? 'ring-1 ring-flame-500' : ''}
+                ${hasCompleted ? 'bg-green-500/20' : hasWorkout ? 'bg-flame-500/20' : ''}
+              `}
+            >
+              {format(day, 'd')}
+              {goalDeadline && (
+                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-yellow-400" />
+              )}
+            </Link>
+          )
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-3 mt-3 text-[10px] text-iron-500">
+        <div className="flex items-center gap-1">
+          <div className="w-2 h-2 rounded bg-green-500/30" />
+          <span>Done</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-2 h-2 rounded bg-flame-500/30" />
+          <span>Planned</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+          <span>Goal</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ============ WIDGET REGISTRY ============
 export const WIDGET_REGISTRY = {
   stats: {
@@ -611,6 +731,14 @@ export const WIDGET_REGISTRY = {
     icon: Target,
     component: GoalsWidget,
     defaultEnabled: true,
+    size: 'half'
+  },
+  calendar: {
+    id: 'calendar',
+    label: 'Calendar',
+    icon: Calendar,
+    component: CalendarWidget,
+    defaultEnabled: false,
     size: 'half'
   },
   health: {

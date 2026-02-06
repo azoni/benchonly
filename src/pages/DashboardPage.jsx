@@ -29,7 +29,8 @@ import {
   AddWidgetCard,
   CaloriesWidget,
   ProfileWidget,
-  FeedWidget
+  FeedWidget,
+  CalendarWidget
 } from '../components/DashboardWidgets'
 import { calculateTDEE, calculateActivityCalories, calculateStrengthWorkoutCalories } from '../services/calorieService'
 import { getTodayString, toDateString } from '../utils/dateUtils'
@@ -45,7 +46,9 @@ export default function DashboardPage() {
   // Dashboard data
   const [stats, setStats] = useState({ workoutsThisWeek: 0, totalWorkouts: 0, activeGoals: 0 })
   const [recentWorkouts, setRecentWorkouts] = useState([])
+  const [allWorkouts, setAllWorkouts] = useState([])
   const [goals, setGoals] = useState([])
+  const [allGoals, setAllGoals] = useState([])
   const [healthData, setHealthData] = useState([])
   const [calorieData, setCalorieData] = useState({ todayTotal: 0, weekTotal: 0, lifetimeTotal: 0 })
   const [feedItems, setFeedItems] = useState([])
@@ -170,7 +173,9 @@ export default function DashboardPage() {
       })
       
       setRecentWorkouts(workouts.slice(0, 5))
+      setAllWorkouts(workouts)
       setGoals(userGoals.slice(0, 3))
+      setAllGoals(userGoals.filter(g => g.status === 'active'))
       setHealthData(health)
 
       // Calculate stats
@@ -306,6 +311,8 @@ export default function DashboardPage() {
         return <RecentWorkoutsWidget workouts={recentWorkouts} />
       case 'goals':
         return <GoalsWidget goals={goals} />
+      case 'calendar':
+        return <CalendarWidget workouts={allWorkouts} goals={allGoals} />
       case 'health':
         return <HealthWidget healthData={healthData} goals={healthGoals} />
       case 'profile':

@@ -306,6 +306,23 @@ export default function GroupDetailPage() {
     setShowWorkoutModal(true)
   }
 
+  const handleDeleteWorkoutGroup = async (assignments) => {
+    const count = assignments.length
+    if (!confirm(`Delete this workout for ${count} member${count > 1 ? 's' : ''}? This cannot be undone.`)) return
+    
+    try {
+      // Delete all workouts in this group
+      await Promise.all(assignments.map(a => groupWorkoutService.delete(a.id)))
+      
+      // Update local state
+      setGroupWorkouts(prev => prev.filter(w => !assignments.some(a => a.id === w.id)))
+      setExpandedWorkout(null)
+    } catch (error) {
+      console.error('Error deleting workouts:', error)
+      alert('Failed to delete workouts')
+    }
+  }
+
   const addExerciseForMember = (memberId) => {
     setMemberPrescriptions(prev => ({
       ...prev,
@@ -881,13 +898,23 @@ export default function GroupDetailPage() {
                           
                           {/* Admin Edit Button */}
                           {isAdmin && (
-                            <div className="p-4 border-t border-iron-800">
+                            <div className="p-4 border-t border-iron-800 flex gap-2">
                               <button
                                 onClick={() => openEditWorkoutModal(workoutGroup)}
-                                className="btn-secondary w-full flex items-center justify-center gap-2"
+                                className="btn-secondary flex-1 flex items-center justify-center gap-2"
                               >
                                 <Edit2 className="w-4 h-4" />
                                 Edit Workout
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteWorkoutGroup(workoutGroup.assignments)
+                                }}
+                                className="px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors flex items-center gap-2"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Delete
                               </button>
                             </div>
                           )}

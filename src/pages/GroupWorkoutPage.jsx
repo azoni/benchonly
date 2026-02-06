@@ -11,7 +11,8 @@ import {
   Play,
   Calendar,
   MessageSquare,
-  Pencil
+  Pencil,
+  Trash2
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { groupWorkoutService, groupService } from '../services/firestore'
@@ -75,6 +76,23 @@ export default function GroupWorkoutPage() {
       navigate(`/groups/${workout.groupId}`, { state: { activeTab: 'workouts' } })
     } else {
       navigate(-1)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Delete this workout? This cannot be undone.')) return
+    
+    try {
+      await groupWorkoutService.delete(id)
+      // Navigate back to group
+      if (workout?.groupId) {
+        navigate(`/groups/${workout.groupId}`, { state: { activeTab: 'workouts' } })
+      } else {
+        navigate(-1)
+      }
+    } catch (error) {
+      console.error('Error deleting workout:', error)
+      alert('Failed to delete workout')
     }
   }
 
@@ -206,6 +224,15 @@ export default function GroupWorkoutPage() {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2">
+              {isAdmin && (
+                <button 
+                  onClick={handleDelete}
+                  className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                  title="Delete workout"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
               <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-sm font-medium">Group</span>
               {isCompleted ? (
                 <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">Completed</span>
