@@ -106,6 +106,21 @@ export const userService = {
       u.email?.toLowerCase().includes(term) ||
       u.username?.toLowerCase().includes(term)
     );
+  },
+
+  async getDashboardConfig(userId) {
+    const docSnap = await getDoc(doc(db, 'users', userId));
+    if (docSnap.exists()) {
+      return docSnap.data().dashboardConfig || null;
+    }
+    return null;
+  },
+
+  async saveDashboardConfig(userId, config) {
+    await updateDoc(doc(db, 'users', userId), {
+      dashboardConfig: config,
+      updatedAt: serverTimestamp()
+    });
   }
 };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import GridLayout from 'react-grid-layout'
@@ -42,54 +42,82 @@ import { feedService } from '../services/feedService'
 const STORAGE_KEY = 'dashboard_widgets'
 const STORAGE_KEY_LAYOUT = 'dashboard_layout'
 
-// Default grid layout for widgets (x, y are grid units, w=1 is half width, w=2 is full width)
-// Grid has 2 columns total
+// Default grid layout for widgets
+// Grid has 2 columns, rowHeight is 50px
+// w: 1 = half width, w: 2 = full width
+// Sizes are calibrated to actual widget content - minH=1 allows very compact sizing
 const DEFAULT_LAYOUTS = {
-  profile: { w: 1, h: 2, minH: 2, maxH: 3 },
-  stats: { w: 1, h: 2, minH: 2, maxH: 3 },
-  recentWorkouts: { w: 1, h: 4, minH: 3, maxH: 6 },
-  goals: { w: 1, h: 3, minH: 2, maxH: 5 },
-  calendar: { w: 1, h: 6, minH: 5, maxH: 8 },
-  health: { w: 1, h: 3, minH: 2, maxH: 4 },
-  feed: { w: 1, h: 4, minH: 3, maxH: 6 },
-  calories: { w: 1, h: 3, minH: 2, maxH: 4 },
-  healthChart: { w: 1, h: 4, minH: 3, maxH: 6 },
-  oneRepMax: { w: 1, h: 4, minH: 3, maxH: 6 },
-  quickLinks: { w: 2, h: 3, minH: 2, maxH: 4 },
+  profile: { w: 1, h: 2, minH: 1, maxH: 4 },
+  stats: { w: 1, h: 2, minH: 1, maxH: 4 },
+  recentWorkouts: { w: 1, h: 5, minH: 2, maxH: 10 },
+  goals: { w: 1, h: 3, minH: 2, maxH: 8 },
+  calendar: { w: 1, h: 8, minH: 5, maxH: 12 },
+  health: { w: 1, h: 3, minH: 1, maxH: 6 },
+  feed: { w: 1, h: 4, minH: 2, maxH: 8 },
+  calories: { w: 1, h: 2, minH: 1, maxH: 5 },
+  healthChart: { w: 1, h: 4, minH: 2, maxH: 8 },
+  oneRepMax: { w: 1, h: 3, minH: 2, maxH: 8 },
+  quickLinks: { w: 2, h: 3, minH: 2, maxH: 5 },
 }
 
 // Generate initial layout from widget order
 const generateLayout = (enabledWidgets, savedLayout = null) => {
-  if (savedLayout) {
-    // Filter to only include enabled widgets and add any missing ones
+  if (savedLayout && savedLayout.length > 0) {
+    // Use saved layout but filter to only enabled widgets
     const layoutMap = {}
     savedLayout.forEach(item => { layoutMap[item.i] = item })
     
-    let x = 0, y = 0
-    return enabledWidgets.filter(id => id !== 'addWidget').map(widgetId => {
+    const result = []
+    let maxY = 0
+    
+    enabledWidgets.forEach(widgetId => {
       if (layoutMap[widgetId]) {
-        return layoutMap[widgetId]
+        result.push(layoutMap[widgetId])
+        const itemBottom = layoutMap[widgetId].y + layoutMap[widgetId].h
+        if (itemBottom > maxY) maxY = itemBottom
+      } else {
+        // New widget not in saved layout, add at bottom
+        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 3, minH: 1, maxH: 8 }
+        result.push({ 
+          i: widgetId, 
+          x: 0, 
+          y: maxY,
+          ...defaults 
+        })
+        maxY += defaults.h
       }
-      // New widget, add to end
-      const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 3 }
-      const item = { i: widgetId, x: x, y: 999, ...defaults }
-      x = (x + defaults.w) % 2
-      return item
     })
+    
+    return result
   }
   
-  // Generate fresh layout
-  let x = 0, y = 0
-  return enabledWidgets.filter(id => id !== 'addWidget').map(widgetId => {
-    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 3 }
-    const item = { i: widgetId, x, y, ...defaults }
-    x += defaults.w
-    if (x >= 2) {
-      x = 0
-      y += defaults.h
+  // Generate fresh layout - pack widgets efficiently
+  const layout = []
+  let col0Y = 0 // Track Y position for column 0
+  let col1Y = 0 // Track Y position for column 1
+  
+  enabledWidgets.forEach(widgetId => {
+    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 3, minH: 1, maxH: 8 }
+    
+    if (defaults.w === 2) {
+      // Full width - place at the max of both columns
+      const y = Math.max(col0Y, col1Y)
+      layout.push({ i: widgetId, x: 0, y, ...defaults })
+      col0Y = y + defaults.h
+      col1Y = y + defaults.h
+    } else {
+      // Half width - place in shorter column
+      if (col0Y <= col1Y) {
+        layout.push({ i: widgetId, x: 0, y: col0Y, ...defaults })
+        col0Y += defaults.h
+      } else {
+        layout.push({ i: widgetId, x: 1, y: col1Y, ...defaults })
+        col1Y += defaults.h
+      }
     }
-    return item
   })
+  
+  return layout
 }
 
 export default function DashboardPage() {
@@ -176,21 +204,78 @@ export default function DashboardPage() {
   
   // Container width for grid
   const [containerWidth, setContainerWidth] = useState(800)
+  const [configLoaded, setConfigLoaded] = useState(false)
+  const saveTimeoutRef = useRef(null)
 
-  // Save widget config when changed
+  // Load dashboard config from Firestore or localStorage
   useEffect(() => {
+    const loadConfig = async () => {
+      if (user && !isGuest) {
+        try {
+          const config = await userService.getDashboardConfig(user.uid)
+          if (config) {
+            // Cloud config exists - use it
+            if (config.widgetOrder) setWidgetOrder(config.widgetOrder)
+            if (config.enabledWidgets) setEnabledWidgets(config.enabledWidgets)
+            if (config.layout) setLayout(config.layout)
+          } else {
+            // No cloud config - sync current localStorage config to cloud
+            const localOrder = localStorage.getItem(STORAGE_KEY)
+            const localEnabled = localStorage.getItem(STORAGE_KEY + '_enabled')
+            const localLayout = localStorage.getItem(STORAGE_KEY_LAYOUT)
+            
+            if (localOrder || localEnabled || localLayout) {
+              await userService.saveDashboardConfig(user.uid, {
+                widgetOrder: localOrder ? JSON.parse(localOrder) : DEFAULT_WIDGET_ORDER,
+                enabledWidgets: localEnabled ? JSON.parse(localEnabled) : DEFAULT_WIDGET_ORDER,
+                layout: localLayout ? JSON.parse(localLayout) : null
+              })
+            }
+          }
+        } catch (error) {
+          console.error('Error loading dashboard config:', error)
+        }
+      }
+      setConfigLoaded(true)
+    }
+    loadConfig()
+  }, [user, isGuest])
+
+  // Save dashboard config to Firestore (debounced) and localStorage
+  useEffect(() => {
+    if (!configLoaded) return // Don't save before initial load
+    
+    // Always save to localStorage as backup
     localStorage.setItem(STORAGE_KEY, JSON.stringify(widgetOrder))
-  }, [widgetOrder])
-
-  useEffect(() => {
     localStorage.setItem(STORAGE_KEY + '_enabled', JSON.stringify(enabledWidgets))
-  }, [enabledWidgets])
-  
-  useEffect(() => {
     if (layout) {
       localStorage.setItem(STORAGE_KEY_LAYOUT, JSON.stringify(layout))
     }
-  }, [layout])
+    
+    // Save to Firestore for logged-in users (debounced)
+    if (user && !isGuest) {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          await userService.saveDashboardConfig(user.uid, {
+            widgetOrder,
+            enabledWidgets,
+            layout
+          })
+        } catch (error) {
+          console.error('Error saving dashboard config:', error)
+        }
+      }, 1000) // Debounce 1 second
+    }
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [widgetOrder, enabledWidgets, layout, user, isGuest, configLoaded])
 
   useEffect(() => {
     if (user) {
@@ -372,11 +457,26 @@ export default function DashboardPage() {
     }
   }
 
-  const resetToDefaults = () => {
+  const resetToDefaults = async () => {
     setWidgetOrder(DEFAULT_WIDGET_ORDER)
     setEnabledWidgets(DEFAULT_WIDGET_ORDER)
     setLayout(null)
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(STORAGE_KEY + '_enabled')
     localStorage.removeItem(STORAGE_KEY_LAYOUT)
+    
+    // Also clear from Firestore immediately
+    if (user && !isGuest) {
+      try {
+        await userService.saveDashboardConfig(user.uid, {
+          widgetOrder: DEFAULT_WIDGET_ORDER,
+          enabledWidgets: DEFAULT_WIDGET_ORDER,
+          layout: null
+        })
+      } catch (error) {
+        console.error('Error resetting dashboard config:', error)
+      }
+    }
   }
 
   const getGreeting = () => {
@@ -556,12 +656,14 @@ export default function DashboardPage() {
           className="layout"
           layout={generateLayout(visibleWidgets, layout)}
           cols={2}
-          rowHeight={60}
+          rowHeight={50}
           width={containerWidth}
           margin={[16, 16]}
           containerPadding={[0, 0]}
           isDraggable={customizeMode}
           isResizable={customizeMode}
+          compactType="vertical"
+          preventCollision={false}
           onLayoutChange={(newLayout) => {
             if (customizeMode) {
               setLayout(newLayout)
@@ -575,9 +677,9 @@ export default function DashboardPage() {
             if (!config) return null
 
             return (
-              <div key={widgetId} className="relative">
+              <div key={widgetId} className="h-full">
                 {customizeMode && (
-                  <div className="widget-drag-handle absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-2 bg-iron-900/90 border-b border-iron-700 rounded-t-xl cursor-move">
+                  <div className="widget-drag-handle absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-2 bg-iron-900/95 border-b border-iron-700 rounded-t-xl cursor-move">
                     <div className="flex items-center gap-2">
                       <GripVertical className="w-4 h-4 text-iron-400" />
                       <span className="text-xs font-medium text-iron-300">{config.label}</span>
@@ -591,8 +693,10 @@ export default function DashboardPage() {
                     </button>
                   </div>
                 )}
-                <div className={customizeMode ? 'pt-8 h-full overflow-hidden' : 'h-full'}>
-                  {renderWidget(widgetId)}
+                <div className={`h-full ${customizeMode ? 'pt-9' : ''}`}>
+                  <div className="h-full overflow-auto">
+                    {renderWidget(widgetId)}
+                  </div>
                 </div>
                 {customizeMode && (
                   <div className="absolute inset-0 border-2 border-dashed border-flame-500/30 rounded-xl pointer-events-none" />
