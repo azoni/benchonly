@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isToday, isSameDay } from 'date-fns'
 import { 
   ArrowLeft,
@@ -77,6 +77,7 @@ const BODYWEIGHT_EXERCISES = [
 export default function GroupDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, userProfile } = useAuth()
   const [group, setGroup] = useState(null)
   const [members, setMembers] = useState([])
@@ -92,7 +93,7 @@ export default function GroupDetailPage() {
   const allTimeExercises = [...TIME_EXERCISES, ...(customExercises.time || [])]
   const [showMenu, setShowMenu] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
-  const [activeTab, setActiveTab] = useState('members')
+  const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'members')
   
   // Invite modal state
   const [showInviteModal, setShowInviteModal] = useState(false)

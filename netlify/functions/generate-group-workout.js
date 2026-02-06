@@ -31,7 +31,7 @@ export async function handler(event) {
   }
 
   try {
-    const { coachId, groupId, athletes, prompt, workoutDate } = JSON.parse(event.body);
+    const { coachId, groupId, athletes, prompt, workoutDate, model, settings } = JSON.parse(event.body);
 
     if (!groupId || !athletes?.length) {
       return {
@@ -49,7 +49,16 @@ export async function handler(event) {
       };
     }
 
-    const contextStr = buildGroupContext(athletes);
+    // Get admin settings (or use defaults)
+    const adminSettings = settings || {
+      painThresholdMin: 3,
+      painThresholdCount: 2,
+    };
+
+    // Model selection - gpt-4o for premium, gpt-4o-mini for standard
+    const selectedModel = model === 'premium' ? 'gpt-4o' : 'gpt-4o-mini';
+
+    const contextStr = buildGroupContext(athletes, adminSettings);
 
     const systemPrompt = `You are an expert strength coach creating personalized workouts for a group.
 
@@ -58,9 +67,10 @@ RULES:
 2. Personalize WEIGHTS based on each athlete's max lifts (70-85% of e1RM)
 3. AVOID or SUBSTITUTE exercises where athlete has pain history
 4. Consider RPE patterns when setting weights
-5. Include coaching notes explaining your reasoning
+5. Factor in cardio/activity load when considering recovery
+6. Include coaching notes explaining your reasoning
 
-OUTPUT JSON:
+OUTPUT JSON only, no markdown:
 {
   "name": "Workout Name",
   "description": "Brief description",
@@ -91,7 +101,7 @@ For pain substitutions: "substitution": { "reason": "shoulder pain", "original":
 
     const startTime = Date.now();
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: selectedModel,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -162,7 +172,7 @@ For pain substitutions: "substitution": { "reason": "shoulder pain", "original":
         assignedBy: coachId,
         groupId,
         generatedByAI: true,
-        aiModel: 'gpt-4o-mini',
+        aiModel: selectedModel,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
@@ -170,7 +180,30 @@ For pain substitutions: "substitution": { "reason": "shoulder pain", "original":
       createdWorkouts.push({ athleteId, workoutId: docRef.id, athleteName: aw.athleteName });
     }
 
-    const cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60;
+    // Cost calculation - GPT-4o: $2.50/$10.00 per 1M, GPT-4o-mini: $0.15/$0.60 per 1M
+    const isPremium = selectedModel === 'gpt-4o';
+    const inputRate = isPremium ? 2.50 : 0.15;
+    const outputRate = isPremium ? 10.00 : 0.60;
+    const cost = (usage.prompt_tokens / 1e6) * inputRate + (usage.completion_tokens / 1e6) * outputRate;
+
+    // Log AI usage for tracking
+    try {
+      await db.collection('tokenUsage').add({
+        userId: coachId,
+        feature: 'generate-group-workout',
+        model: selectedModel,
+        promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens,
+        totalTokens: usage.total_tokens,
+        estimatedCost: cost,
+        responseTimeMs: responseTime,
+        athleteCount: athletes.length,
+        groupId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.error('Failed to log usage:', e);
+    }
 
     return {
       statusCode: 200,
@@ -183,7 +216,7 @@ For pain substitutions: "substitution": { "reason": "shoulder pain", "original":
         athleteWorkouts: result.athleteWorkouts,
         createdWorkouts,
         usage: {
-          model: 'gpt-4o-mini',
+          model: selectedModel,
           tokens: usage.total_tokens,
           responseMs: responseTime,
           cost: `$${cost.toFixed(6)}`,
@@ -200,7 +233,10 @@ For pain substitutions: "substitution": { "reason": "shoulder pain", "original":
   }
 }
 
-function buildGroupContext(athletes) {
+function buildGroupContext(athletes, settings = {}) {
+  const painThresholdMin = settings.painThresholdMin || 3;
+  const painThresholdCount = settings.painThresholdCount || 2;
+  
   let s = `GROUP: ${athletes.length} athletes\n\n`;
 
   athletes.forEach((a) => {
@@ -217,10 +253,12 @@ function buildGroupContext(athletes) {
       s += 'Maxes: No data (use conservative weights)\n';
     }
 
+    // Only flag pain if significant based on settings
     const pain = Object.entries(a.painHistory || {});
-    if (pain.length) {
+    const significantPain = pain.filter(([_, d]) => d.maxPain >= painThresholdMin || d.count >= painThresholdCount);
+    if (significantPain.length) {
       s += 'PAIN [MUST SUBSTITUTE]: ';
-      s += pain.map(([n, d]) => `${n} (${d.maxPain}/10, ${d.count}x)`).join(', ');
+      s += significantPain.map(([n, d]) => `${n} (${d.maxPain}/10, ${d.count}x)`).join(', ');
       s += '\n';
     }
 
@@ -237,6 +275,16 @@ function buildGroupContext(athletes) {
       s += 'Goals: ' + a.goals.slice(0, 3).map(g => 
         `${g.lift}: ${g.currentWeight || g.currentValue || '?'}->${g.targetWeight || g.targetValue}`
       ).join(', ') + '\n';
+    }
+
+    // Include cardio/activity data
+    if (a.cardioHistory?.length) {
+      s += 'Recent Cardio: ';
+      s += a.cardioHistory.slice(0, 3).map(c => {
+        const duration = c.duration ? `${c.duration}min` : '';
+        return `${c.activityType || c.name || 'Activity'} ${duration}`;
+      }).join(', ');
+      s += '\n';
     }
 
     if (a.recentWorkouts?.length) {

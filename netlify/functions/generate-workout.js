@@ -31,7 +31,7 @@ export async function handler(event) {
   }
 
   try {
-    const { userId, prompt, workoutFocus, intensity, context } = JSON.parse(event.body);
+    const { userId, prompt, workoutFocus, intensity, context, model, settings } = JSON.parse(event.body);
 
     if (!userId) {
       return {
@@ -49,7 +49,16 @@ export async function handler(event) {
       };
     }
 
-    const contextStr = buildContext(context, workoutFocus, intensity);
+    // Get admin settings (or use defaults)
+    const adminSettings = settings || {
+      painThresholdMin: 3,
+      painThresholdCount: 2,
+    };
+
+    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings);
+
+    // Select model based on request
+    const selectedModel = model === 'premium' ? 'gpt-4o' : 'gpt-4o-mini';
 
     const systemPrompt = `You are an expert strength coach. Create a personalized workout considering:
 - Max lifts (use 70-85% of e1RM for working sets)
@@ -57,8 +66,9 @@ export async function handler(event) {
 - RPE patterns (adjust intensity accordingly)
 - Goals (prioritize goal lifts)
 - Recent workout history (build on what they've been doing)
+- Cardio/activity load (factor in overall training stress)
 
-OUTPUT JSON:
+OUTPUT JSON only, no markdown:
 {
   "name": "Workout Name",
   "description": "Brief description",
@@ -79,7 +89,7 @@ OUTPUT JSON:
 
     const startTime = Date.now();
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: selectedModel,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -101,6 +111,16 @@ OUTPUT JSON:
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         body: JSON.stringify({ error: 'AI returned invalid JSON' }),
       };
+    }
+
+    // Calculate cost based on model
+    let cost;
+    if (selectedModel === 'gpt-4o') {
+      // GPT-4o: $2.50/$10.00 per 1M tokens
+      cost = (usage.prompt_tokens / 1e6) * 2.50 + (usage.completion_tokens / 1e6) * 10.00;
+    } else {
+      // GPT-4o-mini: $0.15/$0.60 per 1M tokens
+      cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60;
     }
 
     // Save to Firestore
@@ -132,12 +152,28 @@ OUTPUT JSON:
       date: new Date(),
       userId,
       generatedByAI: true,
-      aiModel: 'gpt-4o-mini',
+      aiModel: selectedModel,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
     const docRef = await db.collection('workouts').add(workoutData);
-    const cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60;
+
+    // Log AI usage for tracking
+    try {
+      await db.collection('tokenUsage').add({
+        userId,
+        feature: 'generate-workout',
+        model: selectedModel,
+        promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens,
+        totalTokens: usage.total_tokens,
+        estimatedCost: cost,
+        responseTimeMs: responseTime,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.error('Failed to log usage:', e);
+    }
 
     return {
       statusCode: 200,
@@ -147,7 +183,7 @@ OUTPUT JSON:
         workoutId: docRef.id,
         workout: { ...workout, id: docRef.id },
         usage: {
-          model: 'gpt-4o-mini',
+          model: selectedModel,
           tokens: usage.total_tokens,
           responseMs: responseTime,
           cost: `$${cost.toFixed(6)}`,
@@ -164,7 +200,10 @@ OUTPUT JSON:
   }
 }
 
-function buildContext(ctx, focus, intensity) {
+function buildContext(ctx, focus, intensity, settings = {}) {
+  const painThresholdMin = settings.painThresholdMin || 3;
+  const painThresholdCount = settings.painThresholdCount || 2;
+  
   let s = '';
   if (focus && focus !== 'auto') s += `FOCUS: ${focus}\n`;
   
@@ -182,7 +221,10 @@ function buildContext(ctx, focus, intensity) {
     s += 'MAX LIFTS: No data - use conservative weights\n\n';
   }
 
-  const pain = Object.entries(ctx?.painHistory || {});
+  // Filter pain to only significant patterns
+  const pain = Object.entries(ctx?.painHistory || {}).filter(([_, d]) => 
+    d.maxPain >= painThresholdMin || d.count >= painThresholdCount
+  );
   if (pain.length) {
     s += 'PAIN HISTORY [MUST AVOID OR SUBSTITUTE]:\n';
     pain.forEach(([n, d]) => { 
@@ -208,6 +250,17 @@ function buildContext(ctx, focus, intensity) {
     s += 'GOALS:\n';
     ctx.goals.slice(0, 4).forEach(g => {
       s += `  ${g.lift}: ${g.currentWeight || g.currentValue || '?'} -> ${g.targetWeight || g.targetValue}\n`;
+    });
+    s += '\n';
+  }
+
+  // Include cardio/activity data
+  if (ctx?.cardioHistory?.length) {
+    s += 'RECENT CARDIO/ACTIVITY (factor into recovery):\n';
+    ctx.cardioHistory.slice(0, 5).forEach(c => {
+      const duration = c.duration ? `${c.duration}min` : '';
+      const distance = c.distance ? `${c.distance}mi` : '';
+      s += `  ${c.date || 'Recent'}: ${c.activityType || c.name || 'Activity'} ${duration} ${distance}\n`;
     });
     s += '\n';
   }

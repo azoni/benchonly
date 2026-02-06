@@ -15,10 +15,12 @@ import {
   Edit2,
   Trash2,
   Activity,
-  TrendingUp
+  TrendingUp,
+  Settings,
+  Save
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit, doc, setDoc, getDoc } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import { workoutService, goalService } from '../services/firestore'
 import { analyticsService } from '../services/analyticsService'
@@ -39,8 +41,17 @@ export default function AdminPage() {
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [showWorkoutModal, setShowWorkoutModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
-  const [activeTab, setActiveTab] = useState('users') // 'users', 'activity', or 'usage'
+  const [activeTab, setActiveTab] = useState('users') // 'users', 'activity', 'usage', or 'settings'
   const [activityData, setActivityData] = useState(null)
+  
+  // AI Settings state
+  const [aiSettings, setAiSettings] = useState({
+    painThresholdMin: 3,
+    painThresholdCount: 2,
+    defaultModel: 'standard',
+  })
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settingsSaved, setSettingsSaved] = useState(false)
   const [activityLoading, setActivityLoading] = useState(false)
   const [usageData, setUsageData] = useState([])
   const [usageLoading, setUsageLoading] = useState(false)
@@ -128,7 +139,46 @@ export default function AdminPage() {
     if (activeTab === 'usage' && usageData.length === 0) {
       loadUsageData()
     }
+    if (activeTab === 'settings') {
+      loadSettings()
+    }
   }, [activeTab])
+
+  const loadSettings = async () => {
+    try {
+      const settingsDoc = await getDoc(doc(db, 'settings', 'ai'))
+      if (settingsDoc.exists()) {
+        setAiSettings({
+          painThresholdMin: settingsDoc.data().painThresholdMin ?? 3,
+          painThresholdCount: settingsDoc.data().painThresholdCount ?? 2,
+          defaultModel: settingsDoc.data().defaultModel ?? 'standard',
+        })
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error)
+    }
+  }
+
+  const saveSettings = async () => {
+    setSettingsSaving(true)
+    setSettingsSaved(false)
+    try {
+      await setDoc(doc(db, 'settings', 'ai'), {
+        painThresholdMin: aiSettings.painThresholdMin,
+        painThresholdCount: aiSettings.painThresholdCount,
+        defaultModel: aiSettings.defaultModel,
+        updatedAt: new Date(),
+        updatedBy: user.uid,
+      })
+      setSettingsSaved(true)
+      setTimeout(() => setSettingsSaved(false), 2000)
+    } catch (error) {
+      console.error('Error saving settings:', error)
+      alert('Failed to save settings')
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
 
   const loadUsageData = async () => {
     setUsageLoading(true)
@@ -255,7 +305,7 @@ export default function AdminPage() {
       </div>
 
       {/* Tabs */}
-      <div className="card-steel p-1 mb-6 flex gap-1 max-w-xs">
+      <div className="card-steel p-1 mb-6 flex gap-1 max-w-md">
         <button
           onClick={() => setActiveTab('users')}
           className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
@@ -288,6 +338,17 @@ export default function AdminPage() {
         >
           <TrendingUp className="w-4 h-4" />
           Usage
+        </button>
+        <button
+          onClick={() => setActiveTab('settings')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
+            activeTab === 'settings'
+              ? 'bg-flame-500 text-white'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          Settings
         </button>
       </div>
 
@@ -827,6 +888,139 @@ export default function AdminPage() {
           )}
         </div>
       ) : null}
+
+      {/* Settings Tab */}
+      {activeTab === 'settings' && (
+        <div className="max-w-2xl">
+          <div className="card-steel p-6">
+            <h2 className="text-xl font-display text-iron-100 mb-6 flex items-center gap-2">
+              <Settings className="w-5 h-5 text-flame-500" />
+              AI Workout Generation Settings
+            </h2>
+
+            <div className="space-y-6">
+              {/* Pain Threshold Settings */}
+              <div className="p-4 bg-iron-800/50 rounded-xl">
+                <h3 className="font-medium text-iron-200 mb-4">Pain Detection Thresholds</h3>
+                <p className="text-sm text-iron-500 mb-4">
+                  Control when exercises are flagged for substitution based on pain history.
+                </p>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-iron-400 mb-2">
+                      Minimum Pain Level (1-10)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={aiSettings.painThresholdMin}
+                      onChange={(e) => setAiSettings(prev => ({
+                        ...prev,
+                        painThresholdMin: parseInt(e.target.value) || 3
+                      }))}
+                      className="input-field w-full"
+                    />
+                    <p className="text-xs text-iron-600 mt-1">
+                      Pain level that triggers a flag (currently: ≥{aiSettings.painThresholdMin})
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-iron-400 mb-2">
+                      Recurring Pain Count
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={aiSettings.painThresholdCount}
+                      onChange={(e) => setAiSettings(prev => ({
+                        ...prev,
+                        painThresholdCount: parseInt(e.target.value) || 2
+                      }))}
+                      className="input-field w-full"
+                    />
+                    <p className="text-xs text-iron-600 mt-1">
+                      Times pain reported to trigger flag (currently: ≥{aiSettings.painThresholdCount})
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 p-3 bg-iron-900/50 rounded-lg">
+                  <p className="text-sm text-iron-400">
+                    <strong className="text-iron-300">Current Logic:</strong> Flag exercise if pain ≥{aiSettings.painThresholdMin}/10 OR reported ≥{aiSettings.painThresholdCount} times
+                  </p>
+                </div>
+              </div>
+
+              {/* Default Model Setting */}
+              <div className="p-4 bg-iron-800/50 rounded-xl">
+                <h3 className="font-medium text-iron-200 mb-4">Default AI Model</h3>
+                <p className="text-sm text-iron-500 mb-4">
+                  Set the default model for AI workout generation.
+                </p>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAiSettings(prev => ({ ...prev, defaultModel: 'standard' }))}
+                    className={`flex-1 py-3 px-4 rounded-lg text-sm font-medium transition-colors ${
+                      aiSettings.defaultModel === 'standard'
+                        ? 'bg-flame-500 text-white'
+                        : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                    }`}
+                  >
+                    <div className="font-semibold">Standard</div>
+                    <div className="text-xs opacity-75 mt-1">GPT-4o-mini (~$0.001/workout)</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiSettings(prev => ({ ...prev, defaultModel: 'premium' }))}
+                    className={`flex-1 py-3 px-4 rounded-lg text-sm font-medium transition-colors ${
+                      aiSettings.defaultModel === 'premium'
+                        ? 'bg-purple-500 text-white'
+                        : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                    }`}
+                  >
+                    <div className="font-semibold">Premium</div>
+                    <div className="text-xs opacity-75 mt-1">GPT-4o (~$0.02/workout)</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="flex items-center justify-between pt-4 border-t border-iron-800">
+                <div className="text-sm text-iron-500">
+                  {settingsSaved && (
+                    <span className="text-green-400 flex items-center gap-1">
+                      <Check className="w-4 h-4" /> Settings saved!
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={saveSettings}
+                  disabled={settingsSaving}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  {settingsSaving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Settings
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Goal Modal */}
       {showGoalModal && (

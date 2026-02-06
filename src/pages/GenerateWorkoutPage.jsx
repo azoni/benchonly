@@ -42,6 +42,7 @@ export default function GenerateWorkoutPage() {
     maxLifts: {},
     painHistory: {},
     rpeAverages: {},
+    cardioHistory: [],
   });
   
   // Generation options
@@ -197,12 +198,37 @@ export default function GenerateWorkoutPage() {
         goals.length > 0 ? `${goals.length} active goals` : 'No active goals'
       );
       
+      // Step 7: Load cardio/activity history
+      addAnalysisStep('Loading cardio history', 'loading');
+      let cardioHistory = [];
+      try {
+        const cardioSnap = await getDocs(query(
+          collection(db, 'workouts'),
+          where('userId', '==', user.uid),
+          where('workoutType', '==', 'cardio'),
+          limit(20)
+        ));
+        cardioHistory = cardioSnap.docs.map(d => {
+          const data = d.data();
+          return {
+            ...data,
+            date: data.date?.toDate?.()?.toISOString?.().split('T')[0] || data.date,
+          };
+        });
+        cardioHistory.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+        cardioHistory = cardioHistory.slice(0, 10);
+      } catch (e) { console.error(e); }
+      addAnalysisStep('Loading cardio history', 'complete',
+        cardioHistory.length > 0 ? `${cardioHistory.length} recent cardio sessions` : 'No cardio data'
+      );
+      
       setUserContext({
         recentWorkouts: allWorkouts,
         goals,
         maxLifts,
         painHistory,
         rpeAverages,
+        cardioHistory,
       });
       
       setCurrentStep(null);
@@ -234,6 +260,7 @@ export default function GenerateWorkoutPage() {
             maxLifts: userContext.maxLifts,
             painHistory: userContext.painHistory,
             rpeAverages: userContext.rpeAverages,
+            cardioHistory: userContext.cardioHistory,
           },
         }),
       });

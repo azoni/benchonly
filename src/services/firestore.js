@@ -316,80 +316,98 @@ export const workoutService = {
       
       if (goalsSnapshot.empty) return;
       
+      // Helper to normalize exercise names for comparison
+      const normalizeName = (name) => {
+        if (!name) return '';
+        return name.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '') // Remove special chars
+          .replace(/\s+/g, ' ')        // Normalize spaces
+          .trim();
+      };
+      
       // Process each exercise in the workout
       for (const exercise of workoutData.exercises || []) {
-        const exerciseName = exercise.name?.toLowerCase().trim();
+        const exerciseName = normalizeName(exercise.name);
+        if (!exerciseName) continue;
         
         for (const goalDoc of goalsSnapshot.docs) {
           const goal = goalDoc.data();
-          const goalLift = goal.lift?.toLowerCase().trim();
+          const goalLift = normalizeName(goal.lift);
           const metricType = goal.metricType || 'weight';
           
-          // Check if exercise matches goal lift
-          if (exerciseName && goalLift && (exerciseName.includes(goalLift) || goalLift?.includes(exerciseName))) {
-            let bestValue = 0;
+          // Check if exercise matches goal lift (flexible matching)
+          // Match if: exact match, one contains the other, or key words match
+          const isMatch = exerciseName === goalLift ||
+            exerciseName.includes(goalLift) || 
+            goalLift.includes(exerciseName) ||
+            // Also match "bench press" to "bench" etc.
+            (goalLift.split(' ').some(word => word.length > 3 && exerciseName.includes(word)));
+          
+          if (!isMatch) continue;
+          
+          let bestValue = 0;
+          
+          // Find the best value from a SINGLE set based on metric type
+          for (const set of exercise.sets || []) {
+            let setValue = 0;
             
-            // Find the best value from a SINGLE set based on metric type
-            for (const set of exercise.sets || []) {
-              let setValue = 0;
+            if (metricType === 'weight') {
+              setValue = parseFloat(set.actualWeight) || parseFloat(set.prescribedWeight) || 0;
+            } else if (metricType === 'reps') {
+              // For reps goals, find the MAX reps in a single set (not total)
+              setValue = parseInt(set.actualReps) || parseInt(set.prescribedReps) || 0;
+            } else if (metricType === 'time') {
+              // For time goals, find the max time in a single set
+              setValue = parseFloat(set.actualTime) || parseFloat(set.prescribedTime) || 0;
+            }
+            
+            if (setValue > bestValue) {
+              bestValue = setValue;
+            }
+          }
+          
+          if (bestValue > 0) {
+            const targetValue = parseFloat(goal.targetValue) || parseFloat(goal.targetWeight) || 0;
+            const startValue = parseFloat(goal.startValue) || parseFloat(goal.startWeight) || 0;
+            const currentValue = parseFloat(goal.currentValue) || parseFloat(goal.currentWeight) || startValue;
+            
+            // Calculate progress percentage
+            let progress = 0;
+            if (targetValue > startValue) {
+              progress = Math.min(100, Math.round(((bestValue - startValue) / (targetValue - startValue)) * 100));
+            }
+            
+            // Update goal with new progress and current value
+            const updates = {
+              currentValue: bestValue,
+              currentWeight: metricType === 'weight' ? bestValue : goal.currentWeight, // Keep for backward compat
+              progress: Math.max(goal.progress || 0, progress), // Only increase, never decrease
+              updatedAt: serverTimestamp(),
+            };
+            
+            // Mark as completed if target reached
+            if (bestValue >= targetValue && targetValue > 0) {
+              updates.status = 'completed';
+              updates.completedAt = serverTimestamp();
               
-              if (metricType === 'weight') {
-                setValue = parseFloat(set.actualWeight) || parseFloat(set.prescribedWeight) || 0;
-              } else if (metricType === 'reps') {
-                // For reps goals, find the MAX reps in a single set (not total)
-                setValue = parseInt(set.actualReps) || parseInt(set.prescribedReps) || 0;
-              } else if (metricType === 'time') {
-                // For time goals, find the max time in a single set
-                setValue = parseFloat(set.actualTime) || parseFloat(set.prescribedTime) || 0;
-              }
-              
-              if (setValue > bestValue) {
-                bestValue = setValue;
+              // Create feed item for goal completion
+              try {
+                await feedService.createFeedItem(userId, FEED_TYPES.GOAL_COMPLETED, {
+                  goalId: goalDoc.id,
+                  lift: goal.lift,
+                  targetValue: targetValue,
+                  metricType,
+                  unit: metricType === 'weight' ? 'lbs' : metricType === 'reps' ? 'reps' : 'sec'
+                });
+              } catch (e) {
+                console.error('Feed error:', e);
               }
             }
             
-            if (bestValue > 0) {
-              const targetValue = parseFloat(goal.targetValue) || parseFloat(goal.targetWeight) || 0;
-              const startValue = parseFloat(goal.startValue) || parseFloat(goal.startWeight) || parseFloat(goal.currentValue) || parseFloat(goal.currentWeight) || 0;
-              const currentValue = parseFloat(goal.currentValue) || parseFloat(goal.currentWeight) || startValue;
-              
-              // Calculate progress percentage
-              let progress = 0;
-              if (targetValue > startValue) {
-                progress = Math.min(100, Math.round(((bestValue - startValue) / (targetValue - startValue)) * 100));
-              }
-              
-              // Update goal with new progress and current value
-              const updates = {
-                currentValue: bestValue,
-                currentWeight: metricType === 'weight' ? bestValue : goal.currentWeight, // Keep for backward compat
-                progress: Math.max(goal.progress || 0, progress), // Only increase, never decrease
-                updatedAt: serverTimestamp(),
-              };
-              
-              // Mark as completed if target reached
-              if (bestValue >= targetValue) {
-                updates.status = 'completed';
-                updates.completedAt = serverTimestamp();
-                
-                // Create feed item for goal completion
-                try {
-                  await feedService.createFeedItem(userId, FEED_TYPES.GOAL_COMPLETED, {
-                    goalId: goalDoc.id,
-                    lift: goal.lift,
-                    targetValue: targetValue,
-                    metricType,
-                    unit: metricType === 'weight' ? 'lbs' : metricType === 'reps' ? 'reps' : 'sec'
-                  });
-                } catch (e) {
-                  console.error('Feed error:', e);
-                }
-              }
-              
-              // Only update if this is a new PR or first entry
-              if (bestValue >= currentValue) {
-                await updateDoc(doc(db, 'goals', goalDoc.id), updates);
-              }
+            // Only update if this is a new PR or first entry
+            if (bestValue >= currentValue) {
+              await updateDoc(doc(db, 'goals', goalDoc.id), updates);
+              console.log(`Goal updated: ${goal.lift} - new value: ${bestValue}`);
             }
           }
         }

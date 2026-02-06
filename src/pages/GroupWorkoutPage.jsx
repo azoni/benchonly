@@ -67,8 +67,12 @@ export default function GroupWorkoutPage() {
   }
 
   const handleBack = () => {
+    // If we came from a group page, go back there with the right tab
     if (location.state?.from) {
-      navigate(location.state.from)
+      navigate(location.state.from, { state: location.state?.backState })
+    } else if (workout?.groupId) {
+      // Default: go to group workouts tab
+      navigate(`/groups/${workout.groupId}`, { state: { activeTab: 'workouts' } })
     } else {
       navigate(-1)
     }
