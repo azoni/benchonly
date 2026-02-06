@@ -106,10 +106,10 @@ export default function LoginPage() {
   ];
 
   const stats = [
-    { value: '500+', label: 'Exercises' },
-    { value: '50+', label: 'Cardio Activities' },
-    { value: '10+', label: 'Widgets' },
-    { value: 'AI', label: 'Powered' },
+    { value: '45+', label: 'Cardio Activities' },
+    { value: '10+', label: 'Dashboard Widgets' },
+    { value: 'AI', label: 'Workout Generator' },
+    { value: 'Free', label: 'To Use' },
   ];
 
   const currentFeature = showcaseFeatures[activeFeature];
@@ -584,42 +584,6 @@ export default function LoginPage() {
                       activeFeature === i ? 'w-8 bg-flame-500' : 'w-2 bg-iron-700 hover:bg-iron-600'
                     }`}
                   />
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Social Proof */}
-          <section className="px-6 py-16 bg-iron-900/50 border-y border-iron-800/50">
-            <div className="max-w-7xl mx-auto">
-              <div className="text-center mb-10">
-                <p className="text-iron-400">Trusted by lifters who take their training seriously</p>
-              </div>
-              <div className="grid sm:grid-cols-3 gap-6">
-                {[
-                  { quote: "Finally an app that understands progressive overload. The AI suggestions are actually useful.", name: "Alex M.", lift: "Bench: 275 lbs" },
-                  { quote: "Group workouts feature is a game changer for coaching my clients. Saves me hours every week.", name: "Coach Jordan", lift: "CPT, CSCS" },
-                  { quote: "Been tracking for 6 months. Love seeing my progress charts and the customizable dashboard.", name: "Sam K.", lift: "Deadlift: 405 lbs" },
-                ].map((t, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.1 }}
-                    className="card-steel p-6 rounded-xl"
-                  >
-                    <p className="text-iron-300 mb-4 leading-relaxed">"{t.quote}"</p>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-iron-700 flex items-center justify-center text-iron-400 font-medium">
-                        {t.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div>
-                        <p className="text-iron-200 font-medium">{t.name}</p>
-                        <p className="text-xs text-iron-500">{t.lift}</p>
-                      </div>
-                    </div>
-                  </motion.div>
                 ))}
               </div>
             </div>
