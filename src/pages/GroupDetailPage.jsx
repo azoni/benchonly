@@ -120,6 +120,7 @@ export default function GroupDetailPage() {
   const [showAIGenerateModal, setShowAIGenerateModal] = useState(false)
 
   const isAdmin = group?.admins?.includes(user?.uid)
+  const isAppAdmin = user?.email === 'charltonuw@gmail.com'
 
   useEffect(() => {
     async function fetchData() {
@@ -1631,6 +1632,7 @@ export default function GroupDetailPage() {
         group={group}
         athletes={members}
         coachId={user.uid}
+        isAdmin={isAppAdmin}
         onSuccess={() => {
           // Refresh workouts list
           groupWorkoutService.getByGroup(id).then(setGroupWorkouts)

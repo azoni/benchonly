@@ -12,6 +12,8 @@ import {
   Brain,
   ChevronDown,
   ChevronUp,
+  Lock,
+  Zap,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
@@ -23,8 +25,8 @@ export default function GenerateGroupWorkoutModal({
   group, 
   athletes,
   coachId,
-  onSuccess,
   isAdmin = false,
+  onSuccess 
 }) {
   const [prompt, setPrompt] = useState('');
   const [workoutDate, setWorkoutDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -34,39 +36,11 @@ export default function GenerateGroupWorkoutModal({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [useAdvancedModel, setUseAdvancedModel] = useState(false);
-  const [workoutFocus, setWorkoutFocus] = useState(['auto']);
+  const [model, setModel] = useState('standard');
   
   // Analysis tracking
   const [analysisSteps, setAnalysisSteps] = useState([]);
   const [expandedAthlete, setExpandedAthlete] = useState(null);
-  
-  const focusOptions = [
-    { value: 'auto', label: 'Auto', exclusive: true },
-    { value: 'push', label: 'Push' },
-    { value: 'pull', label: 'Pull' },
-    { value: 'legs', label: 'Legs' },
-    { value: 'upper', label: 'Upper' },
-    { value: 'lower', label: 'Lower' },
-    { value: 'full', label: 'Full Body', exclusive: true },
-    { value: 'bench', label: 'Bench' },
-    { value: 'arms', label: 'Arms' },
-    { value: 'core', label: 'Core' },
-  ];
-  
-  const toggleFocus = (value) => {
-    const option = focusOptions.find(o => o.value === value);
-    if (option?.exclusive) {
-      setWorkoutFocus([value]);
-    } else if (workoutFocus.includes('auto') || workoutFocus.includes('full')) {
-      setWorkoutFocus([value]);
-    } else if (workoutFocus.includes(value)) {
-      const newFocus = workoutFocus.filter(v => v !== value);
-      setWorkoutFocus(newFocus.length > 0 ? newFocus : ['auto']);
-    } else {
-      setWorkoutFocus([...workoutFocus, value]);
-    }
-  };
 
   useEffect(() => {
     if (isOpen && athletes?.length > 0) {
@@ -101,14 +75,11 @@ export default function GenerateGroupWorkoutModal({
         contexts[athlete.uid] = { ...ctx, name };
         
         const liftCount = Object.keys(ctx.maxLifts || {}).length;
-        // Only count significant pain (recurring OR severe)
-        const significantPain = Object.entries(ctx.painHistory || {}).filter(
-          ([_, d]) => d.count >= 2 || d.maxPain >= 3
-        );
+        const painCount = Object.keys(ctx.painHistory || {}).length;
         let detail = `${liftCount} lifts`;
-        if (significantPain.length > 0) detail += `, ${significantPain.length} pain flags`;
+        if (painCount > 0) detail += `, ${painCount} pain flags`;
         
-        addStep(`Analyzing ${name}`, significantPain.length > 0 ? 'warning' : 'complete', detail);
+        addStep(`Analyzing ${name}`, painCount > 0 ? 'warning' : 'complete', detail);
       } catch (err) {
         console.error(`Error for ${athlete.uid}:`, err);
         contexts[athlete.uid] = {
@@ -233,34 +204,18 @@ export default function GenerateGroupWorkoutModal({
 
     setLoading(true);
     setError(null);
-    
-    addStep('Preparing athlete data', 'loading');
-    await new Promise(r => setTimeout(r, 200));
+    addStep('Generating workouts', 'loading');
 
     try {
-      // Filter pain to only significant patterns for each athlete
-      const athleteData = selectedAthletes.map(uid => {
-        const ctx = athleteContexts[uid];
-        const significantPain = {};
-        Object.entries(ctx?.painHistory || {}).forEach(([name, data]) => {
-          if (data.count >= 2 || data.maxPain >= 3) {
-            significantPain[name] = data;
-          }
-        });
-        
-        return {
-          id: uid,
-          name: ctx?.name || 'Unknown',
-          maxLifts: ctx?.maxLifts || {},
-          painHistory: significantPain,
-          rpeAverages: ctx?.rpeAverages || {},
-          goals: ctx?.goals || [],
-          recentWorkouts: ctx?.recentWorkouts || [],
-        };
-      });
-      
-      addStep('Preparing athlete data', 'complete', `${athleteData.length} athletes`);
-      addStep('Sending to AI', 'loading', useAdvancedModel ? 'Using GPT-4o' : 'Using GPT-4o-mini');
+      const athleteData = selectedAthletes.map(uid => ({
+        id: uid,
+        name: athleteContexts[uid]?.name || 'Unknown',
+        maxLifts: athleteContexts[uid]?.maxLifts || {},
+        painHistory: athleteContexts[uid]?.painHistory || {},
+        rpeAverages: athleteContexts[uid]?.rpeAverages || {},
+        goals: athleteContexts[uid]?.goals || [],
+        recentWorkouts: athleteContexts[uid]?.recentWorkouts || [],
+      }));
 
       const response = await fetch('/.netlify/functions/generate-group-workout', {
         method: 'POST',
@@ -269,14 +224,11 @@ export default function GenerateGroupWorkoutModal({
           coachId,
           groupId: group.id,
           athletes: athleteData,
-          prompt: workoutFocus.includes('auto') ? prompt : `Focus: ${workoutFocus.join(' + ')}. ${prompt}`,
+          prompt,
           workoutDate,
-          model: useAdvancedModel ? 'premium' : 'standard',
+          model: isAdmin ? model : 'standard', // Only admin can use premium
         }),
       });
-
-      addStep('Sending to AI', 'complete');
-      addStep('Creating workouts', 'loading');
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
@@ -285,14 +237,14 @@ export default function GenerateGroupWorkoutModal({
 
       const data = await response.json();
       setResult(data);
-      addStep('Creating workouts', 'complete', 
-        `${data.createdWorkouts?.length} workouts saved`
+      addStep('Generating workouts', 'complete', 
+        `${data.createdWorkouts?.length} workouts created in ${data.usage?.responseMs}ms`
       );
 
     } catch (err) {
       console.error('Error:', err);
       setError(err.message);
-      addStep('Creating workouts', 'error', err.message);
+      addStep('Generating workouts', 'error', err.message);
     } finally {
       setLoading(false);
     }
@@ -317,11 +269,10 @@ export default function GenerateGroupWorkoutModal({
 
   const handleClose = () => {
     setPrompt('');
+    setModel('standard');
     setResult(null);
     setError(null);
     setAnalysisSteps([]);
-    setUseAdvancedModel(false);
-    setWorkoutFocus(['auto']);
     onClose();
   };
 
@@ -411,9 +362,7 @@ export default function GenerateGroupWorkoutModal({
                         </div>
                         <div className="bg-iron-800/50 rounded-lg py-2">
                           <p className="text-lg font-semibold text-iron-100">
-                            {Object.values(athleteContexts).filter(c => 
-                              Object.entries(c.painHistory || {}).some(([_, d]) => d.count >= 2 || d.maxPain >= 3)
-                            ).length}
+                            {Object.values(athleteContexts).filter(c => Object.keys(c.painHistory || {}).length > 0).length}
                           </p>
                           <p className="text-xs text-iron-500">With Pain</p>
                         </div>
@@ -433,31 +382,9 @@ export default function GenerateGroupWorkoutModal({
                       <textarea
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="e.g., 'Heavy bench day' or 'Moderate intensity, extra volume'"
+                        placeholder="e.g., 'Heavy bench day' or 'Upper body, moderate intensity'"
                         className="input-field w-full min-h-[80px] resize-none"
                       />
-                    </div>
-                    
-                    {/* Focus - Multi-select */}
-                    <div>
-                      <label className="block text-sm text-iron-400 mb-2">
-                        Focus <span className="text-iron-600">(select multiple)</span>
-                      </label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {focusOptions.map(opt => (
-                          <button
-                            key={opt.value}
-                            onClick={() => toggleFocus(opt.value)}
-                            className={`px-2 py-1 text-xs rounded-md border transition-colors
-                              ${workoutFocus.includes(opt.value)
-                                ? 'border-flame-500 bg-flame-500/10 text-flame-400'
-                                : 'border-iron-700 text-iron-400 hover:border-iron-600'
-                              }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
                     </div>
 
                     {/* Date */}
@@ -472,27 +399,45 @@ export default function GenerateGroupWorkoutModal({
                         className="input-field w-full"
                       />
                     </div>
-                    
-                    {/* Admin: Model Selection */}
-                    {isAdmin && (
-                      <div className="p-3 bg-iron-800/50 rounded-lg border border-iron-700">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-iron-200">Advanced Model</p>
-                            <p className="text-xs text-iron-500">GPT-4o for better results</p>
+
+                    {/* Model Selection */}
+                    <div>
+                      <label className="block text-sm text-iron-400 mb-2">AI Model</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setModel('standard')}
+                          className={`px-3 py-2 text-sm rounded-lg border transition-colors text-left
+                            ${model === 'standard'
+                              ? 'border-flame-500 bg-flame-500/10 text-flame-400'
+                              : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                            }`}
+                        >
+                          <div className="font-medium flex items-center gap-2">
+                            <Zap className="w-3 h-3" />
+                            Standard
                           </div>
-                          <button
-                            onClick={() => setUseAdvancedModel(!useAdvancedModel)}
-                            className={`w-12 h-6 rounded-full transition-colors relative
-                              ${useAdvancedModel ? 'bg-flame-500' : 'bg-iron-700'}`}
-                          >
-                            <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform
-                              ${useAdvancedModel ? 'translate-x-7' : 'translate-x-1'}`} 
-                            />
-                          </button>
-                        </div>
+                          <div className="text-xs text-iron-500">Fast</div>
+                        </button>
+                        <button
+                          onClick={() => isAdmin && setModel('premium')}
+                          disabled={!isAdmin}
+                          className={`px-3 py-2 text-sm rounded-lg border transition-colors text-left
+                            ${model === 'premium'
+                              ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                              : !isAdmin 
+                                ? 'border-iron-800 text-iron-600 cursor-not-allowed opacity-60'
+                                : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                            }`}
+                        >
+                          <div className="font-medium flex items-center gap-2">
+                            <Sparkles className="w-3 h-3" />
+                            Premium
+                            {!isAdmin && <Lock className="w-3 h-3" />}
+                          </div>
+                          <div className="text-xs text-iron-500">Higher quality</div>
+                        </button>
                       </div>
-                    )}
+                    </div>
 
                     {/* Athletes */}
                     <div>
@@ -508,11 +453,7 @@ export default function GenerateGroupWorkoutModal({
                       <div className="space-y-2 max-h-[200px] overflow-y-auto">
                         {athletes?.map((a) => {
                           const ctx = athleteContexts[a.uid];
-                          // Only count significant pain
-                          const significantPain = Object.entries(ctx?.painHistory || {}).filter(
-                            ([_, d]) => d.count >= 2 || d.maxPain >= 3
-                          );
-                          const hasPain = significantPain.length > 0;
+                          const hasPain = Object.keys(ctx?.painHistory || {}).length > 0;
                           const liftCount = Object.keys(ctx?.maxLifts || {}).length;
                           const isExpanded = expandedAthlete === a.uid;
                           
@@ -576,24 +517,19 @@ export default function GenerateGroupWorkoutModal({
                                         </div>
                                       )}
                                       
-                                      {/* Pain - only show significant */}
-                                      {(() => {
-                                        const sigPain = Object.entries(ctx.painHistory || {}).filter(
-                                          ([_, d]) => d.count >= 2 || d.maxPain >= 3
-                                        );
-                                        return sigPain.length > 0 ? (
-                                          <div>
-                                            <p className="text-amber-400 mb-1">Significant Pain</p>
-                                            <div className="flex flex-wrap gap-1">
-                                              {sigPain.map(([name, data]) => (
-                                                <span key={name} className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded">
-                                                  {name}: {data.maxPain}/10 ({data.count}x)
-                                                </span>
-                                              ))}
-                                            </div>
+                                      {/* Pain */}
+                                      {Object.keys(ctx.painHistory || {}).length > 0 && (
+                                        <div>
+                                          <p className="text-amber-400 mb-1">Pain History</p>
+                                          <div className="flex flex-wrap gap-1">
+                                            {Object.entries(ctx.painHistory).map(([name, data]) => (
+                                              <span key={name} className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded">
+                                                {name}: {data.maxPain}/10
+                                              </span>
+                                            ))}
                                           </div>
-                                        ) : null;
-                                      })()}
+                                        </div>
+                                      )}
                                       
                                       {/* Goals */}
                                       {ctx.goals?.length > 0 && (

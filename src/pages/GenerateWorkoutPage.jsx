@@ -16,6 +16,8 @@ import {
   Activity,
   Calendar,
   Brain,
+  Lock,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
@@ -49,7 +51,10 @@ export default function GenerateWorkoutPage() {
   const [prompt, setPrompt] = useState('');
   const [workoutFocus, setWorkoutFocus] = useState('auto');
   const [intensity, setIntensity] = useState('moderate');
+  const [model, setModel] = useState('standard');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  
+  const isAdmin = user?.email === 'charltonuw@gmail.com';
   
   useEffect(() => {
     if (user) loadUserContext();
@@ -254,6 +259,7 @@ export default function GenerateWorkoutPage() {
           prompt,
           workoutFocus,
           intensity,
+          model: isAdmin ? model : 'standard', // Only admin can use premium
           context: {
             recentWorkouts: userContext.recentWorkouts.slice(0, 10),
             goals: userContext.goals,
@@ -452,6 +458,45 @@ export default function GenerateWorkoutPage() {
                       <div className="text-xs text-iron-500">{opt.desc}</div>
                     </button>
                   ))}
+                </div>
+              </div>
+              
+              {/* Model Selection */}
+              <div className="mb-6">
+                <label className="block text-sm text-iron-400 mb-2">AI Model</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setModel('standard')}
+                    className={`px-4 py-3 text-sm rounded-lg border transition-colors text-left
+                      ${model === 'standard'
+                        ? 'border-flame-500 bg-flame-500/10 text-flame-400'
+                        : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                      }`}
+                  >
+                    <div className="font-medium flex items-center gap-2">
+                      <Zap className="w-4 h-4" />
+                      Standard
+                    </div>
+                    <div className="text-xs text-iron-500 mt-1">GPT-4o-mini • Fast</div>
+                  </button>
+                  <button
+                    onClick={() => isAdmin && setModel('premium')}
+                    disabled={!isAdmin}
+                    className={`px-4 py-3 text-sm rounded-lg border transition-colors text-left relative
+                      ${model === 'premium'
+                        ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                        : !isAdmin 
+                          ? 'border-iron-800 text-iron-600 cursor-not-allowed opacity-60'
+                          : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                      }`}
+                  >
+                    <div className="font-medium flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" />
+                      Premium
+                      {!isAdmin && <Lock className="w-3 h-3" />}
+                    </div>
+                    <div className="text-xs text-iron-500 mt-1">GPT-4o • Higher quality</div>
+                  </button>
                 </div>
               </div>
               
