@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Dumbbell, 
   ArrowRight, 
@@ -12,20 +12,36 @@ import {
   TrendingUp,
   Zap,
   BarChart3,
-  MessageCircle,
-  Heart
+  Heart,
+  CheckCircle,
+  Layout,
+  Activity,
+  Brain,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { user, signInWithGoogle, signInAsGuest, loading } = useAuth();
+  const [activeFeature, setActiveFeature] = useState(0);
 
   useEffect(() => {
     if (user) {
       navigate('/dashboard');
     }
   }, [user, navigate]);
+
+  // Auto-rotate features
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveFeature(prev => (prev + 1) % 4);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleGoogleSignIn = async () => {
     const result = await signInWithGoogle();
@@ -39,52 +55,72 @@ export default function LoginPage() {
     navigate('/dashboard');
   };
 
-  const features = [
+  const showcaseFeatures = [
     {
+      id: 'ai',
+      title: 'AI-Powered Workouts',
+      subtitle: 'Your personal trainer, always available',
+      description: 'Generate personalized workouts based on your history, goals, and current fitness level. Our AI analyzes your pain points, tracks RPE, and adapts recommendations.',
+      highlights: ['Analyzes your lift history', 'Avoids exercises causing pain', 'Optimizes for your goals'],
+      color: 'flame',
       icon: Sparkles,
-      title: 'AI Coach',
-      description: 'Get personalized workout suggestions and form tips from your AI training partner.',
     },
     {
+      id: 'dashboard',
+      title: 'Customizable Dashboard',
+      subtitle: 'Your training hub, your way',
+      description: 'Drag and drop widgets to create your perfect dashboard. Track what matters - from daily stats to health metrics, calendar, goals, and activity feed.',
+      highlights: ['10+ customizable widgets', 'Drag & drop layout', 'Track calories, sleep, PRs'],
+      color: 'purple',
+      icon: Layout,
+    },
+    {
+      id: 'groups',
+      title: 'Group Training',
+      subtitle: 'Train together, grow together',
+      description: 'Create training groups, assign workouts to members, and track everyone\'s progress. Perfect for coaches, gym buddies, or competitive crews.',
+      highlights: ['Assign custom workouts', 'AI generates for entire team', 'View member progress'],
+      color: 'cyan',
       icon: Users,
-      title: 'Train Together',
-      description: 'Create groups, assign workouts, and track attendance with your gym crew.',
     },
     {
-      icon: Target,
-      title: 'Goal Tracking',
-      description: 'Set PRs for bench, squat, deadlift and watch your progress over time.',
-    },
-    {
-      icon: BarChart3,
+      id: 'analytics',
       title: 'Smart Analytics',
-      description: 'Visualize your gains with charts, streaks, and detailed workout history.',
+      subtitle: 'Data-driven gains',
+      description: 'Visualize your progress with detailed charts and insights. Track PRs, monitor volume, analyze RPE trends, and celebrate streaks.',
+      highlights: ['1RM estimations', 'Volume tracking', 'Goal progress charts'],
+      color: 'green',
+      icon: TrendingUp,
     },
-    {
-      icon: Calendar,
-      title: 'Schedule & Plan',
-      description: 'Plan your week, set recurring workouts, and never miss a session.',
-    },
-    {
-      icon: Heart,
-      title: 'Health Tracking',
-      description: 'Log sleep, water, protein and calories to optimize your recovery.',
-    },
+  ];
+
+  const quickFeatures = [
+    { icon: Sparkles, title: 'AI Coach' },
+    { icon: Target, title: 'Goals' },
+    { icon: Users, title: 'Groups' },
+    { icon: Layout, title: 'Widgets' },
+    { icon: Calendar, title: 'Calendar' },
+    { icon: Heart, title: 'Health' },
+    { icon: Activity, title: 'Feed' },
+    { icon: BarChart3, title: 'Analytics' },
   ];
 
   const stats = [
     { value: '500+', label: 'Exercises' },
     { value: '50+', label: 'Cardio Activities' },
-    { value: '∞', label: 'Possibilities' },
+    { value: '10+', label: 'Widgets' },
+    { value: 'AI', label: 'Powered' },
   ];
+
+  const currentFeature = showcaseFeatures[activeFeature];
 
   return (
     <div className="min-h-screen bg-iron-950 relative overflow-hidden">
       {/* Background elements */}
-      <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-flame-500/20 rounded-full blur-[120px]" />
         <div className="absolute top-1/2 -left-40 w-[400px] h-[400px] bg-purple-500/10 rounded-full blur-[100px]" />
-        <div className="absolute -bottom-40 right-1/4 w-[500px] h-[500px] bg-flame-500/10 rounded-full blur-[100px]" />
+        <div className="absolute -bottom-40 right-1/4 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[100px]" />
         
         <div
           className="absolute inset-0 opacity-[0.02]"
@@ -100,7 +136,7 @@ export default function LoginPage() {
         <header className="py-6 px-6 lg:px-12">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-plate bg-flame-500 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-plate bg-flame-500 flex items-center justify-center shadow-lg shadow-flame-500/20">
                 <Dumbbell className="w-6 h-6 text-white" />
               </div>
               <span className="font-display text-2xl text-iron-50 tracking-wider">
@@ -108,22 +144,31 @@ export default function LoginPage() {
               </span>
             </div>
             
-            <button
-              onClick={handleGoogleSignIn}
-              disabled={loading}
-              className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/10 text-white border border-white/20
-                rounded-lg font-medium text-sm hover:bg-white/20 transition-all"
-            >
-              Sign In
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleGuestSignIn}
+                className="hidden sm:flex items-center gap-2 px-4 py-2 text-iron-400 hover:text-iron-200 transition-colors"
+              >
+                <Play className="w-4 h-4" />
+                Try Demo
+              </button>
+              <button
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white text-iron-900
+                  rounded-lg font-medium text-sm hover:bg-iron-100 transition-all disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sign In'}
+              </button>
+            </div>
           </div>
         </header>
 
-        {/* Hero Section */}
         <main className="flex-1">
-          <section className="px-6 py-12 lg:py-20">
+          {/* Hero Section */}
+          <section className="px-6 py-12 lg:py-16">
             <div className="max-w-7xl mx-auto">
-              <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+              <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
                 {/* Left side - Hero Text */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -133,21 +178,20 @@ export default function LoginPage() {
                   <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-flame-500/10 border border-flame-500/30
                     rounded-full text-flame-400 text-sm mb-6">
                     <Zap className="w-4 h-4" />
-                    Your AI-Powered Gym Partner
+                    AI-Powered Training Platform
                   </div>
 
                   <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl text-iron-50 mb-6 leading-[1.1]">
-                    TRACK.
-                    <span className="text-gradient block">TRAIN.</span>
-                    <span className="block">TRANSFORM.</span>
+                    THE SMARTEST
+                    <span className="text-gradient block">WAY TO LIFT</span>
                   </h1>
 
                   <p className="text-xl text-iron-400 mb-8 max-w-lg leading-relaxed">
-                    The smartest way to log workouts, hit PRs, and train with friends. 
+                    Track workouts, hit PRs, and train with friends. 
                     Powered by AI that actually understands lifting.
                   </p>
 
-                  <div className="flex flex-col sm:flex-row gap-3 mb-6">
+                  <div className="flex flex-col sm:flex-row gap-3 mb-8">
                     <button
                       onClick={handleGoogleSignIn}
                       disabled={loading}
@@ -174,19 +218,15 @@ export default function LoginPage() {
                         hover:bg-iron-800 hover:border-iron-600 transition-all duration-200"
                     >
                       <Play className="w-5 h-5" />
-                      Try Demo
+                      Explore Demo
                     </button>
                   </div>
 
-                  <p className="text-sm text-iron-500">
-                    <span className="text-iron-400">Demo mode:</span> Explore with sample data, no account needed
-                  </p>
-
                   {/* Stats */}
-                  <div className="flex gap-8 mt-10 pt-10 border-t border-iron-800">
+                  <div className="flex flex-wrap gap-6 sm:gap-10">
                     {stats.map((stat) => (
                       <div key={stat.label}>
-                        <p className="text-3xl font-display text-flame-400">{stat.value}</p>
+                        <p className="text-2xl sm:text-3xl font-display text-flame-400">{stat.value}</p>
                         <p className="text-sm text-iron-500">{stat.label}</p>
                       </div>
                     ))}
@@ -200,30 +240,33 @@ export default function LoginPage() {
                   transition={{ duration: 0.6, delay: 0.2 }}
                   className="relative"
                 >
-                  {/* Mock phone/app preview */}
-                  <div className="relative mx-auto max-w-sm">
+                  <div className="relative mx-auto max-w-md">
                     <div className="absolute inset-0 bg-gradient-to-b from-flame-500/20 to-purple-500/20 rounded-3xl blur-2xl" />
-                    <div className="relative bg-iron-900 rounded-3xl border border-iron-800 p-4 shadow-2xl">
+                    <div className="relative bg-iron-900 rounded-3xl border border-iron-800 p-5 shadow-2xl">
                       {/* Mock header */}
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center justify-between mb-5">
                         <div>
                           <p className="text-xs text-iron-500">Good morning</p>
                           <p className="font-display text-lg text-iron-100">Let's crush it 💪</p>
                         </div>
-                        <div className="w-10 h-10 rounded-full bg-flame-500/20 flex items-center justify-center">
-                          <span className="text-sm">👤</span>
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-flame-500 to-purple-500 flex items-center justify-center">
+                          <span className="text-white font-medium text-sm">JD</span>
                         </div>
                       </div>
                       
-                      {/* Mock stats */}
-                      <div className="grid grid-cols-2 gap-2 mb-4">
-                        <div className="bg-iron-800 rounded-xl p-3">
-                          <p className="text-xs text-iron-500">This Week</p>
-                          <p className="text-xl font-display text-flame-400">4 workouts</p>
+                      {/* Mock stats grid */}
+                      <div className="grid grid-cols-3 gap-2 mb-4">
+                        <div className="bg-iron-800 rounded-xl p-3 text-center">
+                          <p className="text-2xl font-display text-flame-400">4</p>
+                          <p className="text-[10px] text-iron-500">This Week</p>
                         </div>
-                        <div className="bg-iron-800 rounded-xl p-3">
-                          <p className="text-xs text-iron-500">Bench PR</p>
-                          <p className="text-xl font-display text-green-400">225 lbs</p>
+                        <div className="bg-iron-800 rounded-xl p-3 text-center">
+                          <p className="text-2xl font-display text-green-400">225</p>
+                          <p className="text-[10px] text-iron-500">Bench PR</p>
+                        </div>
+                        <div className="bg-iron-800 rounded-xl p-3 text-center">
+                          <p className="text-2xl font-display text-purple-400">12</p>
+                          <p className="text-[10px] text-iron-500">Day Streak</p>
                         </div>
                       </div>
                       
@@ -233,26 +276,29 @@ export default function LoginPage() {
                           <div className="w-10 h-10 rounded-lg bg-flame-500/20 flex items-center justify-center">
                             <Dumbbell className="w-5 h-5 text-flame-400" />
                           </div>
-                          <div>
+                          <div className="flex-1">
                             <p className="font-medium text-iron-100">Push Day</p>
                             <p className="text-xs text-iron-500">5 exercises • 45 min</p>
                           </div>
+                          <div className="px-2 py-1 bg-green-500/20 rounded text-xs text-green-400 font-medium">
+                            Done
+                          </div>
                         </div>
                         <div className="flex gap-2">
-                          <span className="px-2 py-1 bg-iron-700 rounded text-xs text-iron-300">Bench</span>
-                          <span className="px-2 py-1 bg-iron-700 rounded text-xs text-iron-300">OHP</span>
+                          <span className="px-2 py-1 bg-iron-700 rounded text-xs text-iron-300">Bench 185×8</span>
+                          <span className="px-2 py-1 bg-iron-700 rounded text-xs text-iron-300">OHP 95×10</span>
                           <span className="px-2 py-1 bg-iron-700 rounded text-xs text-iron-300">+3</span>
                         </div>
                       </div>
                       
                       {/* Mock AI chat preview */}
-                      <div className="bg-gradient-to-r from-flame-500/10 to-purple-500/10 border border-flame-500/20 rounded-xl p-3">
+                      <div className="bg-gradient-to-r from-flame-500/10 to-purple-500/10 border border-flame-500/20 rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-2">
                           <Sparkles className="w-4 h-4 text-flame-400" />
                           <span className="text-xs font-medium text-flame-400">AI Coach</span>
                         </div>
                         <p className="text-sm text-iron-300">
-                          "Great session! You're 10 lbs away from your bench goal. Let's add some pause reps next week."
+                          "Great push day! You're 10 lbs from your bench goal. Try pause reps next session to break through."
                         </p>
                       </div>
                     </div>
@@ -262,8 +308,22 @@ export default function LoginPage() {
             </div>
           </section>
 
-          {/* Features Grid */}
-          <section className="px-6 py-16 bg-iron-900/50">
+          {/* Features Strip */}
+          <section className="px-6 py-6 border-y border-iron-800/50 bg-iron-900/30">
+            <div className="max-w-7xl mx-auto">
+              <div className="flex flex-wrap justify-center gap-x-8 gap-y-3">
+                {quickFeatures.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 text-iron-400">
+                    <f.icon className="w-4 h-4 text-flame-400" />
+                    <span className="text-sm">{f.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Feature Showcase */}
+          <section className="px-6 py-20">
             <div className="max-w-7xl mx-auto">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -275,30 +335,290 @@ export default function LoginPage() {
                   Everything You Need to Level Up
                 </h2>
                 <p className="text-iron-400 max-w-2xl mx-auto">
-                  From tracking your lifts to competing with friends, we've got you covered.
+                  From AI-powered workouts to team training, we've built the complete platform for serious lifters.
                 </p>
               </motion.div>
 
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {features.map((feature, index) => (
+              {/* Feature Tabs */}
+              <div className="flex justify-center gap-2 mb-10 flex-wrap">
+                {showcaseFeatures.map((f, i) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setActiveFeature(i)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                      activeFeature === i
+                        ? f.color === 'flame' ? 'bg-flame-500 text-white'
+                        : f.color === 'purple' ? 'bg-purple-500 text-white'
+                        : f.color === 'cyan' ? 'bg-cyan-500 text-white'
+                        : 'bg-green-500 text-white'
+                        : 'bg-iron-800 text-iron-400 hover:text-iron-200'
+                    }`}
+                  >
+                    <f.icon className="w-4 h-4" />
+                    <span className="hidden sm:inline">{f.title.split(' ')[0]}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Feature Content */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeFeature}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="grid lg:grid-cols-2 gap-12 items-center"
+                >
+                  {/* Text Side */}
+                  <div className={`${activeFeature % 2 === 1 ? 'lg:order-2' : ''}`}>
+                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm mb-4 ${
+                      currentFeature.color === 'flame' ? 'bg-flame-500/10 text-flame-400'
+                      : currentFeature.color === 'purple' ? 'bg-purple-500/10 text-purple-400'
+                      : currentFeature.color === 'cyan' ? 'bg-cyan-500/10 text-cyan-400'
+                      : 'bg-green-500/10 text-green-400'
+                    }`}>
+                      <currentFeature.icon className="w-4 h-4" />
+                      {currentFeature.subtitle}
+                    </div>
+                    <h3 className="font-display text-3xl text-iron-100 mb-4">
+                      {currentFeature.title}
+                    </h3>
+                    <p className="text-iron-400 mb-6 leading-relaxed">
+                      {currentFeature.description}
+                    </p>
+                    <ul className="space-y-3">
+                      {currentFeature.highlights.map((h, i) => (
+                        <li key={i} className="flex items-center gap-3 text-iron-300">
+                          <CheckCircle className={`w-5 h-5 flex-shrink-0 ${
+                            currentFeature.color === 'flame' ? 'text-flame-400'
+                            : currentFeature.color === 'purple' ? 'text-purple-400'
+                            : currentFeature.color === 'cyan' ? 'text-cyan-400'
+                            : 'text-green-400'
+                          }`} />
+                          {h}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Preview Side */}
+                  <div className={`${activeFeature % 2 === 1 ? 'lg:order-1' : ''}`}>
+                    <div className="relative">
+                      <div className={`absolute inset-0 rounded-2xl blur-2xl opacity-50 ${
+                        currentFeature.color === 'flame' ? 'bg-flame-500/20'
+                        : currentFeature.color === 'purple' ? 'bg-purple-500/20'
+                        : currentFeature.color === 'cyan' ? 'bg-cyan-500/20'
+                        : 'bg-green-500/20'
+                      }`} />
+                      
+                      {/* Feature-specific mockup */}
+                      <div className="relative bg-iron-900 rounded-2xl border border-iron-800 p-6 shadow-xl">
+                        {activeFeature === 0 && (
+                          /* AI Generator Preview */
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-3 mb-4">
+                              <div className="w-10 h-10 rounded-xl bg-flame-500/20 flex items-center justify-center">
+                                <Brain className="w-5 h-5 text-flame-400" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-iron-100">AI Workout Generator</p>
+                                <p className="text-xs text-iron-500">Analyzing your training data...</p>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              {['Loading workout history', 'Analyzing max lifts', 'Checking pain history', 'Generating workout'].map((step, i) => (
+                                <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-iron-800/50">
+                                  <Check className="w-4 h-4 text-green-400" />
+                                  <span className="text-sm text-iron-300">{step}</span>
+                                  <span className="ml-auto text-xs text-iron-500">{(i + 1) * 0.3}s</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="p-4 bg-flame-500/10 border border-flame-500/20 rounded-xl mt-4">
+                              <p className="text-xs text-flame-400 mb-2 font-medium">Generated: Push Day A</p>
+                              <div className="space-y-1 text-sm text-iron-300">
+                                <p>• Bench Press 4×6 @ 175 lbs</p>
+                                <p>• Incline DB Press 3×10</p>
+                                <p>• OHP 3×8 @ 95 lbs</p>
+                                <p>• Tricep Pushdown 3×12</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {activeFeature === 1 && (
+                          /* Dashboard Preview */
+                          <div className="space-y-3">
+                            <p className="text-xs text-iron-500 uppercase tracking-wide mb-3">Drag & Drop Widgets</p>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="bg-iron-800 rounded-xl p-3">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Calendar className="w-4 h-4 text-flame-400" />
+                                  <span className="text-xs text-iron-400">This Week</span>
+                                </div>
+                                <p className="text-xl font-display text-flame-400">4</p>
+                              </div>
+                              <div className="bg-iron-800 rounded-xl p-3">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Dumbbell className="w-4 h-4 text-purple-400" />
+                                  <span className="text-xs text-iron-400">Total</span>
+                                </div>
+                                <p className="text-xl font-display text-purple-400">127</p>
+                              </div>
+                            </div>
+                            <div className="bg-iron-800 rounded-xl p-3">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Heart className="w-4 h-4 text-red-400" />
+                                <span className="text-xs text-iron-400">Health Today</span>
+                              </div>
+                              <div className="flex gap-4 text-sm text-iron-300">
+                                <span>😴 7.5h</span>
+                                <span>💧 48oz</span>
+                                <span>🥩 145g</span>
+                              </div>
+                            </div>
+                            <div className="bg-iron-800 rounded-xl p-3">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Target className="w-4 h-4 text-green-400" />
+                                <span className="text-xs text-iron-400">Active Goals</span>
+                              </div>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-iron-300">Bench 225</span>
+                                  <span className="text-green-400">90%</span>
+                                </div>
+                                <div className="h-1.5 bg-iron-700 rounded-full overflow-hidden">
+                                  <div className="h-full bg-green-500 rounded-full" style={{ width: '90%' }} />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {activeFeature === 2 && (
+                          /* Groups Preview */
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-3 p-3 bg-iron-800 rounded-xl">
+                              <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                                <Users className="w-5 h-5 text-cyan-400" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-medium text-iron-100">Morning Crew</p>
+                                <p className="text-xs text-iron-500">5 athletes • Push Day assigned</p>
+                              </div>
+                            </div>
+                            <p className="text-xs text-iron-500 uppercase tracking-wide">Workout Progress</p>
+                            <div className="space-y-2">
+                              {[
+                                { name: 'Alex', status: 'Completed', color: 'green' },
+                                { name: 'Jordan', status: 'Completed', color: 'green' },
+                                { name: 'Sam', status: 'In Progress', color: 'yellow' },
+                                { name: 'Taylor', status: 'Pending', color: 'iron' },
+                              ].map((m, i) => (
+                                <div key={i} className="flex items-center justify-between p-2.5 bg-iron-800/50 rounded-lg">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-full bg-iron-700 flex items-center justify-center text-xs text-iron-400">
+                                      {m.name[0]}
+                                    </div>
+                                    <span className="text-sm text-iron-300">{m.name}</span>
+                                  </div>
+                                  <span className={`text-xs px-2 py-0.5 rounded ${
+                                    m.color === 'green' ? 'bg-green-500/20 text-green-400' 
+                                    : m.color === 'yellow' ? 'bg-yellow-500/20 text-yellow-400' 
+                                    : 'bg-iron-700 text-iron-500'
+                                  }`}>{m.status}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {activeFeature === 3 && (
+                          /* Analytics Preview */
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="bg-iron-800 rounded-xl p-3 text-center">
+                                <p className="text-2xl font-display text-green-400">225</p>
+                                <p className="text-xs text-iron-500">Bench 1RM</p>
+                                <p className="text-[10px] text-green-400">↑ 10 lbs</p>
+                              </div>
+                              <div className="bg-iron-800 rounded-xl p-3 text-center">
+                                <p className="text-2xl font-display text-green-400">315</p>
+                                <p className="text-xs text-iron-500">Squat 1RM</p>
+                                <p className="text-[10px] text-green-400">↑ 15 lbs</p>
+                              </div>
+                            </div>
+                            <div className="bg-iron-800 rounded-xl p-3">
+                              <p className="text-xs text-iron-500 mb-3">Bench Progress (8 weeks)</p>
+                              <div className="h-24 flex items-end gap-1.5">
+                                {[55, 60, 58, 65, 70, 68, 75, 82, 80, 88, 92, 100].map((h, i) => (
+                                  <div 
+                                    key={i} 
+                                    className="flex-1 bg-gradient-to-t from-green-600 to-green-400 rounded-t transition-all hover:from-green-500 hover:to-green-300"
+                                    style={{ height: `${h}%` }}
+                                  />
+                                ))}
+                              </div>
+                              <div className="flex justify-between mt-2 text-[10px] text-iron-600">
+                                <span>Jan</span>
+                                <span>Feb</span>
+                                <span>Mar</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+
+              {/* Navigation dots */}
+              <div className="flex justify-center gap-2 mt-8">
+                {showcaseFeatures.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveFeature(i)}
+                    className={`h-2 rounded-full transition-all ${
+                      activeFeature === i ? 'w-8 bg-flame-500' : 'w-2 bg-iron-700 hover:bg-iron-600'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Social Proof */}
+          <section className="px-6 py-16 bg-iron-900/50 border-y border-iron-800/50">
+            <div className="max-w-7xl mx-auto">
+              <div className="text-center mb-10">
+                <p className="text-iron-400">Trusted by lifters who take their training seriously</p>
+              </div>
+              <div className="grid sm:grid-cols-3 gap-6">
+                {[
+                  { quote: "Finally an app that understands progressive overload. The AI suggestions are actually useful.", name: "Alex M.", lift: "Bench: 275 lbs" },
+                  { quote: "Group workouts feature is a game changer for coaching my clients. Saves me hours every week.", name: "Coach Jordan", lift: "CPT, CSCS" },
+                  { quote: "Been tracking for 6 months. Love seeing my progress charts and the customizable dashboard.", name: "Sam K.", lift: "Deadlift: 405 lbs" },
+                ].map((t, i) => (
                   <motion.div
-                    key={feature.title}
+                    key={i}
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
-                    transition={{ delay: index * 0.1 }}
-                    className="card-steel p-6 rounded-xl hover:border-iron-600 transition-colors group"
+                    transition={{ delay: i * 0.1 }}
+                    className="card-steel p-6 rounded-xl"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-flame-500/10 flex items-center justify-center mb-4 
-                      group-hover:bg-flame-500/20 transition-colors">
-                      <feature.icon className="w-6 h-6 text-flame-400" />
+                    <p className="text-iron-300 mb-4 leading-relaxed">"{t.quote}"</p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-iron-700 flex items-center justify-center text-iron-400 font-medium">
+                        {t.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <div>
+                        <p className="text-iron-200 font-medium">{t.name}</p>
+                        <p className="text-xs text-iron-500">{t.lift}</p>
+                      </div>
                     </div>
-                    <h3 className="font-display text-lg text-iron-100 mb-2">
-                      {feature.title}
-                    </h3>
-                    <p className="text-sm text-iron-400 leading-relaxed">
-                      {feature.description}
-                    </p>
                   </motion.div>
                 ))}
               </div>
@@ -317,7 +637,7 @@ export default function LoginPage() {
                   Ready to Get Stronger?
                 </h2>
                 <p className="text-xl text-iron-400 mb-8 max-w-2xl mx-auto">
-                  Join lifters who are already crushing their goals. It's free to start.
+                  Join lifters who are already crushing their goals. It's completely free to start.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   <button
@@ -348,18 +668,22 @@ export default function LoginPage() {
         </main>
 
         {/* Footer */}
-        <footer className="py-6 px-6 lg:px-12 border-t border-iron-800/50">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-iron-500">
-              © 2025 BENCH ONLY. Built for serious lifters.
-            </p>
-            <div className="flex items-center gap-6">
-              <a href="https://benchpressonly.com/privacy" className="text-sm text-iron-500 hover:text-iron-300">
-                Privacy
-              </a>
-              <a href="https://benchpressonly.com/terms" className="text-sm text-iron-500 hover:text-iron-300">
-                Terms
-              </a>
+        <footer className="py-8 px-6 lg:px-12 border-t border-iron-800/50">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-flame-500 flex items-center justify-center">
+                  <Dumbbell className="w-4 h-4 text-white" />
+                </div>
+                <span className="font-display text-lg text-iron-400">BENCH ONLY</span>
+              </div>
+              <p className="text-sm text-iron-500">
+                © 2025 BENCH ONLY. Built for serious lifters.
+              </p>
+              <div className="flex items-center gap-6">
+                <a href="/privacy" className="text-sm text-iron-500 hover:text-iron-300 transition-colors">Privacy</a>
+                <a href="/terms" className="text-sm text-iron-500 hover:text-iron-300 transition-colors">Terms</a>
+              </div>
             </div>
           </div>
         </footer>

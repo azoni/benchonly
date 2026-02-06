@@ -547,7 +547,7 @@ export function FeedWidget({ feedItems = [], users = {} }) {
   return (
     <div className="card-steel p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-display text-lg text-iron-100">Activity Feed</h3>
+        <h3 className="font-display text-lg text-iron-100">Community Activity</h3>
         <Link 
           to="/feed" 
           className="text-xs text-flame-400 hover:text-flame-300"
@@ -560,9 +560,7 @@ export function FeedWidget({ feedItems = [], users = {} }) {
         <div className="py-6 text-center">
           <Users className="w-8 h-8 text-iron-600 mx-auto mb-2" />
           <p className="text-sm text-iron-500">No recent activity</p>
-          <Link to="/feed" className="text-xs text-flame-400 hover:text-flame-300 mt-2 inline-block">
-            Check out the feed →
-          </Link>
+          <p className="text-xs text-iron-600 mt-1">Complete a workout to appear here!</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -759,7 +757,7 @@ export const WIDGET_REGISTRY = {
   },
   feed: {
     id: 'feed',
-    label: 'Activity Feed',
+    label: 'Community Feed',
     icon: MessageCircle,
     component: FeedWidget,
     defaultEnabled: false,

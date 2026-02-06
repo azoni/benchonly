@@ -37,9 +37,40 @@ export default function FeedPage() {
   const [submittingComment, setSubmittingComment] = useState(false)
 
   useEffect(() => {
-    loadFeed()
-    loadUsers()
+    loadInitialData()
   }, [])
+
+  const loadInitialData = async () => {
+    setLoading(true)
+    try {
+      // Load users first to know who is public
+      const snapshot = await getDocs(collection(db, 'users'))
+      const usersMap = {}
+      const publicUserIds = new Set()
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data()
+        usersMap[doc.id] = { id: doc.id, ...data }
+        // Track public users (and always include current user)
+        if (!data.isPrivate || doc.id === user?.uid) {
+          publicUserIds.add(doc.id)
+        }
+      })
+      setUsers(usersMap)
+      
+      // Now load feed and filter by public users
+      const result = await feedService.getFeed(30) // Get more to account for filtering
+      const publicItems = result.items.filter(item => publicUserIds.has(item.userId))
+      
+      setFeedItems(publicItems)
+      setLastDoc(result.lastDoc)
+      setHasMore(result.hasMore && publicItems.length >= 15)
+    } catch (error) {
+      console.error('Error loading feed:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const loadUsers = async () => {
     try {
@@ -48,14 +79,13 @@ export default function FeedPage() {
       const usersMap = {}
       snapshot.docs.forEach(doc => {
         const data = doc.data()
-        // Only include non-private users
-        if (!data.isPrivate) {
-          usersMap[doc.id] = { id: doc.id, ...data }
-        }
+        usersMap[doc.id] = { id: doc.id, ...data }
       })
       setUsers(usersMap)
+      return usersMap
     } catch (error) {
       console.error('Error loading users:', error)
+      return {}
     }
   }
 
@@ -67,10 +97,15 @@ export default function FeedPage() {
     }
 
     try {
-      const result = await feedService.getFeed(15, loadMore ? lastDoc : null)
+      const result = await feedService.getFeed(30, loadMore ? lastDoc : null)
       
       // Filter out items from private users
-      const publicItems = result.items.filter(item => users[item.userId] || !users[item.userId]?.isPrivate)
+      const publicUserIds = new Set(
+        Object.entries(users)
+          .filter(([id, u]) => !u.isPrivate || id === user?.uid)
+          .map(([id]) => id)
+      )
+      const publicItems = result.items.filter(item => publicUserIds.has(item.userId))
       
       if (loadMore) {
         setFeedItems(prev => [...prev, ...publicItems])
@@ -79,7 +114,7 @@ export default function FeedPage() {
       }
       
       setLastDoc(result.lastDoc)
-      setHasMore(result.hasMore)
+      setHasMore(result.hasMore && publicItems.length > 0)
     } catch (error) {
       console.error('Error loading feed:', error)
     } finally {
@@ -203,7 +238,7 @@ export default function FeedPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 text-center">
         <Activity className="w-16 h-16 text-iron-600 mx-auto mb-4" />
-        <h2 className="text-xl font-display text-iron-200 mb-2">Activity Feed</h2>
+        <h2 className="text-xl font-display text-iron-200 mb-2">Community Feed</h2>
         <p className="text-iron-500 mb-6">Sign in to see what others are up to and share your progress!</p>
         <Link to="/login" className="btn-primary">Sign In</Link>
       </div>
@@ -217,7 +252,7 @@ export default function FeedPage() {
         <div>
           <h1 className="text-2xl font-display text-iron-100 flex items-center gap-3">
             <Activity className="w-7 h-7 text-flame-500" />
-            Activity Feed
+            Community Feed
           </h1>
           <p className="text-iron-500 text-sm mt-1">
             See what the community is up to

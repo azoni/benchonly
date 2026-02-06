@@ -247,19 +247,27 @@ export default function DashboardPage() {
         trackingStartDate: oldestWorkoutDate?.toISOString() || null
       })
 
-      // Load feed data (non-blocking)
+      // Load feed data (non-blocking) - show public users' activity
       try {
-        const feedResult = await feedService.getFeed(5)
+        const feedResult = await feedService.getFeed(20) // Get more to account for filtering
         if (feedResult?.items?.length > 0) {
-          setFeedItems(feedResult.items)
-          const userIds = [...new Set(feedResult.items.map(item => item.userId))]
+          // Get all users to check privacy settings
           const allUsers = await userService.getAll()
           const usersMap = {}
+          const publicUserIds = new Set()
+          
           allUsers.forEach(u => {
-            if (userIds.includes(u.uid)) {
-              usersMap[u.uid] = u
+            usersMap[u.uid] = u
+            // Include public users and always include current user
+            if (!u.isPrivate || u.uid === user?.uid) {
+              publicUserIds.add(u.uid)
             }
           })
+          
+          // Filter feed to only show public users' activity
+          const publicFeedItems = feedResult.items.filter(item => publicUserIds.has(item.userId))
+          
+          setFeedItems(publicFeedItems.slice(0, 10))
           setFeedUsers(usersMap)
         }
       } catch (feedError) {
