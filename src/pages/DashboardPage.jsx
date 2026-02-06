@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, Reorder, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import GridLayout from 'react-grid-layout'
 import {
   Plus,
   HelpCircle,
-  Settings,
   X,
   GripVertical,
   Check,
@@ -40,6 +40,57 @@ import { getTodayString, toDateString } from '../utils/dateUtils'
 import { feedService } from '../services/feedService'
 
 const STORAGE_KEY = 'dashboard_widgets'
+const STORAGE_KEY_LAYOUT = 'dashboard_layout'
+
+// Default grid layout for widgets (x, y are grid units, w=1 is half width, w=2 is full width)
+// Grid has 2 columns total
+const DEFAULT_LAYOUTS = {
+  profile: { w: 1, h: 2, minH: 2, maxH: 3 },
+  stats: { w: 1, h: 2, minH: 2, maxH: 3 },
+  recentWorkouts: { w: 1, h: 4, minH: 3, maxH: 6 },
+  goals: { w: 1, h: 3, minH: 2, maxH: 5 },
+  calendar: { w: 1, h: 6, minH: 5, maxH: 8 },
+  health: { w: 1, h: 3, minH: 2, maxH: 4 },
+  feed: { w: 1, h: 4, minH: 3, maxH: 6 },
+  calories: { w: 1, h: 3, minH: 2, maxH: 4 },
+  healthChart: { w: 1, h: 4, minH: 3, maxH: 6 },
+  oneRepMax: { w: 1, h: 4, minH: 3, maxH: 6 },
+  quickLinks: { w: 2, h: 3, minH: 2, maxH: 4 },
+}
+
+// Generate initial layout from widget order
+const generateLayout = (enabledWidgets, savedLayout = null) => {
+  if (savedLayout) {
+    // Filter to only include enabled widgets and add any missing ones
+    const layoutMap = {}
+    savedLayout.forEach(item => { layoutMap[item.i] = item })
+    
+    let x = 0, y = 0
+    return enabledWidgets.filter(id => id !== 'addWidget').map(widgetId => {
+      if (layoutMap[widgetId]) {
+        return layoutMap[widgetId]
+      }
+      // New widget, add to end
+      const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 3 }
+      const item = { i: widgetId, x: x, y: 999, ...defaults }
+      x = (x + defaults.w) % 2
+      return item
+    })
+  }
+  
+  // Generate fresh layout
+  let x = 0, y = 0
+  return enabledWidgets.filter(id => id !== 'addWidget').map(widgetId => {
+    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 3 }
+    const item = { i: widgetId, x, y, ...defaults }
+    x += defaults.w
+    if (x >= 2) {
+      x = 0
+      y += defaults.h
+    }
+    return item
+  })
+}
 
 export default function DashboardPage() {
   const { user, userProfile, isGuest } = useAuth()
@@ -109,6 +160,22 @@ export default function DashboardPage() {
     }
     return DEFAULT_WIDGET_ORDER
   })
+  
+  // Grid layout state
+  const [layout, setLayout] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_LAYOUT)
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch {
+        return null
+      }
+    }
+    return null
+  })
+  
+  // Container width for grid
+  const [containerWidth, setContainerWidth] = useState(800)
 
   // Save widget config when changed
   useEffect(() => {
@@ -118,6 +185,12 @@ export default function DashboardPage() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY + '_enabled', JSON.stringify(enabledWidgets))
   }, [enabledWidgets])
+  
+  useEffect(() => {
+    if (layout) {
+      localStorage.setItem(STORAGE_KEY_LAYOUT, JSON.stringify(layout))
+    }
+  }, [layout])
 
   useEffect(() => {
     if (user) {
@@ -302,6 +375,8 @@ export default function DashboardPage() {
   const resetToDefaults = () => {
     setWidgetOrder(DEFAULT_WIDGET_ORDER)
     setEnabledWidgets(DEFAULT_WIDGET_ORDER)
+    setLayout(null)
+    localStorage.removeItem(STORAGE_KEY_LAYOUT)
   }
 
   const getGreeting = () => {
@@ -358,11 +433,11 @@ export default function DashboardPage() {
 
   // Filter to only show enabled widgets in the correct order (but filter out addWidget if no more available)
   const availableWidgetCount = Object.keys(WIDGET_REGISTRY).filter(
-    id => !enabledWidgets.includes(id) && id !== 'addWidget'
+    id => !enabledWidgets.includes(id) && !WIDGET_REGISTRY[id]?.isSpecial
   ).length
   const visibleWidgets = widgetOrder.filter(id => {
     if (!enabledWidgets.includes(id)) return false
-    if (id === 'addWidget' && availableWidgetCount === 0) return false
+    if (WIDGET_REGISTRY[id]?.isSpecial) return false // Filter out addWidget etc.
     return true
   })
 
@@ -409,17 +484,17 @@ export default function DashboardPage() {
       </div>
 
       {/* Widgets Grid */}
-      {customizeMode ? (
+      {customizeMode && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="space-y-4"
+          className="mb-4"
         >
           {/* Customize Mode Header */}
           <div className="flex items-center justify-between p-4 bg-flame-500/10 border border-flame-500/30 rounded-xl">
             <div>
               <h3 className="font-medium text-iron-100">Customize Dashboard</h3>
-              <p className="text-sm text-iron-400">Drag to reorder • Toggle visibility</p>
+              <p className="text-sm text-iron-400">Drag widgets to move • Drag corners to resize</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -439,137 +514,108 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Visual preview of current layout */}
-          <div className="p-4 bg-iron-900/50 rounded-xl border border-iron-800">
-            <p className="text-xs text-iron-500 mb-3 uppercase tracking-wide">Layout Preview</p>
-            <div className="grid grid-cols-4 gap-1.5">
-              {widgetOrder.filter(id => enabledWidgets.includes(id)).map((widgetId) => {
-                const config = WIDGET_REGISTRY[widgetId]
-                if (!config) return null
-                const isFullWidth = config.size === 'full'
-                return (
-                  <div 
-                    key={widgetId}
-                    className={`h-8 rounded bg-flame-500/30 flex items-center justify-center ${
-                      isFullWidth ? 'col-span-4' : 'col-span-2'
-                    }`}
-                  >
-                    <span className="text-[10px] text-flame-300 truncate px-1">{config.label}</span>
-                  </div>
-                )
-              })}
+          {/* Widget Toggle List */}
+          <div className="mt-4 p-4 bg-iron-900/50 rounded-xl border border-iron-800">
+            <p className="text-xs text-iron-500 mb-3 uppercase tracking-wide">Toggle Widgets</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(WIDGET_REGISTRY)
+                .filter(([id, config]) => !config.isSpecial)
+                .map(([widgetId, config]) => {
+                  const Icon = config.icon
+                  const isEnabled = enabledWidgets.includes(widgetId)
+                  return (
+                    <button
+                      key={widgetId}
+                      onClick={() => toggleWidget(widgetId)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        isEnabled 
+                          ? 'bg-flame-500/20 text-flame-300 border border-flame-500/30' 
+                          : 'bg-iron-800 text-iron-500 border border-iron-700 hover:border-iron-600'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {config.label}
+                      {isEnabled ? <Eye className="w-3 h-3 ml-1" /> : <EyeOff className="w-3 h-3 ml-1" />}
+                    </button>
+                  )
+                })}
             </div>
           </div>
-
-          {/* Draggable Widget List */}
-          <Reorder.Group 
-            axis="y" 
-            values={widgetOrder} 
-            onReorder={setWidgetOrder}
-            className="space-y-2"
-          >
-            {widgetOrder.map((widgetId) => {
-              const config = WIDGET_REGISTRY[widgetId]
-              if (!config) return null
-              const Icon = config.icon
-              const isEnabled = enabledWidgets.includes(widgetId)
-
-              return (
-                <Reorder.Item
-                  key={widgetId}
-                  value={widgetId}
-                  className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-grab active:cursor-grabbing active:scale-[1.02] active:shadow-lg ${
-                    isEnabled 
-                      ? 'bg-iron-800 border-iron-700' 
-                      : 'bg-iron-900/50 border-iron-800/50 opacity-50'
-                  }`}
-                  whileDrag={{ scale: 1.02, boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}
-                >
-                  <GripVertical className="w-5 h-5 text-iron-500 flex-shrink-0" />
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    isEnabled ? 'bg-flame-500/20' : 'bg-iron-800'
-                  }`}>
-                    <Icon className={`w-4 h-4 ${isEnabled ? 'text-flame-400' : 'text-iron-600'}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`font-medium text-sm ${isEnabled ? 'text-iron-100' : 'text-iron-500'}`}>
-                      {config.label}
-                    </p>
-                    <p className="text-xs text-iron-600">
-                      {config.size === 'full' ? 'Full width' : 'Half width'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleWidget(widgetId)
-                    }}
-                    className={`p-2 rounded-lg transition-colors ${
-                      isEnabled 
-                        ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
-                        : 'bg-iron-800 text-iron-500 hover:bg-iron-700'
-                    }`}
-                  >
-                    {isEnabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                  </button>
-                </Reorder.Item>
-              )
-            })}
-          </Reorder.Group>
-
-          {/* Add widgets that aren't in order yet */}
-          {Object.keys(WIDGET_REGISTRY).filter(id => !widgetOrder.includes(id)).length > 0 && (
-            <div className="pt-4 border-t border-iron-800">
-              <p className="text-xs text-iron-500 mb-3 uppercase tracking-wide">Add Widgets</p>
-              <div className="grid grid-cols-2 gap-2">
-                {Object.entries(WIDGET_REGISTRY)
-                  .filter(([id]) => !widgetOrder.includes(id))
-                  .map(([widgetId, config]) => {
-                    const Icon = config.icon
-                    return (
-                      <button
-                        key={widgetId}
-                        onClick={() => {
-                          setWidgetOrder(prev => [...prev, widgetId])
-                          setEnabledWidgets(prev => [...prev, widgetId])
-                        }}
-                        className="flex items-center gap-2 p-3 rounded-xl bg-iron-900 border border-iron-800 hover:border-flame-500/50 hover:bg-iron-800/50 transition-colors"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-iron-800 flex items-center justify-center">
-                          <Icon className="w-4 h-4 text-iron-500" />
-                        </div>
-                        <span className="text-sm text-iron-400 flex-1 text-left truncate">{config.label}</span>
-                        <Plus className="w-4 h-4 text-flame-500 flex-shrink-0" />
-                      </button>
-                    )
-                  })}
-              </div>
-            </div>
-          )}
         </motion.div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <AnimatePresence mode="popLayout">
-            {visibleWidgets.map((widgetId) => {
-              const config = WIDGET_REGISTRY[widgetId]
-              if (!config) return null
-              const isFullWidth = config.size === 'full'
+      )}
 
-              return (
-                <motion.div
-                  key={widgetId}
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className={isFullWidth ? 'md:col-span-2' : ''}
-                >
+      {/* Grid Layout */}
+      <div 
+        ref={(node) => {
+          if (node && node.offsetWidth !== containerWidth) {
+            setContainerWidth(node.offsetWidth)
+          }
+        }}
+      >
+        <GridLayout
+          className="layout"
+          layout={generateLayout(visibleWidgets, layout)}
+          cols={2}
+          rowHeight={60}
+          width={containerWidth}
+          margin={[16, 16]}
+          containerPadding={[0, 0]}
+          isDraggable={customizeMode}
+          isResizable={customizeMode}
+          onLayoutChange={(newLayout) => {
+            if (customizeMode) {
+              setLayout(newLayout)
+            }
+          }}
+          draggableHandle=".widget-drag-handle"
+          resizeHandles={['se']}
+        >
+          {visibleWidgets.map((widgetId) => {
+            const config = WIDGET_REGISTRY[widgetId]
+            if (!config) return null
+
+            return (
+              <div key={widgetId} className="relative">
+                {customizeMode && (
+                  <div className="widget-drag-handle absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-2 bg-iron-900/90 border-b border-iron-700 rounded-t-xl cursor-move">
+                    <div className="flex items-center gap-2">
+                      <GripVertical className="w-4 h-4 text-iron-400" />
+                      <span className="text-xs font-medium text-iron-300">{config.label}</span>
+                    </div>
+                    <button
+                      onClick={() => toggleWidget(widgetId)}
+                      className="p-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                      title="Hide widget"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+                <div className={customizeMode ? 'pt-8 h-full overflow-hidden' : 'h-full'}>
                   {renderWidget(widgetId)}
-                </motion.div>
-              )
-            })}
-          </AnimatePresence>
-        </div>
+                </div>
+                {customizeMode && (
+                  <div className="absolute inset-0 border-2 border-dashed border-flame-500/30 rounded-xl pointer-events-none" />
+                )}
+              </div>
+            )
+          })}
+        </GridLayout>
+      </div>
+
+      {/* Add widget button when not customizing */}
+      {!customizeMode && Object.keys(WIDGET_REGISTRY).filter(id => !enabledWidgets.includes(id) && !WIDGET_REGISTRY[id].isSpecial).length > 0 && (
+        <button
+          onClick={() => setCustomizeMode(true)}
+          className="mt-4 w-full card-steel p-4 border-2 border-dashed border-iron-700 hover:border-flame-500/50 transition-colors group"
+        >
+          <div className="flex items-center justify-center gap-2">
+            <Plus className="w-5 h-5 text-iron-500 group-hover:text-flame-400 transition-colors" />
+            <span className="text-iron-400 group-hover:text-iron-200 transition-colors">
+              Add More Widgets
+            </span>
+          </div>
+        </button>
       )}
     </div>
   )
