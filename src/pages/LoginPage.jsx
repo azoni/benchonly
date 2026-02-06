@@ -39,7 +39,7 @@ export default function LoginPage() {
   useEffect(() => {
     const timer = setInterval(() => {
       setActiveFeature(prev => (prev + 1) % 4);
-    }, 5000);
+    }, 8000);
     return () => clearInterval(timer);
   }, []);
 

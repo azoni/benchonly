@@ -9,7 +9,10 @@ import {
   GripVertical,
   Check,
   RotateCcw,
-  Dumbbell
+  Dumbbell,
+  Edit2,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { workoutService, goalService, healthService, scheduleService, userService, groupWorkoutService } from '../services/firestore'
@@ -392,10 +395,11 @@ export default function DashboardPage() {
           </button>
           <button
             onClick={() => setCustomizeMode(true)}
-            className="p-2 text-iron-500 hover:text-iron-300 hover:bg-iron-800 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-lg transition-colors"
             title="Customize Dashboard"
           >
-            <Settings className="w-5 h-5" />
+            <Edit2 className="w-4 h-4" />
+            <span className="text-sm hidden sm:inline">Edit</span>
           </button>
           <Link to="/workouts" className="btn-primary flex items-center gap-2">
             <Dumbbell className="w-5 h-5" />
@@ -415,7 +419,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between p-4 bg-flame-500/10 border border-flame-500/30 rounded-xl">
             <div>
               <h3 className="font-medium text-iron-100">Customize Dashboard</h3>
-              <p className="text-sm text-iron-400">Drag to reorder, toggle to show/hide</p>
+              <p className="text-sm text-iron-400">Drag widgets to reorder, click eye to show/hide</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -435,65 +439,74 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Draggable Widget List */}
+          {/* Draggable Widget Grid - Shows actual widgets */}
           <Reorder.Group 
             axis="y" 
             values={widgetOrder} 
             onReorder={setWidgetOrder}
-            className="space-y-3"
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
           >
             {widgetOrder.map((widgetId) => {
               const config = WIDGET_REGISTRY[widgetId]
               if (!config) return null
               const Icon = config.icon
               const isEnabled = enabledWidgets.includes(widgetId)
+              const isFullWidth = config.size === 'full'
 
               return (
                 <Reorder.Item
                   key={widgetId}
                   value={widgetId}
-                  className={`flex items-center gap-4 p-4 rounded-xl border transition-colors cursor-grab active:cursor-grabbing ${
-                    isEnabled 
-                      ? 'bg-iron-800 border-iron-700' 
-                      : 'bg-iron-900 border-iron-800 opacity-60'
-                  }`}
+                  className={`relative ${isFullWidth ? 'md:col-span-2' : ''}`}
+                  whileDrag={{ scale: 1.02, zIndex: 50 }}
                 >
-                  <GripVertical className="w-5 h-5 text-iron-500 flex-shrink-0" />
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    isEnabled ? 'bg-flame-500/20' : 'bg-iron-800'
+                  {/* Widget with edit overlay */}
+                  <div className={`relative rounded-xl overflow-hidden transition-all ${
+                    !isEnabled ? 'opacity-40 grayscale' : ''
                   }`}>
-                    <Icon className={`w-5 h-5 ${isEnabled ? 'text-flame-400' : 'text-iron-500'}`} />
+                    {/* Edit controls overlay */}
+                    <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-2 bg-gradient-to-b from-iron-900/95 via-iron-900/80 to-transparent">
+                      <div className="flex items-center gap-2 cursor-grab active:cursor-grabbing px-2 py-1 rounded-lg bg-iron-800/50">
+                        <GripVertical className="w-4 h-4 text-iron-400" />
+                        <span className="text-xs font-medium text-iron-300">{config.label}</span>
+                        <span className="text-[10px] text-iron-500 bg-iron-700 px-1.5 py-0.5 rounded">
+                          {config.size === 'full' ? 'Full' : 'Half'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleWidget(widgetId)
+                        }}
+                        className={`p-2 rounded-lg transition-colors ${
+                          isEnabled 
+                            ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
+                            : 'bg-iron-700 text-iron-400 hover:bg-iron-600'
+                        }`}
+                        title={isEnabled ? 'Hide widget' : 'Show widget'}
+                      >
+                        {isEnabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    
+                    {/* Actual widget content (with top padding for overlay) */}
+                    <div className="pt-8 pointer-events-none">
+                      {renderWidget(widgetId)}
+                    </div>
+                    
+                    {/* Drag hint border */}
+                    <div className="absolute inset-0 border-2 border-dashed border-iron-600 rounded-xl pointer-events-none" />
                   </div>
-                  <div className="flex-1">
-                    <p className={`font-medium ${isEnabled ? 'text-iron-100' : 'text-iron-400'}`}>
-                      {config.label}
-                    </p>
-                    <p className="text-xs text-iron-500">
-                      {config.size === 'full' ? 'Full width' : 'Half width'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => toggleWidget(widgetId)}
-                    className={`w-12 h-7 rounded-full transition-colors relative ${
-                      isEnabled ? 'bg-flame-500' : 'bg-iron-700'
-                    }`}
-                  >
-                    <span 
-                      className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${
-                        isEnabled ? 'left-6' : 'left-1'
-                      }`}
-                    />
-                  </button>
                 </Reorder.Item>
               )
             })}
           </Reorder.Group>
 
-          {/* Add widgets that aren't in order yet */}
+          {/* Add Available Widgets */}
           {Object.keys(WIDGET_REGISTRY).filter(id => !widgetOrder.includes(id)).length > 0 && (
             <div className="pt-4 border-t border-iron-800">
               <p className="text-sm text-iron-500 mb-3">Available Widgets</p>
-              <div className="space-y-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {Object.entries(WIDGET_REGISTRY)
                   .filter(([id]) => !widgetOrder.includes(id))
                   .map(([widgetId, config]) => {
@@ -505,15 +518,15 @@ export default function DashboardPage() {
                           setWidgetOrder(prev => [...prev, widgetId])
                           setEnabledWidgets(prev => [...prev, widgetId])
                         }}
-                        className="w-full flex items-center gap-4 p-4 rounded-xl bg-iron-900 border border-iron-800 hover:border-iron-700 transition-colors"
+                        className="flex items-center gap-3 p-3 rounded-xl bg-iron-900 border border-iron-800 hover:border-flame-500/50 hover:bg-iron-800/50 transition-colors"
                       >
-                        <Plus className="w-5 h-5 text-iron-500" />
-                        <div className="w-10 h-10 rounded-lg bg-iron-800 flex items-center justify-center">
-                          <Icon className="w-5 h-5 text-iron-500" />
+                        <div className="w-8 h-8 rounded-lg bg-iron-800 flex items-center justify-center">
+                          <Icon className="w-4 h-4 text-iron-500" />
                         </div>
                         <div className="flex-1 text-left">
-                          <p className="font-medium text-iron-300">{config.label}</p>
+                          <span className="text-sm text-iron-300">{config.label}</span>
                         </div>
+                        <Plus className="w-4 h-4 text-flame-500" />
                       </button>
                     )
                   })}
