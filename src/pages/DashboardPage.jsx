@@ -45,27 +45,27 @@ const STORAGE_KEY_LAYOUT = 'dashboard_layout'
 // Default grid layout for widgets
 // Grid has 2 columns, rowHeight is 50px
 // w: 1 = half width, w: 2 = full width
-// Sizes calibrated to actual widget content
+// minH set very low to allow compact sizing
 const DEFAULT_LAYOUTS = {
-  profile: { w: 1, h: 3, minH: 2, maxH: 5 },
-  stats: { w: 1, h: 3, minH: 2, maxH: 5 },
-  recentWorkouts: { w: 1, h: 6, minH: 3, maxH: 10 },
-  goals: { w: 1, h: 4, minH: 2, maxH: 8 },
-  calendar: { w: 1, h: 11, minH: 8, maxH: 14 },
-  health: { w: 1, h: 4, minH: 2, maxH: 6 },
-  feed: { w: 1, h: 5, minH: 3, maxH: 8 },
-  calories: { w: 1, h: 3, minH: 2, maxH: 5 },
-  healthChart: { w: 1, h: 5, minH: 3, maxH: 8 },
-  oneRepMax: { w: 1, h: 4, minH: 3, maxH: 8 },
-  quickLinks: { w: 1, h: 5, minH: 3, maxH: 7 },
+  profile: { w: 1, h: 3, minH: 1, maxH: 6 },
+  stats: { w: 1, h: 3, minH: 1, maxH: 6 },
+  recentWorkouts: { w: 1, h: 5, minH: 2, maxH: 12 },
+  goals: { w: 1, h: 4, minH: 1, maxH: 10 },
+  calendar: { w: 1, h: 9, minH: 4, maxH: 14 },
+  health: { w: 1, h: 3, minH: 1, maxH: 8 },
+  feed: { w: 1, h: 4, minH: 1, maxH: 10 },
+  calories: { w: 1, h: 3, minH: 1, maxH: 6 },
+  healthChart: { w: 1, h: 4, minH: 2, maxH: 10 },
+  oneRepMax: { w: 1, h: 4, minH: 2, maxH: 10 },
+  quickLinks: { w: 1, h: 4, minH: 2, maxH: 8 },
 }
 
-// Default layout positions for the initial dashboard
+// Default layout positions for the initial dashboard (matches user's preferred layout)
 const getDefaultLayout = () => [
-  { i: 'profile', x: 0, y: 0, ...DEFAULT_LAYOUTS.profile },
-  { i: 'quickLinks', x: 1, y: 0, ...DEFAULT_LAYOUTS.quickLinks },
-  { i: 'goals', x: 0, y: 3, ...DEFAULT_LAYOUTS.goals },
-  { i: 'calendar', x: 1, y: 5, ...DEFAULT_LAYOUTS.calendar },
+  { i: 'profile', x: 0, y: 0, w: 1, h: 3, minH: 1, maxH: 6 },
+  { i: 'quickLinks', x: 1, y: 0, w: 1, h: 4, minH: 2, maxH: 8 },
+  { i: 'goals', x: 0, y: 3, w: 1, h: 4, minH: 1, maxH: 10 },
+  { i: 'calendar', x: 1, y: 4, w: 1, h: 9, minH: 4, maxH: 14 },
 ]
 
 // Generate layout - uses saved layout if available, otherwise generates fresh
@@ -82,17 +82,27 @@ const generateLayout = (enabledWidgets, savedLayout = null) => {
     // First pass: add widgets that exist in saved layout
     enabledWidgets.forEach(widgetId => {
       if (layoutMap[widgetId]) {
-        result.push(layoutMap[widgetId])
-        const item = layoutMap[widgetId]
-        if (item.x === 0) col0Y = Math.max(col0Y, item.y + item.h)
-        else col1Y = Math.max(col1Y, item.y + item.h)
+        const saved = layoutMap[widgetId]
+        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 1, maxH: 10 }
+        // Merge saved position/size with default constraints
+        result.push({
+          i: widgetId,
+          x: saved.x,
+          y: saved.y,
+          w: saved.w || defaults.w,
+          h: saved.h || defaults.h,
+          minH: defaults.minH,
+          maxH: defaults.maxH,
+        })
+        if (saved.x === 0) col0Y = Math.max(col0Y, saved.y + (saved.h || defaults.h))
+        else col1Y = Math.max(col1Y, saved.y + (saved.h || defaults.h))
       }
     })
     
     // Second pass: add new widgets not in saved layout
     enabledWidgets.forEach(widgetId => {
       if (!layoutMap[widgetId]) {
-        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 8 }
+        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 1, maxH: 10 }
         if (col0Y <= col1Y) {
           result.push({ i: widgetId, x: 0, y: col0Y, ...defaults })
           col0Y += defaults.h
@@ -121,7 +131,7 @@ const generateLayout = (enabledWidgets, savedLayout = null) => {
   let col1Y = 0
   
   enabledWidgets.forEach(widgetId => {
-    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 8 }
+    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 1, maxH: 10 }
     
     if (defaults.w === 2) {
       const y = Math.max(col0Y, col1Y)
@@ -225,56 +235,121 @@ export default function DashboardPage() {
   })
   
   // Container width for grid
-  const [containerWidth, setContainerWidth] = useState(800)
+  const [containerWidth, setContainerWidth] = useState(0)
+  const containerRef = useRef(null)
   const [configLoaded, setConfigLoaded] = useState(false)
   const saveTimeoutRef = useRef(null)
 
+  // Measure container width using ResizeObserver for reliability
+  useEffect(() => {
+    if (!containerRef.current) return
+    
+    const updateWidth = () => {
+      if (containerRef.current) {
+        const width = containerRef.current.getBoundingClientRect().width
+        if (width > 0) {
+          setContainerWidth(width)
+        }
+      }
+    }
+    
+    // Use ResizeObserver for accurate measurements
+    const resizeObserver = new ResizeObserver(() => {
+      updateWidth()
+    })
+    
+    resizeObserver.observe(containerRef.current)
+    
+    // Initial measurement
+    updateWidth()
+    
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [])
+
+  // Re-measure after config loads
+  useEffect(() => {
+    if (configLoaded && containerRef.current) {
+      const width = containerRef.current.getBoundingClientRect().width
+      if (width > 0) {
+        setContainerWidth(width)
+      }
+    }
+  }, [configLoaded])
+
   // Load dashboard config from Firestore or localStorage
   useEffect(() => {
+    let isMounted = true
+    
     const loadConfig = async () => {
+      let loadedLayout = null
+      let loadedOrder = widgetOrder
+      let loadedEnabled = enabledWidgets
+      
       if (user && !isGuest) {
         try {
           const config = await userService.getDashboardConfig(user.uid)
+          console.log('Loaded dashboard config from Firestore:', config)
+          
           if (config) {
             // Cloud config exists - use it
-            if (config.widgetOrder) setWidgetOrder(config.widgetOrder)
-            if (config.enabledWidgets) setEnabledWidgets(config.enabledWidgets)
-            if (config.layout) setLayout(config.layout)
+            if (config.widgetOrder) loadedOrder = config.widgetOrder
+            if (config.enabledWidgets) loadedEnabled = config.enabledWidgets
+            if (config.layout) loadedLayout = config.layout
           } else {
-            // No cloud config - sync current localStorage config to cloud
-            const localOrder = localStorage.getItem(STORAGE_KEY)
-            const localEnabled = localStorage.getItem(STORAGE_KEY + '_enabled')
+            // No cloud config - check localStorage
             const localLayout = localStorage.getItem(STORAGE_KEY_LAYOUT)
-            
-            if (localOrder || localEnabled || localLayout) {
-              await userService.saveDashboardConfig(user.uid, {
-                widgetOrder: localOrder ? JSON.parse(localOrder) : DEFAULT_WIDGET_ORDER,
-                enabledWidgets: localEnabled ? JSON.parse(localEnabled) : DEFAULT_WIDGET_ORDER,
-                layout: localLayout ? JSON.parse(localLayout) : null
-              })
+            if (localLayout) {
+              try {
+                loadedLayout = JSON.parse(localLayout)
+              } catch (e) {
+                console.error('Failed to parse localStorage layout')
+              }
             }
           }
         } catch (error) {
           console.error('Error loading dashboard config:', error)
         }
       }
-      setConfigLoaded(true)
+      
+      if (isMounted) {
+        // Set all state at once to avoid race conditions
+        if (loadedOrder !== widgetOrder) setWidgetOrder(loadedOrder)
+        if (loadedEnabled !== enabledWidgets) setEnabledWidgets(loadedEnabled)
+        if (loadedLayout) {
+          console.log('Setting layout:', loadedLayout.map(l => ({ i: l.i, h: l.h })))
+          setLayout(loadedLayout)
+        }
+        // Small delay to ensure state is set before marking as loaded
+        setTimeout(() => {
+          if (isMounted) setConfigLoaded(true)
+        }, 50)
+      }
     }
+    
     loadConfig()
+    
+    return () => { isMounted = false }
   }, [user, isGuest])
 
   // Save dashboard config to Firestore (debounced) and localStorage
+  // This only handles auto-save during editing - main saves happen in finishEditing and resetToDefaults
   useEffect(() => {
-    if (!configLoaded) return // Don't save before initial load
+    if (!configLoaded || !customizeMode) return // Only auto-save while editing
     
-    // Always save to localStorage as backup
+    console.log('Auto-save during edit, layout:', layout?.map(l => ({ i: l.i, h: l.h })))
+    
+    // Save to localStorage immediately
     localStorage.setItem(STORAGE_KEY, JSON.stringify(widgetOrder))
     localStorage.setItem(STORAGE_KEY + '_enabled', JSON.stringify(enabledWidgets))
     if (layout) {
       localStorage.setItem(STORAGE_KEY_LAYOUT, JSON.stringify(layout))
+    } else {
+      localStorage.removeItem(STORAGE_KEY_LAYOUT)
     }
     
-    // Save to Firestore for logged-in users (debounced)
+    // Debounced save to Firestore
     if (user && !isGuest) {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
@@ -289,7 +364,7 @@ export default function DashboardPage() {
         } catch (error) {
           console.error('Error saving dashboard config:', error)
         }
-      }, 1000) // Debounce 1 second
+      }, 500)
     }
     
     return () => {
@@ -297,7 +372,7 @@ export default function DashboardPage() {
         clearTimeout(saveTimeoutRef.current)
       }
     }
-  }, [widgetOrder, enabledWidgets, layout, user, isGuest, configLoaded])
+  }, [widgetOrder, enabledWidgets, layout, user, isGuest, configLoaded, customizeMode])
 
   useEffect(() => {
     if (user) {
@@ -486,6 +561,8 @@ export default function DashboardPage() {
     localStorage.setItem(STORAGE_KEY + '_enabled', JSON.stringify(enabledWidgets))
     if (layout) {
       localStorage.setItem(STORAGE_KEY_LAYOUT, JSON.stringify(layout))
+    } else {
+      localStorage.removeItem(STORAGE_KEY_LAYOUT)
     }
     
     // Save to Firestore
@@ -496,6 +573,7 @@ export default function DashboardPage() {
           enabledWidgets,
           layout
         })
+        console.log('Dashboard config saved:', { widgetOrder, enabledWidgets, layoutItems: layout?.length })
       } catch (error) {
         console.error('Error saving dashboard config:', error)
       }
@@ -503,6 +581,7 @@ export default function DashboardPage() {
   }, [widgetOrder, enabledWidgets, layout, user, isGuest])
 
   const finishEditing = async () => {
+    console.log('finishEditing called, current layout:', layout?.map(l => ({ i: l.i, h: l.h })))
     await saveConfigNow()
     setCustomizeMode(false)
   }
@@ -694,16 +773,12 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* Grid Layout */}
-      {configLoaded && (
-        <div 
-          ref={(node) => {
-            if (node && node.offsetWidth !== containerWidth) {
-              setContainerWidth(node.offsetWidth)
-            }
-          }}
-          className={customizeMode ? 'editing-dashboard' : ''}
-        >
+      {/* Grid Layout Container */}
+      <div 
+        ref={containerRef}
+        className={`w-full ${customizeMode ? 'editing-dashboard' : ''}`}
+      >
+        {configLoaded && containerWidth > 0 && (
           <GridLayout
             className="layout"
             layout={generateLayout(visibleWidgets, layout)}
@@ -717,6 +792,7 @@ export default function DashboardPage() {
             compactType="vertical"
             preventCollision={false}
             onLayoutChange={(newLayout) => {
+              console.log('onLayoutChange fired, customizeMode:', customizeMode, 'items:', newLayout.map(l => ({ i: l.i, h: l.h })))
               if (customizeMode) {
                 setLayout(newLayout)
               }
@@ -756,9 +832,9 @@ export default function DashboardPage() {
               </div>
             )
           })}
-        </GridLayout>
+          </GridLayout>
+        )}
       </div>
-      )}
       
       {/* Loading state */}
       {!configLoaded && (
