@@ -280,65 +280,28 @@ export default function DashboardPage() {
 
   // Load dashboard config from Firestore or localStorage
   useEffect(() => {
-    let isMounted = true
-    
     const loadConfig = async () => {
-      let loadedLayout = null
-      let loadedOrder = widgetOrder
-      let loadedEnabled = enabledWidgets
-      
       if (user && !isGuest) {
         try {
           const config = await userService.getDashboardConfig(user.uid)
-          console.log('Loaded dashboard config from Firestore:', config)
-          
           if (config) {
-            // Cloud config exists - use it
-            if (config.widgetOrder) loadedOrder = config.widgetOrder
-            if (config.enabledWidgets) loadedEnabled = config.enabledWidgets
-            if (config.layout) loadedLayout = config.layout
-          } else {
-            // No cloud config - check localStorage
-            const localLayout = localStorage.getItem(STORAGE_KEY_LAYOUT)
-            if (localLayout) {
-              try {
-                loadedLayout = JSON.parse(localLayout)
-              } catch (e) {
-                console.error('Failed to parse localStorage layout')
-              }
-            }
+            if (config.widgetOrder) setWidgetOrder(config.widgetOrder)
+            if (config.enabledWidgets) setEnabledWidgets(config.enabledWidgets)
+            if (config.layout) setLayout(config.layout)
           }
         } catch (error) {
           console.error('Error loading dashboard config:', error)
         }
       }
-      
-      if (isMounted) {
-        // Set all state at once to avoid race conditions
-        if (loadedOrder !== widgetOrder) setWidgetOrder(loadedOrder)
-        if (loadedEnabled !== enabledWidgets) setEnabledWidgets(loadedEnabled)
-        if (loadedLayout) {
-          console.log('Setting layout:', loadedLayout.map(l => ({ i: l.i, h: l.h })))
-          setLayout(loadedLayout)
-        }
-        // Small delay to ensure state is set before marking as loaded
-        setTimeout(() => {
-          if (isMounted) setConfigLoaded(true)
-        }, 50)
-      }
+      setConfigLoaded(true)
     }
     
     loadConfig()
-    
-    return () => { isMounted = false }
   }, [user, isGuest])
 
   // Save dashboard config to Firestore (debounced) and localStorage
-  // This only handles auto-save during editing - main saves happen in finishEditing and resetToDefaults
   useEffect(() => {
-    if (!configLoaded || !customizeMode) return // Only auto-save while editing
-    
-    console.log('Auto-save during edit, layout:', layout?.map(l => ({ i: l.i, h: l.h })))
+    if (!configLoaded) return // Don't save before initial load
     
     // Save to localStorage immediately
     localStorage.setItem(STORAGE_KEY, JSON.stringify(widgetOrder))
@@ -364,7 +327,7 @@ export default function DashboardPage() {
         } catch (error) {
           console.error('Error saving dashboard config:', error)
         }
-      }, 500)
+      }, 1000)
     }
     
     return () => {
@@ -372,7 +335,7 @@ export default function DashboardPage() {
         clearTimeout(saveTimeoutRef.current)
       }
     }
-  }, [widgetOrder, enabledWidgets, layout, user, isGuest, configLoaded, customizeMode])
+  }, [widgetOrder, enabledWidgets, layout, user, isGuest, configLoaded])
 
   useEffect(() => {
     if (user) {
@@ -573,7 +536,6 @@ export default function DashboardPage() {
           enabledWidgets,
           layout
         })
-        console.log('Dashboard config saved:', { widgetOrder, enabledWidgets, layoutItems: layout?.length })
       } catch (error) {
         console.error('Error saving dashboard config:', error)
       }
@@ -581,7 +543,6 @@ export default function DashboardPage() {
   }, [widgetOrder, enabledWidgets, layout, user, isGuest])
 
   const finishEditing = async () => {
-    console.log('finishEditing called, current layout:', layout?.map(l => ({ i: l.i, h: l.h })))
     await saveConfigNow()
     setCustomizeMode(false)
   }
@@ -792,7 +753,6 @@ export default function DashboardPage() {
             compactType="vertical"
             preventCollision={false}
             onLayoutChange={(newLayout) => {
-              console.log('onLayoutChange fired, customizeMode:', customizeMode, 'items:', newLayout.map(l => ({ i: l.i, h: l.h })))
               if (customizeMode) {
                 setLayout(newLayout)
               }
