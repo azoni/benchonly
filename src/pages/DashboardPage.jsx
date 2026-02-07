@@ -43,33 +43,33 @@ const STORAGE_KEY = 'dashboard_widgets'
 const STORAGE_KEY_LAYOUT = 'dashboard_layout'
 
 // Default grid layout for widgets
-// Grid has 4 columns. rowHeight is 50px
-// w: 1-4 for width control, h: any height
+// Grid has 12 columns (like Bootstrap). rowHeight is 50px
+// w: 1-12 for width control, h: any height
 // No min/max constraints - user can resize freely
 const DEFAULT_LAYOUTS = {
-  profile: { w: 3, h: 1 },
-  stats: { w: 4, h: 2 },
-  recentWorkouts: { w: 3, h: 4 },
-  goals: { w: 3, h: 3 },
-  calendar: { w: 3, h: 5 },
-  health: { w: 3, h: 2 },
-  feed: { w: 3, h: 4 },
-  calories: { w: 3, h: 2 },
-  healthChart: { w: 3, h: 3 },
-  oneRepMax: { w: 3, h: 2 },
-  quickLinks: { w: 3, h: 2 },
+  profile: { w: 4, h: 2 },
+  stats: { w: 12, h: 2 },
+  recentWorkouts: { w: 6, h: 5 },
+  goals: { w: 4, h: 4 },
+  calendar: { w: 6, h: 7 },
+  health: { w: 4, h: 3 },
+  feed: { w: 6, h: 5 },
+  calories: { w: 4, h: 3 },
+  healthChart: { w: 6, h: 4 },
+  oneRepMax: { w: 4, h: 3 },
+  quickLinks: { w: 4, h: 4 },
 }
 
 // Default layout positions for the initial dashboard
 const getDefaultLayout = () => [
-  { i: 'profile', x: 0, y: 0, w: 3, h: 1 },
-  { i: 'quickLinks', x: 0, y: 1, w: 3, h: 2 },
-  { i: 'goals', x: 0, y: 3, w: 3, h: 3 },
-  { i: 'calendar', x: 0, y: 6, w: 3, h: 5 },
+  { i: 'profile', x: 0, y: 0, w: 4, h: 2 },
+  { i: 'quickLinks', x: 0, y: 2, w: 4, h: 4 },
+  { i: 'goals', x: 0, y: 6, w: 4, h: 4 },
+  { i: 'calendar', x: 4, y: 0, w: 8, h: 7 },
 ]
 
 // Generate layout - uses saved layout if available, otherwise generates fresh
-const generateLayout = (enabledWidgets, savedLayout = null, cols = 4) => {
+const generateLayout = (enabledWidgets, savedLayout = null, cols = 12) => {
   // For single column (mobile), force all widgets to full width and stack vertically
   if (cols === 1) {
     let y = 0
@@ -95,7 +95,7 @@ const generateLayout = (enabledWidgets, savedLayout = null, cols = 4) => {
     enabledWidgets.forEach(widgetId => {
       if (layoutMap[widgetId]) {
         const saved = layoutMap[widgetId]
-        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 2, h: 3 }
+        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 4, h: 3 }
         result.push({
           i: widgetId,
           x: saved.x,
@@ -110,7 +110,7 @@ const generateLayout = (enabledWidgets, savedLayout = null, cols = 4) => {
     // Second pass: add new widgets not in saved layout
     enabledWidgets.forEach(widgetId => {
       if (!layoutMap[widgetId]) {
-        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 2, h: 3 }
+        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 4, h: 3 }
         result.push({ i: widgetId, x: 0, y: maxY, w: defaults.w, h: defaults.h })
         maxY += defaults.h
       }
@@ -128,14 +128,14 @@ const generateLayout = (enabledWidgets, savedLayout = null, cols = 4) => {
     return getDefaultLayout()
   }
   
-  // Generate fresh layout - pack widgets in rows of 4 columns
+  // Generate fresh layout - pack widgets in rows
   const layout = []
   let currentX = 0
   let currentY = 0
   let rowMaxH = 0
   
   enabledWidgets.forEach(widgetId => {
-    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 2, h: 3 }
+    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 4, h: 3 }
     
     // If widget doesn't fit in current row, move to next row
     if (currentX + defaults.w > cols) {
@@ -227,12 +227,12 @@ export default function DashboardPage() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
-        // Validate layout structure (4 columns)
+        // Validate layout structure (12 columns)
         if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(item =>
           item && item.i && 
-          typeof item.x === 'number' && item.x >= 0 && item.x <= 3 &&
+          typeof item.x === 'number' && item.x >= 0 && item.x <= 11 &&
           typeof item.y === 'number' && item.y >= 0 &&
-          typeof item.w === 'number' && item.w >= 1 && item.w <= 4 &&
+          typeof item.w === 'number' && item.w >= 1 && item.w <= 12 &&
           typeof item.h === 'number' && item.h >= 1
         )) {
           return parsed
@@ -291,12 +291,12 @@ export default function DashboardPage() {
   // Validate and clean layout when loaded
   useEffect(() => {
     if (layout && layout.length > 0) {
-      // Check if layout has valid structure (4 columns, so x can be 0-3)
+      // Check if layout has valid structure (12 columns, so x can be 0-11)
       const isValid = layout.every(item => 
         item && item.i && 
-        typeof item.x === 'number' && item.x >= 0 && item.x <= 3 &&
+        typeof item.x === 'number' && item.x >= 0 && item.x <= 11 &&
         typeof item.y === 'number' && item.y >= 0 &&
-        typeof item.w === 'number' && item.w >= 1 && item.w <= 4 &&
+        typeof item.w === 'number' && item.w >= 1 && item.w <= 12 &&
         typeof item.h === 'number' && item.h >= 1
       )
       if (!isValid) {
@@ -313,9 +313,9 @@ export default function DashboardPage() {
       if (!Array.isArray(layoutArray) || layoutArray.length === 0) return false
       return layoutArray.every(item => 
         item && item.i && 
-        typeof item.x === 'number' && item.x >= 0 && item.x <= 3 &&
+        typeof item.x === 'number' && item.x >= 0 && item.x <= 11 &&
         typeof item.y === 'number' && item.y >= 0 &&
-        typeof item.w === 'number' && item.w >= 1 && item.w <= 4 &&
+        typeof item.w === 'number' && item.w >= 1 && item.w <= 12 &&
         typeof item.h === 'number' && item.h >= 1
       )
     }
@@ -791,16 +791,16 @@ export default function DashboardPage() {
         {configLoaded && containerWidth > 0 && (
           <GridLayout
             className="layout"
-            layout={generateLayout(visibleWidgets, layout, containerWidth < 500 ? 1 : 4)}
-            cols={containerWidth < 500 ? 1 : 4}
+            layout={generateLayout(visibleWidgets, layout, containerWidth < 500 ? 1 : 12)}
+            cols={containerWidth < 500 ? 1 : 12}
             rowHeight={50}
             width={containerWidth}
             margin={[12, 12]}
             containerPadding={[0, 0]}
             isDraggable={customizeMode}
             isResizable={customizeMode}
-            compactType="vertical"
-            preventCollision={false}
+            compactType={null}
+            preventCollision={true}
             onLayoutChange={(newLayout) => {
               if (customizeMode) {
                 setLayout(newLayout)
