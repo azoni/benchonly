@@ -270,52 +270,45 @@ export default function DashboardPage() {
     return null
   })
   
-  // Container width for grid
+  // Container width for grid - use window-based calculation
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef(null)
   const [configLoaded, setConfigLoaded] = useState(false)
   const saveTimeoutRef = useRef(null)
 
-  // Measure container width
+  // Calculate width based on container or window
   useEffect(() => {
-    const updateWidth = () => {
+    const calculateWidth = () => {
+      // Try container first
       if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect()
-        const width = rect.width || containerRef.current.offsetWidth
-        if (width > 100) { // Ensure we have a reasonable width
+        const width = containerRef.current.clientWidth
+        if (width > 0) {
           setContainerWidth(width)
+          return
         }
       }
+      // Fallback to window-based calculation
+      // max-w-7xl = 80rem = 1280px, minus padding
+      const maxWidth = 1280
+      const padding = 32 // px-4 on mobile
+      const windowWidth = window.innerWidth - padding
+      setContainerWidth(Math.min(windowWidth, maxWidth))
     }
-    
-    // Measure after a short delay to ensure DOM is ready
-    const timeoutId = setTimeout(updateWidth, 150)
-    updateWidth() // Also try immediately
-    
-    // Update on resize
-    window.addEventListener('resize', updateWidth)
-    
-    return () => {
-      clearTimeout(timeoutId)
-      window.removeEventListener('resize', updateWidth)
-    }
-  }, [])
 
-  // Re-measure when config loads or widgets change
-  useEffect(() => {
-    if (containerRef.current) {
-      // Use timeout to ensure layout is settled
-      setTimeout(() => {
-        if (containerRef.current) {
-          const rect = containerRef.current.getBoundingClientRect()
-          const width = rect.width || containerRef.current.offsetWidth
-          if (width > 100) {
-            setContainerWidth(width)
-          }
-        }
-      }, 50)
+    // Calculate immediately and after delays
+    calculateWidth()
+    const t1 = setTimeout(calculateWidth, 0)
+    const t2 = setTimeout(calculateWidth, 100)
+    const t3 = setTimeout(calculateWidth, 300)
+
+    window.addEventListener('resize', calculateWidth)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
+      window.removeEventListener('resize', calculateWidth)
     }
-  }, [configLoaded, enabledWidgets])
+  }, [configLoaded])
 
   // Validate and clean layout when loaded
   useEffect(() => {
@@ -709,16 +702,6 @@ export default function DashboardPage() {
     return true
   })
 
-  // Debug logging
-  console.log('Dashboard debug:', { 
-    configLoaded, 
-    containerWidth, 
-    enabledWidgets, 
-    widgetOrder,
-    visibleWidgets,
-    layout: layout?.length 
-  })
-
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
       {/* Onboarding Modal */}
@@ -825,15 +808,8 @@ export default function DashboardPage() {
       {/* Grid Layout Container */}
       <div 
         ref={containerRef}
-        className={`w-full min-h-[100px] ${customizeMode ? 'editing-dashboard' : ''}`}
+        className={`w-full ${customizeMode ? 'editing-dashboard' : ''}`}
       >
-        {/* Debug: show if width measurement failed */}
-        {configLoaded && containerWidth < 100 && (
-          <div className="text-center py-10 text-iron-500">
-            <p>Loading dashboard...</p>
-            <p className="text-xs mt-2">Container width: {containerWidth}px</p>
-          </div>
-        )}
         {configLoaded && containerWidth > 0 && (
           <GridLayout
             className="layout"
@@ -841,7 +817,7 @@ export default function DashboardPage() {
             cols={containerWidth < 500 ? 1 : 2}
             rowHeight={50}
             width={containerWidth}
-            margin={[12, 12]}
+            margin={[16, 16]}
             containerPadding={[0, 0]}
             isDraggable={customizeMode}
             isResizable={customizeMode}
