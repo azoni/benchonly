@@ -60,27 +60,46 @@ export async function handler(event) {
     // Select model based on request
     const selectedModel = model === 'premium' ? 'gpt-4o' : 'gpt-4o-mini';
 
-    const systemPrompt = `You are an expert strength coach. Create a personalized workout considering:
+    const systemPrompt = `You are an expert strength coach. Create a personalized workout.
+
+CRITICAL RULES FOR REPEATING PREVIOUS WORKOUTS:
+If the user asks to "repeat", "same as", "copy", or reference a previous workout:
+1. Use the EXACT same exercises from that workout - NO substitutions unless explicitly allowed
+2. Use the EXACT same number of sets and reps
+3. ONLY adjust WEIGHTS based on:
+   - Did user complete all prescribed reps? → Increase weight 2.5-5%
+   - Was RPE low (under 7)? → Increase weight 5%
+   - Was RPE very high (9-10)? → Keep same or decrease slightly
+   - Any pain reported? → Add warning in notes but DON'T substitute unless user allows
+4. If user says "no substitutions" - NEVER substitute, only add warnings in notes
+
+STANDARD WORKOUT RULES:
 - Max lifts (use 70-85% of e1RM for working sets)
-- Pain history (AVOID or SUBSTITUTE those exercises)
+- Pain history (AVOID or SUBSTITUTE those exercises - unless told not to)
 - RPE patterns (adjust intensity accordingly)
 - Goals (prioritize goal lifts)
 - Recent workout history (build on what they've been doing)
 - Cardio/activity load (factor in overall training stress)
+
+WEIGHT PROGRESSION LOGIC:
+- Completed all reps at target RPE 7-8: Add 5 lbs (upper) or 5-10 lbs (lower)
+- Completed all reps at RPE 6 or below: Add 5-10 lbs
+- Missed reps or RPE 9+: Keep same weight or reduce 5%
+- Pain reported on exercise: DO NOT increase weight, add note about monitoring
 
 OUTPUT JSON only, no markdown:
 {
   "name": "Workout Name",
   "description": "Brief description",
   "estimatedDuration": 45,
-  "notes": "Coaching notes explaining workout design and any modifications for pain/RPE.",
+  "notes": "Coaching notes explaining workout design, weight selections, and any modifications or warnings.",
   "exercises": [
     {
       "name": "Exercise Name",
       "type": "weight",
       "sets": [{ "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 }],
       "restSeconds": 90,
-      "notes": "Form cues"
+      "notes": "Form cues or warnings"
     }
   ]
 }`;
@@ -266,14 +285,26 @@ function buildContext(ctx, focus, intensity, settings = {}) {
   }
 
   if (ctx?.recentWorkouts?.length) {
-    s += `RECENT WORKOUTS (${ctx.recentWorkouts.length}):\n`;
+    s += `\nRECENT WORKOUTS (${ctx.recentWorkouts.length} total) - IMPORTANT FOR REPEAT REQUESTS:\n`;
     ctx.recentWorkouts.slice(0, 5).forEach(w => {
-      s += `  ${w.date || 'Recent'}: ${w.name || 'Workout'}\n`;
-      (w.exercises || []).slice(0, 4).forEach(ex => {
+      const dayName = w.dayOfWeek || '';
+      s += `  [${w.date || 'Recent'}${dayName ? ` ${dayName}` : ''}] "${w.name || 'Workout'}"\n`;
+      (w.exercises || []).forEach(ex => {
         const sets = ex.sets || [];
-        const wt = sets[0]?.actualWeight || sets[0]?.prescribedWeight;
-        const rp = sets[0]?.actualReps || sets[0]?.prescribedReps;
-        if (wt || rp) s += `    ${ex.name}: ${wt || '?'}lb x ${rp || '?'} (${sets.length} sets)\n`;
+        if (sets.length === 0) return;
+        
+        // Show each set's details for accurate repeat
+        const setDetails = sets.map((set, i) => {
+          const prescribed = `${set.prescribedWeight || '?'}x${set.prescribedReps || '?'}`;
+          const actual = set.actualWeight || set.actualReps ? 
+            `→${set.actualWeight || '?'}x${set.actualReps || '?'}` : '';
+          const rpeStr = set.rpe ? ` RPE:${set.rpe}` : '';
+          const painStr = set.painLevel && set.painLevel > 0 ? ` PAIN:${set.painLevel}` : '';
+          const completed = set.completed ? '✓' : '';
+          return `${prescribed}${actual}${rpeStr}${painStr}${completed}`;
+        }).join(', ');
+        
+        s += `    ${ex.name}: ${setDetails}\n`;
       });
     });
     s += '\n';

@@ -78,6 +78,7 @@ export default function GenerateWorkoutPage() {
       setLoadingContext(true);
       setAnalysisSteps([]);
       
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       let allWorkouts = [];
       
       // Step 1: Load personal workouts
@@ -91,9 +92,11 @@ export default function GenerateWorkoutPage() {
         snap.docs.forEach(doc => {
           const d = doc.data();
           if (d.status === 'completed') {
+            const workoutDate = d.date?.toDate?.() || new Date(d.date);
             allWorkouts.push({
               ...d,
-              date: d.date?.toDate?.()?.toISOString?.().split('T')[0] || d.date,
+              date: workoutDate.toISOString().split('T')[0],
+              dayOfWeek: dayNames[workoutDate.getDay()],
             });
           }
         });
@@ -109,9 +112,11 @@ export default function GenerateWorkoutPage() {
         snap.docs.forEach(doc => {
           const d = doc.data();
           if (d.status === 'completed') {
+            const workoutDate = d.date?.toDate?.() || new Date(d.date);
             allWorkouts.push({
               ...d,
-              date: d.date?.toDate?.()?.toISOString?.().split('T')[0] || d.date,
+              date: workoutDate.toISOString().split('T')[0],
+              dayOfWeek: dayNames[workoutDate.getDay()],
             });
           }
         });

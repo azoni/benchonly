@@ -57,27 +57,28 @@ const DEFAULT_LAYOUTS = {
   calories: { w: 4, h: 3 },
   healthChart: { w: 6, h: 4 },
   oneRepMax: { w: 4, h: 3 },
-  quickLinks: { w: 4, h: 4 },
+  quickLinks: { w: 4, h: 2 },
 }
 
 // Default layout positions for the initial dashboard
 const getDefaultLayout = () => [
   { i: 'profile', x: 0, y: 0, w: 4, h: 2 },
-  { i: 'quickLinks', x: 0, y: 2, w: 4, h: 4 },
-  { i: 'goals', x: 0, y: 6, w: 4, h: 4 },
+  { i: 'quickLinks', x: 0, y: 2, w: 4, h: 2 },
+  { i: 'goals', x: 0, y: 4, w: 4, h: 4 },
   { i: 'calendar', x: 4, y: 0, w: 8, h: 7 },
 ]
 
 // Generate layout - uses saved layout if available, otherwise generates fresh
-const generateLayout = (enabledWidgets, savedLayout = null, cols = 12) => {
-  // For single column (mobile), force all widgets to full width and stack vertically
-  if (cols === 1) {
+const generateLayout = (enabledWidgets, savedLayout = null, cols = 12, isMobile = false) => {
+  // For mobile, stack all widgets vertically at full width
+  if (isMobile) {
     let y = 0
     return enabledWidgets.map(widgetId => {
-      const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 3 }
+      const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 12, h: 3 }
       const saved = savedLayout?.find(item => item.i === widgetId)
+      // Use saved height if available, otherwise use default
       const h = saved?.h || defaults.h
-      const item = { i: widgetId, x: 0, y: y, w: 1, h: h }
+      const item = { i: widgetId, x: 0, y: y, w: 12, h: h }
       y += h
       return item
     })
@@ -791,8 +792,8 @@ export default function DashboardPage() {
         {configLoaded && containerWidth > 0 && (
           <GridLayout
             className="layout"
-            layout={generateLayout(visibleWidgets, layout, containerWidth < 500 ? 1 : 12)}
-            cols={containerWidth < 500 ? 1 : 12}
+            layout={generateLayout(visibleWidgets, layout, 12, containerWidth < 500)}
+            cols={12}
             rowHeight={50}
             width={containerWidth}
             margin={[12, 12]}

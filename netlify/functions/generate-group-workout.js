@@ -62,32 +62,50 @@ export async function handler(event) {
 
     const systemPrompt = `You are an expert strength coach creating personalized workouts for a group.
 
-RULES:
-1. Same exercises for all athletes (group consistency)
+CRITICAL RULES FOR REPEATING PREVIOUS WORKOUTS:
+If the coach asks to "repeat", "same as", "copy", or reference a previous workout:
+1. Use the EXACT same exercises from that workout - NO substitutions unless explicitly allowed
+2. Use the EXACT same number of sets and reps
+3. ONLY adjust WEIGHTS based on:
+   - Did athlete complete all prescribed reps? → Increase weight 2.5-5%
+   - Was RPE low (under 7)? → Increase weight 5%
+   - Was RPE very high (9-10)? → Keep same or decrease slightly
+   - Any pain reported? → Add warning in notes but DON'T substitute unless coach allows
+4. Each athlete may have done DIFFERENT exercises on the same day - respect their individual workout
+5. If coach says "no substitutions" - NEVER substitute, only add warnings in notes
+
+STANDARD WORKOUT RULES:
+1. Same exercises for all athletes (group consistency) for NEW workouts
 2. Personalize WEIGHTS based on each athlete's max lifts (70-85% of e1RM)
-3. AVOID or SUBSTITUTE exercises where athlete has pain history
+3. AVOID or SUBSTITUTE exercises where athlete has pain history (unless told not to)
 4. Consider RPE patterns when setting weights
 5. Factor in cardio/activity load when considering recovery
 6. Include coaching notes explaining your reasoning
+
+WEIGHT PROGRESSION LOGIC:
+- Completed all reps at target RPE 7-8: Add 5 lbs (upper) or 5-10 lbs (lower)
+- Completed all reps at RPE 6 or below: Add 5-10 lbs
+- Missed reps or RPE 9+: Keep same weight or reduce 5%
+- Pain reported on exercise: DO NOT increase weight, add note about monitoring
 
 OUTPUT JSON only, no markdown:
 {
   "name": "Workout Name",
   "description": "Brief description",
-  "coachingNotes": "Explanation of workout focus, exercise selection, and programming intent.",
+  "coachingNotes": "Explanation of workout focus, exercise selection, and programming intent. Include any warnings about pain or form issues.",
   "baseExercises": [
     { "name": "Bench Press", "type": "weight", "defaultSets": 4, "defaultReps": 8 }
   ],
   "athleteWorkouts": {
     "ATHLETE_ID": {
       "athleteName": "Name",
-      "personalNotes": "Notes for this athlete explaining weight selections and modifications.",
+      "personalNotes": "Notes for this athlete explaining weight selections, any concerns, and modifications.",
       "exercises": [
         {
           "name": "Bench Press",
           "type": "weight",
           "sets": [{ "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 }],
-          "notes": "Form cues",
+          "notes": "Form cues or warnings",
           "substitution": null
         }
       ]
@@ -95,7 +113,7 @@ OUTPUT JSON only, no markdown:
   }
 }
 
-For pain substitutions: "substitution": { "reason": "shoulder pain", "original": "Bench Press", "replacement": "Floor Press" }`;
+For pain substitutions (only when allowed): "substitution": { "reason": "shoulder pain", "original": "Bench Press", "replacement": "Floor Press" }`;
 
     const userPrompt = `Create a group workout:\n\n${contextStr}\n\n${prompt ? `COACH REQUEST: ${prompt}` : 'Generate appropriate strength workout.'}`;
 
@@ -257,7 +275,7 @@ function buildGroupContext(athletes, settings = {}) {
     const pain = Object.entries(a.painHistory || {});
     const significantPain = pain.filter(([_, d]) => d.maxPain >= painThresholdMin || d.count >= painThresholdCount);
     if (significantPain.length) {
-      s += 'PAIN [MUST SUBSTITUTE]: ';
+      s += 'PAIN HISTORY: ';
       s += significantPain.map(([n, d]) => `${n} (${d.maxPain}/10, ${d.count}x)`).join(', ');
       s += '\n';
     }
@@ -287,15 +305,28 @@ function buildGroupContext(athletes, settings = {}) {
       s += '\n';
     }
 
+    // DETAILED recent workout history for repeating workouts
     if (a.recentWorkouts?.length) {
-      s += `Recent (${a.recentWorkouts.length} workouts):\n`;
-      a.recentWorkouts.slice(0, 2).forEach(w => {
-        s += `  ${w.date || 'Recent'}: ${w.name || 'Workout'}\n`;
-        (w.exercises || []).slice(0, 3).forEach(ex => {
+      s += `\nRECENT WORKOUTS (${a.recentWorkouts.length} total):\n`;
+      a.recentWorkouts.slice(0, 3).forEach(w => {
+        const dayName = w.dayOfWeek || '';
+        s += `  [${w.date || 'Recent'}${dayName ? ` ${dayName}` : ''}] "${w.name || 'Workout'}"\n`;
+        (w.exercises || []).forEach(ex => {
           const sets = ex.sets || [];
-          const wt = sets[0]?.actualWeight || sets[0]?.prescribedWeight;
-          const rp = sets[0]?.actualReps || sets[0]?.prescribedReps;
-          if (wt || rp) s += `    ${ex.name}: ${wt || '?'}lb x ${rp || '?'}\n`;
+          if (sets.length === 0) return;
+          
+          // Show each set's details
+          const setDetails = sets.map((set, i) => {
+            const prescribed = `${set.prescribedWeight || '?'}x${set.prescribedReps || '?'}`;
+            const actual = set.actualWeight || set.actualReps ? 
+              `→${set.actualWeight || '?'}x${set.actualReps || '?'}` : '';
+            const rpeStr = set.rpe ? ` RPE:${set.rpe}` : '';
+            const painStr = set.painLevel && set.painLevel > 0 ? ` PAIN:${set.painLevel}` : '';
+            const completed = set.completed ? '✓' : '';
+            return `${prescribed}${actual}${rpeStr}${painStr}${completed}`;
+          }).join(', ');
+          
+          s += `    ${ex.name}: ${setDetails}\n`;
         });
       });
     }

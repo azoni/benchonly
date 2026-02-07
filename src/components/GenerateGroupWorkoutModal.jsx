@@ -186,13 +186,37 @@ export default function GenerateGroupWorkoutModal({
       goals = snap.docs.map(d => d.data()).filter(g => g.status === 'active');
     } catch (e) { console.error(e); }
 
+    // Format recent workouts with day of week and full set details
+    const formattedWorkouts = allWorkouts.slice(0, 5).map(w => {
+      const workoutDate = new Date(w.date);
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      return {
+        ...w,
+        dayOfWeek: dayNames[workoutDate.getDay()],
+        exercises: (w.exercises || []).map(ex => ({
+          name: ex.name,
+          type: ex.type || 'weight',
+          notes: ex.notes,
+          sets: (ex.sets || []).map(s => ({
+            prescribedWeight: s.prescribedWeight,
+            prescribedReps: s.prescribedReps,
+            actualWeight: s.actualWeight,
+            actualReps: s.actualReps,
+            rpe: s.rpe,
+            painLevel: s.painLevel,
+            completed: s.completed,
+          })),
+        })),
+      };
+    });
+
     return { 
       id: athleteId, 
       maxLifts, 
       painHistory, 
       rpeAverages, 
       goals,
-      recentWorkouts: allWorkouts.slice(0, 5),
+      recentWorkouts: formattedWorkouts,
     };
   };
 
