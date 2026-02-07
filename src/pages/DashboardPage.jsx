@@ -43,62 +43,41 @@ const STORAGE_KEY = 'dashboard_widgets'
 const STORAGE_KEY_LAYOUT = 'dashboard_layout'
 
 // Default grid layout for widgets
-// Grid has 2 columns. rowHeight is 50px
-// Heights based on actual widget content:
-// - ProfileWidget: avatar(64px) + padding(48px) = ~120px → h:3 (150px)
-// - StatsWidget: 2 stat cards ~100px → h:2 (100px)  
-// - RecentWorkoutsWidget: header + 5 items ~310px → h:6 (300px)
-// - GoalsWidget: header + 4 goals ~265px → h:5 (250px)
-// - HealthWidget: header + 3 metrics ~140px → h:3 (150px)
-// - HealthChartWidget: header + chart ~270px → h:5 (250px)
-// - CalendarWidget: header + grid + legend ~300px → h:6 (300px)
-// - QuickLinksWidget: header + 4x2 grid ~200px → h:4 (200px)
-// - CaloriesWidget: header + display + details ~220px → h:4 (200px)
-// - FeedWidget: header + 5 items ~310px → h:6 (300px)
-// - OneRepMaxWidget: header + inputs + result ~180px → h:4 (200px)
+// Grid has 4 columns. rowHeight is 50px
+// w: 1-4 for width control, h: any height
+// No min/max constraints - user can resize freely
 const DEFAULT_LAYOUTS = {
-  profile: { w: 1, h: 3, minH: 2, maxH: 4 },
-  stats: { w: 2, h: 2, minH: 2, maxH: 4 },
-  recentWorkouts: { w: 1, h: 6, minH: 4, maxH: 8 },
-  goals: { w: 1, h: 5, minH: 3, maxH: 7 },
-  calendar: { w: 1, h: 6, minH: 5, maxH: 8 },
-  health: { w: 1, h: 3, minH: 2, maxH: 5 },
-  feed: { w: 1, h: 6, minH: 4, maxH: 8 },
-  calories: { w: 1, h: 4, minH: 3, maxH: 6 },
-  healthChart: { w: 1, h: 5, minH: 4, maxH: 7 },
-  oneRepMax: { w: 1, h: 4, minH: 3, maxH: 5 },
-  quickLinks: { w: 1, h: 4, minH: 3, maxH: 5 },
+  profile: { w: 3, h: 1 },
+  stats: { w: 4, h: 2 },
+  recentWorkouts: { w: 3, h: 4 },
+  goals: { w: 3, h: 3 },
+  calendar: { w: 3, h: 5 },
+  health: { w: 3, h: 2 },
+  feed: { w: 3, h: 4 },
+  calories: { w: 3, h: 2 },
+  healthChart: { w: 3, h: 3 },
+  oneRepMax: { w: 3, h: 2 },
+  quickLinks: { w: 3, h: 2 },
 }
 
 // Default layout positions for the initial dashboard
-// Profile (150px) and QuickLinks (200px) on top row
-// Goals (250px) and Calendar (300px) on second row
 const getDefaultLayout = () => [
-  { i: 'profile', x: 0, y: 0, w: 1, h: 3, minH: 2, maxH: 4 },
-  { i: 'quickLinks', x: 1, y: 0, w: 1, h: 4, minH: 3, maxH: 5 },
-  { i: 'goals', x: 0, y: 3, w: 1, h: 5, minH: 3, maxH: 7 },
-  { i: 'calendar', x: 1, y: 4, w: 1, h: 6, minH: 5, maxH: 8 },
+  { i: 'profile', x: 0, y: 0, w: 3, h: 1 },
+  { i: 'quickLinks', x: 0, y: 1, w: 3, h: 2 },
+  { i: 'goals', x: 0, y: 3, w: 3, h: 3 },
+  { i: 'calendar', x: 0, y: 6, w: 3, h: 5 },
 ]
 
 // Generate layout - uses saved layout if available, otherwise generates fresh
-const generateLayout = (enabledWidgets, savedLayout = null, cols = 2) => {
+const generateLayout = (enabledWidgets, savedLayout = null, cols = 4) => {
   // For single column (mobile), force all widgets to full width and stack vertically
   if (cols === 1) {
     let y = 0
     return enabledWidgets.map(widgetId => {
-      const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 10 }
-      // Find saved height if available
+      const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 3 }
       const saved = savedLayout?.find(item => item.i === widgetId)
       const h = saved?.h || defaults.h
-      const item = {
-        i: widgetId,
-        x: 0,
-        y: y,
-        w: 1,
-        h: h,
-        minH: defaults.minH,
-        maxH: defaults.maxH,
-      }
+      const item = { i: widgetId, x: 0, y: y, w: 1, h: h }
       y += h
       return item
     })
@@ -110,40 +89,30 @@ const generateLayout = (enabledWidgets, savedLayout = null, cols = 2) => {
     savedLayout.forEach(item => { layoutMap[item.i] = item })
     
     const result = []
-    let col0Y = 0
-    let col1Y = 0
+    let maxY = 0
     
     // First pass: add widgets that exist in saved layout
     enabledWidgets.forEach(widgetId => {
       if (layoutMap[widgetId]) {
         const saved = layoutMap[widgetId]
-        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 10 }
-        // Merge saved position/size with default constraints
+        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 2, h: 3 }
         result.push({
           i: widgetId,
           x: saved.x,
           y: saved.y,
           w: saved.w || defaults.w,
           h: saved.h || defaults.h,
-          minH: defaults.minH,
-          maxH: defaults.maxH,
         })
-        if (saved.x === 0) col0Y = Math.max(col0Y, saved.y + (saved.h || defaults.h))
-        else col1Y = Math.max(col1Y, saved.y + (saved.h || defaults.h))
+        maxY = Math.max(maxY, saved.y + (saved.h || defaults.h))
       }
     })
     
     // Second pass: add new widgets not in saved layout
     enabledWidgets.forEach(widgetId => {
       if (!layoutMap[widgetId]) {
-        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 10 }
-        if (col0Y <= col1Y) {
-          result.push({ i: widgetId, x: 0, y: col0Y, ...defaults })
-          col0Y += defaults.h
-        } else {
-          result.push({ i: widgetId, x: 1, y: col1Y, ...defaults })
-          col1Y += defaults.h
-        }
+        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 2, h: 3 }
+        result.push({ i: widgetId, x: 0, y: maxY, w: defaults.w, h: defaults.h })
+        maxY += defaults.h
       }
     })
     
@@ -159,28 +128,25 @@ const generateLayout = (enabledWidgets, savedLayout = null, cols = 2) => {
     return getDefaultLayout()
   }
   
-  // Generate fresh layout - pack widgets efficiently
+  // Generate fresh layout - pack widgets in rows of 4 columns
   const layout = []
-  let col0Y = 0
-  let col1Y = 0
+  let currentX = 0
+  let currentY = 0
+  let rowMaxH = 0
   
   enabledWidgets.forEach(widgetId => {
-    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 10 }
+    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 2, h: 3 }
     
-    if (defaults.w === 2) {
-      const y = Math.max(col0Y, col1Y)
-      layout.push({ i: widgetId, x: 0, y, ...defaults })
-      col0Y = y + defaults.h
-      col1Y = y + defaults.h
-    } else {
-      if (col0Y <= col1Y) {
-        layout.push({ i: widgetId, x: 0, y: col0Y, ...defaults })
-        col0Y += defaults.h
-      } else {
-        layout.push({ i: widgetId, x: 1, y: col1Y, ...defaults })
-        col1Y += defaults.h
-      }
+    // If widget doesn't fit in current row, move to next row
+    if (currentX + defaults.w > cols) {
+      currentX = 0
+      currentY += rowMaxH
+      rowMaxH = 0
     }
+    
+    layout.push({ i: widgetId, x: currentX, y: currentY, w: defaults.w, h: defaults.h })
+    currentX += defaults.w
+    rowMaxH = Math.max(rowMaxH, defaults.h)
   })
   
   return layout
@@ -261,12 +227,12 @@ export default function DashboardPage() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
-        // Validate layout structure
+        // Validate layout structure (4 columns)
         if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(item =>
           item && item.i && 
-          typeof item.x === 'number' && item.x >= 0 && item.x <= 1 &&
+          typeof item.x === 'number' && item.x >= 0 && item.x <= 3 &&
           typeof item.y === 'number' && item.y >= 0 &&
-          typeof item.w === 'number' && item.w >= 1 &&
+          typeof item.w === 'number' && item.w >= 1 && item.w <= 4 &&
           typeof item.h === 'number' && item.h >= 1
         )) {
           return parsed
@@ -325,12 +291,12 @@ export default function DashboardPage() {
   // Validate and clean layout when loaded
   useEffect(() => {
     if (layout && layout.length > 0) {
-      // Check if layout has valid structure
+      // Check if layout has valid structure (4 columns, so x can be 0-3)
       const isValid = layout.every(item => 
         item && item.i && 
-        typeof item.x === 'number' && item.x >= 0 && item.x <= 1 &&
+        typeof item.x === 'number' && item.x >= 0 && item.x <= 3 &&
         typeof item.y === 'number' && item.y >= 0 &&
-        typeof item.w === 'number' && item.w >= 1 &&
+        typeof item.w === 'number' && item.w >= 1 && item.w <= 4 &&
         typeof item.h === 'number' && item.h >= 1
       )
       if (!isValid) {
@@ -347,9 +313,9 @@ export default function DashboardPage() {
       if (!Array.isArray(layoutArray) || layoutArray.length === 0) return false
       return layoutArray.every(item => 
         item && item.i && 
-        typeof item.x === 'number' && item.x >= 0 && item.x <= 1 &&
+        typeof item.x === 'number' && item.x >= 0 && item.x <= 3 &&
         typeof item.y === 'number' && item.y >= 0 &&
-        typeof item.w === 'number' && item.w >= 1 &&
+        typeof item.w === 'number' && item.w >= 1 && item.w <= 4 &&
         typeof item.h === 'number' && item.h >= 1
       )
     }
@@ -825,11 +791,11 @@ export default function DashboardPage() {
         {configLoaded && containerWidth > 0 && (
           <GridLayout
             className="layout"
-            layout={generateLayout(visibleWidgets, layout, containerWidth < 500 ? 1 : 2)}
-            cols={containerWidth < 500 ? 1 : 2}
+            layout={generateLayout(visibleWidgets, layout, containerWidth < 500 ? 1 : 4)}
+            cols={containerWidth < 500 ? 1 : 4}
             rowHeight={50}
             width={containerWidth}
-            margin={[16, 16]}
+            margin={[12, 12]}
             containerPadding={[0, 0]}
             isDraggable={customizeMode}
             isResizable={customizeMode}
@@ -841,7 +807,7 @@ export default function DashboardPage() {
               }
             }}
             draggableHandle=".widget-drag-handle"
-            resizeHandles={customizeMode ? ['se'] : []}
+            resizeHandles={customizeMode ? ['se', 'e', 's'] : []}
           >
           {visibleWidgets.map((widgetId) => {
             const config = WIDGET_REGISTRY[widgetId]

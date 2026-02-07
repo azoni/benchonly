@@ -241,17 +241,24 @@
 .editing-dashboard .react-grid-item > .react-resizable-handle {
   display: block;
   position: absolute;
-  width: 24px;
-  height: 24px;
   background: rgba(234, 88, 12, 0.3);
   border-radius: 4px;
 }
 
-.editing-dashboard .react-grid-item > .react-resizable-handle::after {
+/* Corner handle (se) */
+.editing-dashboard .react-grid-item > .react-resizable-handle-se {
+  width: 20px;
+  height: 20px;
+  bottom: 4px;
+  right: 4px;
+  cursor: se-resize;
+}
+
+.editing-dashboard .react-grid-item > .react-resizable-handle-se::after {
   content: "";
   position: absolute;
-  right: 6px;
-  bottom: 6px;
+  right: 4px;
+  bottom: 4px;
   width: 8px;
   height: 8px;
   border-right: 2px solid rgb(234, 88, 12);
@@ -259,10 +266,24 @@
   border-radius: 0 0 2px 0;
 }
 
-.editing-dashboard .react-grid-item > .react-resizable-handle.react-resizable-handle-se {
-  bottom: 4px;
-  right: 4px;
-  cursor: se-resize;
+/* Right edge handle (e) */
+.editing-dashboard .react-grid-item > .react-resizable-handle-e {
+  width: 10px;
+  height: 40px;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: e-resize;
+}
+
+/* Bottom edge handle (s) */
+.editing-dashboard .react-grid-item > .react-resizable-handle-s {
+  width: 40px;
+  height: 10px;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: s-resize;
 }
 
 .editing-dashboard .react-grid-item:hover > .react-resizable-handle {
