@@ -47,11 +47,11 @@ const STORAGE_KEY_LAYOUT = 'dashboard_layout'
 // w: 1-12 for width control, h: any height
 // No min/max constraints - user can resize freely
 const DEFAULT_LAYOUTS = {
-  profile: { w: 4, h: 2 },
+  profile: { w: 4, h: 1 },
   stats: { w: 12, h: 2 },
   recentWorkouts: { w: 6, h: 5 },
-  goals: { w: 4, h: 4 },
-  calendar: { w: 6, h: 7 },
+  goals: { w: 4, h: 3 },
+  calendar: { w: 6, h: 5 },
   health: { w: 4, h: 3 },
   feed: { w: 6, h: 5 },
   calories: { w: 4, h: 3 },
@@ -62,10 +62,10 @@ const DEFAULT_LAYOUTS = {
 
 // Default layout positions for the initial dashboard
 const getDefaultLayout = () => [
-  { i: 'profile', x: 0, y: 0, w: 4, h: 2 },
-  { i: 'quickLinks', x: 0, y: 2, w: 4, h: 2 },
-  { i: 'goals', x: 0, y: 4, w: 4, h: 4 },
-  { i: 'calendar', x: 4, y: 0, w: 8, h: 7 },
+  { i: 'profile', x: 0, y: 0, w: 4, h: 1 },
+  { i: 'quickLinks', x: 0, y: 1, w: 4, h: 2 },
+  { i: 'goals', x: 0, y: 3, w: 4, h: 3 },
+  { i: 'calendar', x: 4, y: 0, w: 8, h: 5 },
 ]
 
 // Generate layout - uses saved layout if available, otherwise generates fresh
