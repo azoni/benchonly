@@ -43,33 +43,55 @@ const STORAGE_KEY = 'dashboard_widgets'
 const STORAGE_KEY_LAYOUT = 'dashboard_layout'
 
 // Default grid layout for widgets
-// Grid has 2 columns, rowHeight is 50px
-// w: 1 = half width, w: 2 = full width
-// minH set very low to allow compact sizing
+// Grid has 2 columns on desktop, 1 on mobile. rowHeight is 50px
+// w: 1 = half width (or full on mobile), w: 2 = full width
+// minH set low to allow compact sizing
 const DEFAULT_LAYOUTS = {
-  profile: { w: 1, h: 3, minH: 1, maxH: 6 },
-  stats: { w: 1, h: 3, minH: 1, maxH: 6 },
-  recentWorkouts: { w: 1, h: 5, minH: 2, maxH: 12 },
-  goals: { w: 1, h: 4, minH: 1, maxH: 10 },
-  calendar: { w: 1, h: 9, minH: 4, maxH: 14 },
-  health: { w: 1, h: 3, minH: 1, maxH: 8 },
-  feed: { w: 1, h: 4, minH: 1, maxH: 10 },
-  calories: { w: 1, h: 3, minH: 1, maxH: 6 },
-  healthChart: { w: 1, h: 4, minH: 2, maxH: 10 },
-  oneRepMax: { w: 1, h: 4, minH: 2, maxH: 10 },
-  quickLinks: { w: 1, h: 4, minH: 2, maxH: 8 },
+  profile: { w: 1, h: 3, minH: 2, maxH: 6 },
+  stats: { w: 1, h: 3, minH: 2, maxH: 6 },
+  recentWorkouts: { w: 1, h: 6, minH: 3, maxH: 12 },
+  goals: { w: 1, h: 5, minH: 2, maxH: 10 },
+  calendar: { w: 1, h: 10, minH: 6, maxH: 14 },
+  health: { w: 1, h: 4, minH: 2, maxH: 8 },
+  feed: { w: 1, h: 5, minH: 2, maxH: 10 },
+  calories: { w: 1, h: 3, minH: 2, maxH: 6 },
+  healthChart: { w: 1, h: 5, minH: 3, maxH: 10 },
+  oneRepMax: { w: 1, h: 5, minH: 3, maxH: 10 },
+  quickLinks: { w: 1, h: 5, minH: 3, maxH: 8 },
 }
 
-// Default layout positions for the initial dashboard (matches user's preferred layout)
+// Default layout positions for the initial dashboard
 const getDefaultLayout = () => [
-  { i: 'profile', x: 0, y: 0, w: 1, h: 3, minH: 1, maxH: 6 },
-  { i: 'quickLinks', x: 1, y: 0, w: 1, h: 4, minH: 2, maxH: 8 },
-  { i: 'goals', x: 0, y: 3, w: 1, h: 4, minH: 1, maxH: 10 },
-  { i: 'calendar', x: 1, y: 4, w: 1, h: 9, minH: 4, maxH: 14 },
+  { i: 'profile', x: 0, y: 0, w: 1, h: 3, minH: 2, maxH: 6 },
+  { i: 'quickLinks', x: 1, y: 0, w: 1, h: 5, minH: 3, maxH: 8 },
+  { i: 'goals', x: 0, y: 3, w: 1, h: 5, minH: 2, maxH: 10 },
+  { i: 'calendar', x: 1, y: 5, w: 1, h: 10, minH: 6, maxH: 14 },
 ]
 
 // Generate layout - uses saved layout if available, otherwise generates fresh
-const generateLayout = (enabledWidgets, savedLayout = null) => {
+const generateLayout = (enabledWidgets, savedLayout = null, cols = 2) => {
+  // For single column (mobile), force all widgets to full width and stack vertically
+  if (cols === 1) {
+    let y = 0
+    return enabledWidgets.map(widgetId => {
+      const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 10 }
+      // Find saved height if available
+      const saved = savedLayout?.find(item => item.i === widgetId)
+      const h = saved?.h || defaults.h
+      const item = {
+        i: widgetId,
+        x: 0,
+        y: y,
+        w: 1,
+        h: h,
+        minH: defaults.minH,
+        maxH: defaults.maxH,
+      }
+      y += h
+      return item
+    })
+  }
+
   // If we have a saved layout, use it (filtering to only enabled widgets)
   if (savedLayout && savedLayout.length > 0) {
     const layoutMap = {}
@@ -83,7 +105,7 @@ const generateLayout = (enabledWidgets, savedLayout = null) => {
     enabledWidgets.forEach(widgetId => {
       if (layoutMap[widgetId]) {
         const saved = layoutMap[widgetId]
-        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 1, maxH: 10 }
+        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 10 }
         // Merge saved position/size with default constraints
         result.push({
           i: widgetId,
@@ -102,7 +124,7 @@ const generateLayout = (enabledWidgets, savedLayout = null) => {
     // Second pass: add new widgets not in saved layout
     enabledWidgets.forEach(widgetId => {
       if (!layoutMap[widgetId]) {
-        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 1, maxH: 10 }
+        const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 10 }
         if (col0Y <= col1Y) {
           result.push({ i: widgetId, x: 0, y: col0Y, ...defaults })
           col0Y += defaults.h
@@ -131,7 +153,7 @@ const generateLayout = (enabledWidgets, savedLayout = null) => {
   let col1Y = 0
   
   enabledWidgets.forEach(widgetId => {
-    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 1, maxH: 10 }
+    const defaults = DEFAULT_LAYOUTS[widgetId] || { w: 1, h: 4, minH: 2, maxH: 10 }
     
     if (defaults.w === 2) {
       const y = Math.max(col0Y, col1Y)
@@ -240,43 +262,39 @@ export default function DashboardPage() {
   const [configLoaded, setConfigLoaded] = useState(false)
   const saveTimeoutRef = useRef(null)
 
-  // Measure container width using ResizeObserver for reliability
+  // Measure container width
   useEffect(() => {
-    if (!containerRef.current) return
-    
     const updateWidth = () => {
       if (containerRef.current) {
-        const width = containerRef.current.getBoundingClientRect().width
+        const width = containerRef.current.offsetWidth
         if (width > 0) {
           setContainerWidth(width)
         }
       }
     }
     
-    // Use ResizeObserver for accurate measurements
-    const resizeObserver = new ResizeObserver(() => {
-      updateWidth()
-    })
+    // Measure after a short delay to ensure DOM is ready
+    const timeoutId = setTimeout(updateWidth, 100)
+    updateWidth() // Also try immediately
     
-    resizeObserver.observe(containerRef.current)
-    
-    // Initial measurement
-    updateWidth()
+    // Update on resize
+    window.addEventListener('resize', updateWidth)
     
     return () => {
-      resizeObserver.disconnect()
+      clearTimeout(timeoutId)
+      window.removeEventListener('resize', updateWidth)
     }
   }, [])
 
-  // Re-measure after config loads
+  // Re-measure when config loads or widgets change
   useEffect(() => {
-    if (configLoaded && containerRef.current) {
-      const width = containerRef.current.getBoundingClientRect().width
+    if (containerRef.current) {
+      const width = containerRef.current.offsetWidth
       if (width > 0) {
         setContainerWidth(width)
       }
     }
-  }, [configLoaded])
+  }, [configLoaded, enabledWidgets])
 
   // Load dashboard config from Firestore or localStorage
   useEffect(() => {
@@ -631,6 +649,16 @@ export default function DashboardPage() {
     return true
   })
 
+  // Debug logging
+  console.log('Dashboard debug:', { 
+    configLoaded, 
+    containerWidth, 
+    enabledWidgets, 
+    widgetOrder,
+    visibleWidgets,
+    layout: layout?.length 
+  })
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
       {/* Onboarding Modal */}
@@ -737,16 +765,16 @@ export default function DashboardPage() {
       {/* Grid Layout Container */}
       <div 
         ref={containerRef}
-        className={`w-full ${customizeMode ? 'editing-dashboard' : ''}`}
+        className={`w-full min-h-[100px] ${customizeMode ? 'editing-dashboard' : ''}`}
       >
         {configLoaded && containerWidth > 0 && (
           <GridLayout
             className="layout"
-            layout={generateLayout(visibleWidgets, layout)}
-            cols={2}
+            layout={generateLayout(visibleWidgets, layout, containerWidth < 500 ? 1 : 2)}
+            cols={containerWidth < 500 ? 1 : 2}
             rowHeight={50}
             width={containerWidth}
-            margin={[16, 16]}
+            margin={[12, 12]}
             containerPadding={[0, 0]}
             isDraggable={customizeMode}
             isResizable={customizeMode}
