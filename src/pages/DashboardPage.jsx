@@ -43,29 +43,41 @@ const STORAGE_KEY = 'dashboard_widgets'
 const STORAGE_KEY_LAYOUT = 'dashboard_layout'
 
 // Default grid layout for widgets
-// Grid has 2 columns on desktop, 1 on mobile. rowHeight is 50px
-// w: 1 = half width (or full on mobile), w: 2 = full width
-// minH set low to allow compact sizing
+// Grid has 2 columns. rowHeight is 50px
+// Heights based on actual widget content:
+// - ProfileWidget: avatar(64px) + padding(48px) = ~120px → h:3 (150px)
+// - StatsWidget: 2 stat cards ~100px → h:2 (100px)  
+// - RecentWorkoutsWidget: header + 5 items ~310px → h:6 (300px)
+// - GoalsWidget: header + 4 goals ~265px → h:5 (250px)
+// - HealthWidget: header + 3 metrics ~140px → h:3 (150px)
+// - HealthChartWidget: header + chart ~270px → h:5 (250px)
+// - CalendarWidget: header + grid + legend ~300px → h:6 (300px)
+// - QuickLinksWidget: header + 4x2 grid ~200px → h:4 (200px)
+// - CaloriesWidget: header + display + details ~220px → h:4 (200px)
+// - FeedWidget: header + 5 items ~310px → h:6 (300px)
+// - OneRepMaxWidget: header + inputs + result ~180px → h:4 (200px)
 const DEFAULT_LAYOUTS = {
-  profile: { w: 1, h: 3, minH: 2, maxH: 6 },
-  stats: { w: 1, h: 3, minH: 2, maxH: 6 },
-  recentWorkouts: { w: 1, h: 6, minH: 3, maxH: 12 },
-  goals: { w: 1, h: 5, minH: 2, maxH: 10 },
-  calendar: { w: 1, h: 10, minH: 6, maxH: 14 },
-  health: { w: 1, h: 4, minH: 2, maxH: 8 },
-  feed: { w: 1, h: 5, minH: 2, maxH: 10 },
-  calories: { w: 1, h: 3, minH: 2, maxH: 6 },
-  healthChart: { w: 1, h: 5, minH: 3, maxH: 10 },
-  oneRepMax: { w: 1, h: 5, minH: 3, maxH: 10 },
-  quickLinks: { w: 1, h: 5, minH: 3, maxH: 8 },
+  profile: { w: 1, h: 3, minH: 2, maxH: 4 },
+  stats: { w: 2, h: 2, minH: 2, maxH: 4 },
+  recentWorkouts: { w: 1, h: 6, minH: 4, maxH: 8 },
+  goals: { w: 1, h: 5, minH: 3, maxH: 7 },
+  calendar: { w: 1, h: 6, minH: 5, maxH: 8 },
+  health: { w: 1, h: 3, minH: 2, maxH: 5 },
+  feed: { w: 1, h: 6, minH: 4, maxH: 8 },
+  calories: { w: 1, h: 4, minH: 3, maxH: 6 },
+  healthChart: { w: 1, h: 5, minH: 4, maxH: 7 },
+  oneRepMax: { w: 1, h: 4, minH: 3, maxH: 5 },
+  quickLinks: { w: 1, h: 4, minH: 3, maxH: 5 },
 }
 
 // Default layout positions for the initial dashboard
+// Profile (150px) and QuickLinks (200px) on top row
+// Goals (250px) and Calendar (300px) on second row
 const getDefaultLayout = () => [
-  { i: 'profile', x: 0, y: 0, w: 1, h: 3, minH: 2, maxH: 6 },
-  { i: 'quickLinks', x: 1, y: 0, w: 1, h: 5, minH: 3, maxH: 8 },
-  { i: 'goals', x: 0, y: 3, w: 1, h: 5, minH: 2, maxH: 10 },
-  { i: 'calendar', x: 1, y: 5, w: 1, h: 10, minH: 6, maxH: 14 },
+  { i: 'profile', x: 0, y: 0, w: 1, h: 3, minH: 2, maxH: 4 },
+  { i: 'quickLinks', x: 1, y: 0, w: 1, h: 4, minH: 3, maxH: 5 },
+  { i: 'goals', x: 0, y: 3, w: 1, h: 5, minH: 3, maxH: 7 },
+  { i: 'calendar', x: 1, y: 4, w: 1, h: 6, minH: 5, maxH: 8 },
 ]
 
 // Generate layout - uses saved layout if available, otherwise generates fresh
