@@ -243,13 +243,27 @@ export default function DashboardPage() {
     return DEFAULT_WIDGET_ORDER
   })
   
-  // Grid layout state
+  // Grid layout state - validate before using
   const [layout, setLayout] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEY_LAYOUT)
     if (saved) {
       try {
-        return JSON.parse(saved)
+        const parsed = JSON.parse(saved)
+        // Validate layout structure
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(item =>
+          item && item.i && 
+          typeof item.x === 'number' && item.x >= 0 && item.x <= 1 &&
+          typeof item.y === 'number' && item.y >= 0 &&
+          typeof item.w === 'number' && item.w >= 1 &&
+          typeof item.h === 'number' && item.h >= 1
+        )) {
+          return parsed
+        }
+        // Invalid layout, clear it
+        localStorage.removeItem(STORAGE_KEY_LAYOUT)
+        return null
       } catch {
+        localStorage.removeItem(STORAGE_KEY_LAYOUT)
         return null
       }
     }
@@ -266,15 +280,16 @@ export default function DashboardPage() {
   useEffect(() => {
     const updateWidth = () => {
       if (containerRef.current) {
-        const width = containerRef.current.offsetWidth
-        if (width > 0) {
+        const rect = containerRef.current.getBoundingClientRect()
+        const width = rect.width || containerRef.current.offsetWidth
+        if (width > 100) { // Ensure we have a reasonable width
           setContainerWidth(width)
         }
       }
     }
     
     // Measure after a short delay to ensure DOM is ready
-    const timeoutId = setTimeout(updateWidth, 100)
+    const timeoutId = setTimeout(updateWidth, 150)
     updateWidth() // Also try immediately
     
     // Update on resize
@@ -289,23 +304,68 @@ export default function DashboardPage() {
   // Re-measure when config loads or widgets change
   useEffect(() => {
     if (containerRef.current) {
-      const width = containerRef.current.offsetWidth
-      if (width > 0) {
-        setContainerWidth(width)
-      }
+      // Use timeout to ensure layout is settled
+      setTimeout(() => {
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect()
+          const width = rect.width || containerRef.current.offsetWidth
+          if (width > 100) {
+            setContainerWidth(width)
+          }
+        }
+      }, 50)
     }
   }, [configLoaded, enabledWidgets])
 
+  // Validate and clean layout when loaded
+  useEffect(() => {
+    if (layout && layout.length > 0) {
+      // Check if layout has valid structure
+      const isValid = layout.every(item => 
+        item && item.i && 
+        typeof item.x === 'number' && item.x >= 0 && item.x <= 1 &&
+        typeof item.y === 'number' && item.y >= 0 &&
+        typeof item.w === 'number' && item.w >= 1 &&
+        typeof item.h === 'number' && item.h >= 1
+      )
+      if (!isValid) {
+        console.warn('Invalid layout detected, resetting to defaults')
+        setLayout(null)
+        localStorage.removeItem(STORAGE_KEY_LAYOUT)
+      }
+    }
+  }, [layout])
+
   // Load dashboard config from Firestore or localStorage
   useEffect(() => {
+    const isValidLayout = (layoutArray) => {
+      if (!Array.isArray(layoutArray) || layoutArray.length === 0) return false
+      return layoutArray.every(item => 
+        item && item.i && 
+        typeof item.x === 'number' && item.x >= 0 && item.x <= 1 &&
+        typeof item.y === 'number' && item.y >= 0 &&
+        typeof item.w === 'number' && item.w >= 1 &&
+        typeof item.h === 'number' && item.h >= 1
+      )
+    }
+
     const loadConfig = async () => {
       if (user && !isGuest) {
         try {
           const config = await userService.getDashboardConfig(user.uid)
           if (config) {
-            if (config.widgetOrder) setWidgetOrder(config.widgetOrder)
-            if (config.enabledWidgets) setEnabledWidgets(config.enabledWidgets)
-            if (config.layout) setLayout(config.layout)
+            if (config.widgetOrder && Array.isArray(config.widgetOrder)) {
+              setWidgetOrder(config.widgetOrder)
+            }
+            if (config.enabledWidgets && Array.isArray(config.enabledWidgets)) {
+              setEnabledWidgets(config.enabledWidgets)
+            }
+            // Only use layout if it's valid
+            if (config.layout && isValidLayout(config.layout)) {
+              setLayout(config.layout)
+            } else if (config.layout) {
+              console.warn('Invalid layout from Firestore, ignoring')
+            }
           }
         } catch (error) {
           console.error('Error loading dashboard config:', error)
@@ -767,6 +827,13 @@ export default function DashboardPage() {
         ref={containerRef}
         className={`w-full min-h-[100px] ${customizeMode ? 'editing-dashboard' : ''}`}
       >
+        {/* Debug: show if width measurement failed */}
+        {configLoaded && containerWidth < 100 && (
+          <div className="text-center py-10 text-iron-500">
+            <p>Loading dashboard...</p>
+            <p className="text-xs mt-2">Container width: {containerWidth}px</p>
+          </div>
+        )}
         {configLoaded && containerWidth > 0 && (
           <GridLayout
             className="layout"
