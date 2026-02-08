@@ -708,13 +708,14 @@ export default function DashboardPage() {
           >
             <HelpCircle className="w-5 h-5" />
           </button>
+          {/* Hide edit on mobile - no grid layout there */}
           <button
             onClick={() => setCustomizeMode(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-lg transition-colors"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-lg transition-colors"
             title="Customize Dashboard"
           >
             <Edit2 className="w-4 h-4" />
-            <span className="text-sm hidden sm:inline">Edit</span>
+            <span className="text-sm">Edit</span>
           </button>
           <Link to="/workouts" className="btn-primary flex items-center gap-2">
             <Dumbbell className="w-5 h-5" />
@@ -784,15 +785,30 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* Grid Layout Container */}
+      {/* Mobile: Simple stacked layout */}
+      {configLoaded && containerWidth > 0 && containerWidth < 640 && (
+        <div className="space-y-4">
+          {visibleWidgets.map((widgetId) => {
+            const config = WIDGET_REGISTRY[widgetId]
+            if (!config) return null
+            return (
+              <div key={widgetId} className="w-full">
+                {renderWidget(widgetId)}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Desktop: Grid Layout */}
       <div 
         ref={containerRef}
-        className={`w-full ${customizeMode ? 'editing-dashboard' : ''}`}
+        className={`w-full ${customizeMode ? 'editing-dashboard' : ''} ${containerWidth < 640 ? 'hidden' : ''}`}
       >
-        {configLoaded && containerWidth > 0 && (
+        {configLoaded && containerWidth >= 640 && (
           <GridLayout
             className="layout"
-            layout={generateLayout(visibleWidgets, layout, 12, containerWidth < 500)}
+            layout={generateLayout(visibleWidgets, layout, 12, false)}
             cols={12}
             rowHeight={50}
             width={containerWidth}
@@ -853,8 +869,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Add widget button when not customizing */}
-      {configLoaded && !customizeMode && Object.keys(WIDGET_REGISTRY).filter(id => !enabledWidgets.includes(id) && !WIDGET_REGISTRY[id].isSpecial).length > 0 && (
+      {/* Add widget button when not customizing - desktop only */}
+      {configLoaded && !customizeMode && containerWidth >= 640 && Object.keys(WIDGET_REGISTRY).filter(id => !enabledWidgets.includes(id) && !WIDGET_REGISTRY[id].isSpecial).length > 0 && (
         <button
           onClick={() => setCustomizeMode(true)}
           className="mt-4 w-full card-steel p-4 border-2 border-dashed border-iron-700 hover:border-flame-500/50 transition-colors group"
