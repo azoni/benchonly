@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import admin from 'firebase-admin';
+import { logActivity } from './utils/log-activity.js';
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -222,6 +223,17 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
     } catch (e) {
       console.error('Failed to log usage:', e);
     }
+
+    // Log to portfolio activity feed
+    logActivity({
+      type: 'group_workout_generated',
+      title: `Group Workout: ${result.name || 'AI Group Workout'}`,
+      description: `${athletes.length} athletes, ${selectedModel}`,
+      model: selectedModel,
+      tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
+      cost,
+      metadata: { groupId, athleteCount: athletes.length },
+    });
 
     return {
       statusCode: 200,

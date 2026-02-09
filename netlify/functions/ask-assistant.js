@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { logActivity } from './utils/log-activity.js'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -133,6 +134,19 @@ ${contextString}`
       assistantResponse: cleanMessage,
       createdAt: new Date().toISOString()
     }
+
+    // GPT-4o-mini: $0.15/$0.60 per 1M tokens
+    const cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60
+
+    // Log to portfolio activity feed
+    logActivity({
+      type: 'assistant_chat',
+      title: workout ? 'Assistant Generated Workout' : 'Assistant Answered Question',
+      description: message.slice(0, 120),
+      model: 'gpt-4o-mini',
+      tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
+      cost,
+    })
 
     return {
       statusCode: 200,

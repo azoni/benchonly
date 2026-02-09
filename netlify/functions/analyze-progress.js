@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { logActivity } from './utils/log-activity.js'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -86,6 +87,19 @@ Provide detailed analysis and actionable recommendations.`
     }
 
     const analysis = JSON.parse(completion.choices[0].message.content)
+
+    // GPT-4o-mini: $0.15/$0.60 per 1M tokens
+    const cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60
+
+    // Log to portfolio activity feed
+    logActivity({
+      type: 'progress_analyzed',
+      title: 'Analyzed Training Progress',
+      description: `${timeframe || '30 days'} of workout data, ${workouts?.length || 0} workouts`,
+      model: 'gpt-4o-mini',
+      tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
+      cost,
+    })
 
     return {
       statusCode: 200,

@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { logActivity } from './utils/log-activity.js'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -74,6 +75,19 @@ Fill in missing weights and reps based on progression from recent workouts.`
     }
 
     const result = JSON.parse(completion.choices[0].message.content)
+
+    // GPT-4o-mini: $0.15/$0.60 per 1M tokens
+    const cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60
+
+    // Log to portfolio activity feed
+    logActivity({
+      type: 'workout_autofilled',
+      title: 'Autofilled Workout Data',
+      description: `${result.exercises?.length || 0} exercises filled with predicted weights/reps`,
+      model: 'gpt-4o-mini',
+      tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
+      cost,
+    })
 
     return {
       statusCode: 200,

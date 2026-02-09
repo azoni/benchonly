@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import admin from 'firebase-admin';
+import { logActivity } from './utils/log-activity.js';
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -193,6 +194,17 @@ OUTPUT JSON only, no markdown:
     } catch (e) {
       console.error('Failed to log usage:', e);
     }
+
+    // Log to portfolio activity feed
+    logActivity({
+      type: 'workout_generated',
+      title: `Generated Workout: ${workout.name || 'AI Workout'}`,
+      description: `${(workout.exercises || []).length} exercises, ${selectedModel}`,
+      model: selectedModel,
+      tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
+      cost,
+      metadata: { workoutId: docRef.id, exerciseCount: (workout.exercises || []).length },
+    });
 
     return {
       statusCode: 200,
