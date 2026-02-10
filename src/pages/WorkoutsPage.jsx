@@ -71,16 +71,20 @@ export default function WorkoutsPage() {
     }
   }
 
-  const handleDelete = async (workoutId) => {
+  const handleDelete = async (workout) => {
     if (window.confirm('Are you sure you want to delete this workout?')) {
       if (isGuest) {
-        setWorkouts((prev) => prev.filter((w) => w.id !== workoutId))
+        setWorkouts((prev) => prev.filter((w) => w.id !== workout.id))
         setActiveMenu(null)
         return
       }
       try {
-        await workoutService.delete(workoutId)
-        setWorkouts((prev) => prev.filter((w) => w.id !== workoutId))
+        if (workout.isGroupWorkout) {
+          await groupWorkoutService.delete(workout.id)
+        } else {
+          await workoutService.delete(workout.id)
+        }
+        setWorkouts((prev) => prev.filter((w) => w.id !== workout.id))
         setActiveMenu(null)
       } catch (error) {
         console.error('Error deleting workout:', error)
@@ -344,8 +348,7 @@ export default function WorkoutsPage() {
                   <ChevronRight className="w-5 h-5 text-iron-600 group-hover:text-iron-400 transition-colors flex-shrink-0" />
                 </Link>
 
-                {/* Actions Menu (not for group workouts) */}
-                {!workout.isGroupWorkout && (
+                {/* Actions Menu */}
                   <>
                     <button
                       onClick={(e) => {
@@ -368,16 +371,18 @@ export default function WorkoutsPage() {
                           className="absolute right-2 top-14 bg-iron-800 border border-iron-700
                             rounded-lg shadow-xl z-20 py-1 min-w-[140px]"
                         >
-                          <Link
-                            to={`/workouts/${workout.id}/edit`}
-                            className="flex items-center gap-2 px-4 py-2 text-sm text-iron-300
-                              hover:bg-iron-700 transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                            Edit
-                          </Link>
+                          {!workout.isGroupWorkout && (
+                            <Link
+                              to={`/workouts/${workout.id}/edit`}
+                              className="flex items-center gap-2 px-4 py-2 text-sm text-iron-300
+                                hover:bg-iron-700 transition-colors"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                              Edit
+                            </Link>
+                          )}
                           <button
-                            onClick={() => handleDelete(workout.id)}
+                            onClick={() => handleDelete(workout)}
                             className="flex items-center gap-2 px-4 py-2 text-sm text-red-400
                               hover:bg-iron-700 transition-colors w-full"
                           >
@@ -388,7 +393,6 @@ export default function WorkoutsPage() {
                       )}
                     </AnimatePresence>
                   </>
-                )}
               </motion.div>
             )
           })}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -14,10 +14,30 @@ import {
   ChevronUp,
   Lock,
   Zap,
+  MessageSquare,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
+
+// Simulated thinking messages that rotate during AI generation
+const THINKING_MESSAGES = [
+  { text: 'Loading athlete profiles and training histories...', icon: 'users' },
+  { text: 'Scanning recent workout data for volume and intensity trends...', icon: 'brain' },
+  { text: 'Evaluating pain history and flagging injury risks...', icon: 'alert' },
+  { text: 'Calculating estimated 1-rep maxes from recent sets...', icon: 'calc' },
+  { text: 'Reviewing RPE averages to calibrate load recommendations...', icon: 'brain' },
+  { text: 'Checking recovery status based on recent training frequency...', icon: 'brain' },
+  { text: 'Selecting primary compound movements for the session...', icon: 'dumbbell' },
+  { text: 'Adding accessory exercises to target weak points...', icon: 'dumbbell' },
+  { text: 'Personalizing working weights per athlete based on e1RM...', icon: 'users' },
+  { text: 'Applying progressive overload — adjusting from last session...', icon: 'calc' },
+  { text: 'Building set/rep schemes for target intensity zone...', icon: 'dumbbell' },
+  { text: 'Checking for exercise substitutions where pain was flagged...', icon: 'alert' },
+  { text: 'Writing coaching notes and form cues for each exercise...', icon: 'msg' },
+  { text: 'Generating individualized notes for each athlete...', icon: 'users' },
+  { text: 'Validating workout structure and total volume...', icon: 'calc' },
+];
 
 export default function GenerateGroupWorkoutModal({ 
   isOpen, 
@@ -41,6 +61,11 @@ export default function GenerateGroupWorkoutModal({
   // Analysis tracking
   const [analysisSteps, setAnalysisSteps] = useState([]);
   const [expandedAthlete, setExpandedAthlete] = useState(null);
+  
+  // AI thinking state
+  const [thinkingMessages, setThinkingMessages] = useState([]);
+  const thinkingRef = useRef(null);
+  const thinkingIntervalRef = useRef(null);
 
   useEffect(() => {
     if (isOpen && athletes?.length > 0) {
@@ -48,6 +73,20 @@ export default function GenerateGroupWorkoutModal({
       loadAthleteContexts(athletes);
     }
   }, [isOpen, athletes]);
+
+  // Auto-scroll thinking messages
+  useEffect(() => {
+    if (thinkingRef.current) {
+      thinkingRef.current.scrollTop = thinkingRef.current.scrollHeight;
+    }
+  }, [thinkingMessages]);
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
+    };
+  }, []);
 
   const addStep = (label, status, detail = null) => {
     setAnalysisSteps(prev => {
@@ -59,6 +98,36 @@ export default function GenerateGroupWorkoutModal({
       }
       return [...prev, { label, status, detail }];
     });
+  };
+
+  const startThinkingAnimation = () => {
+    setThinkingMessages([]);
+    let index = 0;
+    
+    // Add first message immediately
+    setThinkingMessages([{ ...THINKING_MESSAGES[0], id: 0 }]);
+    index = 1;
+    
+    thinkingIntervalRef.current = setInterval(() => {
+      if (index < THINKING_MESSAGES.length) {
+        setThinkingMessages(prev => [...prev, { ...THINKING_MESSAGES[index], id: index }]);
+        index++;
+      } else {
+        // Loop with "still working" messages
+        setThinkingMessages(prev => [...prev, { 
+          text: 'Finalizing workout details...', 
+          icon: 'brain', 
+          id: prev.length 
+        }]);
+      }
+    }, 2200);
+  };
+
+  const stopThinkingAnimation = () => {
+    if (thinkingIntervalRef.current) {
+      clearInterval(thinkingIntervalRef.current);
+      thinkingIntervalRef.current = null;
+    }
   };
 
   const loadAthleteContexts = async (athleteList) => {
@@ -83,13 +152,8 @@ export default function GenerateGroupWorkoutModal({
       } catch (err) {
         console.error(`Error for ${athlete.uid}:`, err);
         contexts[athlete.uid] = {
-          id: athlete.uid,
-          name,
-          maxLifts: {},
-          painHistory: {},
-          rpeAverages: {},
-          goals: [],
-          recentWorkouts: [],
+          id: athlete.uid, name,
+          maxLifts: {}, painHistory: {}, rpeAverages: {}, goals: [], recentWorkouts: [],
         };
         addStep(`Analyzing ${name}`, 'complete', 'No data');
       }
@@ -104,16 +168,13 @@ export default function GenerateGroupWorkoutModal({
 
     try {
       const snap = await getDocs(query(
-        collection(db, 'workouts'),
-        where('userId', '==', athleteId),
-        limit(30)
+        collection(db, 'workouts'), where('userId', '==', athleteId), limit(30)
       ));
       snap.docs.forEach(doc => {
         const d = doc.data();
         if (d.status === 'completed') {
           allWorkouts.push({
-            ...d,
-            date: d.date?.toDate?.()?.toISOString?.().split('T')[0] || d.date,
+            ...d, date: d.date?.toDate?.()?.toISOString?.().split('T')[0] || d.date,
           });
         }
       });
@@ -121,16 +182,13 @@ export default function GenerateGroupWorkoutModal({
 
     try {
       const snap = await getDocs(query(
-        collection(db, 'groupWorkouts'),
-        where('assignedTo', '==', athleteId),
-        limit(30)
+        collection(db, 'groupWorkouts'), where('assignedTo', '==', athleteId), limit(30)
       ));
       snap.docs.forEach(doc => {
         const d = doc.data();
         if (d.status === 'completed') {
           allWorkouts.push({
-            ...d,
-            date: d.date?.toDate?.()?.toISOString?.().split('T')[0] || d.date,
+            ...d, date: d.date?.toDate?.()?.toISOString?.().split('T')[0] || d.date,
           });
         }
       });
@@ -179,45 +237,28 @@ export default function GenerateGroupWorkoutModal({
     let goals = [];
     try {
       const snap = await getDocs(query(
-        collection(db, 'goals'),
-        where('userId', '==', athleteId),
-        limit(10)
+        collection(db, 'goals'), where('userId', '==', athleteId), limit(10)
       ));
       goals = snap.docs.map(d => d.data()).filter(g => g.status === 'active');
     } catch (e) { console.error(e); }
 
-    // Format recent workouts with day of week and full set details
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const formattedWorkouts = allWorkouts.slice(0, 5).map(w => {
       const workoutDate = new Date(w.date);
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       return {
-        ...w,
-        dayOfWeek: dayNames[workoutDate.getDay()],
+        ...w, dayOfWeek: dayNames[workoutDate.getDay()],
         exercises: (w.exercises || []).map(ex => ({
-          name: ex.name,
-          type: ex.type || 'weight',
-          notes: ex.notes,
+          name: ex.name, type: ex.type || 'weight', notes: ex.notes,
           sets: (ex.sets || []).map(s => ({
-            prescribedWeight: s.prescribedWeight,
-            prescribedReps: s.prescribedReps,
-            actualWeight: s.actualWeight,
-            actualReps: s.actualReps,
-            rpe: s.rpe,
-            painLevel: s.painLevel,
-            completed: s.completed,
+            prescribedWeight: s.prescribedWeight, prescribedReps: s.prescribedReps,
+            actualWeight: s.actualWeight, actualReps: s.actualReps,
+            rpe: s.rpe, painLevel: s.painLevel, completed: s.completed,
           })),
         })),
       };
     });
 
-    return { 
-      id: athleteId, 
-      maxLifts, 
-      painHistory, 
-      rpeAverages, 
-      goals,
-      recentWorkouts: formattedWorkouts,
-    };
+    return { id: athleteId, maxLifts, painHistory, rpeAverages, goals, recentWorkouts: formattedWorkouts };
   };
 
   const handleGenerate = async () => {
@@ -229,6 +270,7 @@ export default function GenerateGroupWorkoutModal({
     setLoading(true);
     setError(null);
     addStep('Generating workouts', 'loading');
+    startThinkingAnimation();
 
     try {
       const athleteData = selectedAthletes.map(uid => ({
@@ -245,12 +287,9 @@ export default function GenerateGroupWorkoutModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          coachId,
-          groupId: group.id,
-          athletes: athleteData,
-          prompt,
-          workoutDate,
-          model: isAdmin ? model : 'standard', // Only admin can use premium
+          coachId, groupId: group.id, athletes: athleteData,
+          prompt, workoutDate,
+          model: isAdmin ? model : 'standard',
         }),
       });
 
@@ -261,6 +300,15 @@ export default function GenerateGroupWorkoutModal({
 
       const data = await response.json();
       setResult(data);
+      stopThinkingAnimation();
+      
+      // Add completion thinking message
+      setThinkingMessages(prev => [...prev, { 
+        text: `Done! Created ${data.createdWorkouts?.length} personalized workouts.`, 
+        icon: 'check', 
+        id: prev.length 
+      }]);
+      
       addStep('Generating workouts', 'complete', 
         `${data.createdWorkouts?.length} workouts created in ${data.usage?.responseMs}ms`
       );
@@ -268,6 +316,10 @@ export default function GenerateGroupWorkoutModal({
     } catch (err) {
       console.error('Error:', err);
       setError(err.message);
+      stopThinkingAnimation();
+      setThinkingMessages(prev => [...prev, { 
+        text: `Error: ${err.message}`, icon: 'error', id: prev.length 
+      }]);
       addStep('Generating workouts', 'error', err.message);
     } finally {
       setLoading(false);
@@ -297,7 +349,23 @@ export default function GenerateGroupWorkoutModal({
     setResult(null);
     setError(null);
     setAnalysisSteps([]);
+    setThinkingMessages([]);
+    stopThinkingAnimation();
     onClose();
+  };
+
+  const getThinkingIcon = (icon) => {
+    switch (icon) {
+      case 'brain': return <Brain className="w-3 h-3 text-flame-400" />;
+      case 'alert': return <AlertTriangle className="w-3 h-3 text-amber-400" />;
+      case 'calc': return <Sparkles className="w-3 h-3 text-purple-400" />;
+      case 'dumbbell': return <Dumbbell className="w-3 h-3 text-cyan-400" />;
+      case 'users': return <Users className="w-3 h-3 text-green-400" />;
+      case 'msg': return <MessageSquare className="w-3 h-3 text-blue-400" />;
+      case 'check': return <Check className="w-3 h-3 text-green-400" />;
+      case 'error': return <AlertTriangle className="w-3 h-3 text-red-400" />;
+      default: return <Loader2 className="w-3 h-3 text-flame-400 animate-spin" />;
+    }
   };
 
   if (!isOpen) return null;
@@ -375,8 +443,46 @@ export default function GenerateGroupWorkoutModal({
                     ))}
                   </div>
                   
+                  {/* AI Thinking Stream — shows during generation */}
+                  {(loading || thinkingMessages.length > 0) && (
+                    <div className="mt-4 pt-4 border-t border-iron-700">
+                      <div className="flex items-center gap-2 mb-2">
+                        {loading && <Loader2 className="w-3 h-3 text-flame-400 animate-spin" />}
+                        <p className="text-xs text-iron-500 uppercase tracking-wider">
+                          {loading ? 'AI Thinking...' : 'AI Process'}
+                        </p>
+                      </div>
+                      <div 
+                        ref={thinkingRef}
+                        className="max-h-40 overflow-y-auto space-y-1.5 scrollbar-thin"
+                      >
+                        {thinkingMessages.map((msg) => (
+                          <motion.div
+                            key={msg.id}
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3 }}
+                            className="flex items-start gap-2"
+                          >
+                            <div className="mt-0.5 flex-shrink-0">
+                              {getThinkingIcon(msg.icon)}
+                            </div>
+                            <p className="text-xs text-iron-400 leading-relaxed">{msg.text}</p>
+                          </motion.div>
+                        ))}
+                        {loading && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="w-1 h-1 bg-flame-400 rounded-full animate-pulse" />
+                            <span className="w-1 h-1 bg-flame-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+                            <span className="w-1 h-1 bg-flame-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Summary Stats */}
-                  {!loadingContext && Object.keys(athleteContexts).length > 0 && (
+                  {!loadingContext && Object.keys(athleteContexts).length > 0 && !loading && thinkingMessages.length === 0 && (
                     <div className="mt-4 pt-4 border-t border-iron-700">
                       <p className="text-xs text-iron-500 mb-2">Group Summary</p>
                       <div className="grid grid-cols-2 gap-2 text-center">
@@ -398,7 +504,53 @@ export default function GenerateGroupWorkoutModal({
               
               {/* Right - Options or Results */}
               <div className="lg:col-span-2">
-                {!result ? (
+                {loading ? (
+                  /* AI Thinking Display - shown during generation */
+                  <div className="space-y-4">
+                    <div className="bg-iron-800/30 rounded-xl border border-flame-500/20 overflow-hidden">
+                      <div className="flex items-center gap-2 p-4 border-b border-iron-700/50 bg-flame-500/5">
+                        <div className="w-8 h-8 rounded-lg bg-flame-500/20 flex items-center justify-center">
+                          <Brain className="w-4 h-4 text-flame-400 animate-pulse" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-iron-200">AI is generating workouts...</h3>
+                          <p className="text-xs text-iron-500">{selectedAthletes.length} athlete{selectedAthletes.length !== 1 ? 's' : ''} · {prompt || 'Custom workout'}</p>
+                        </div>
+                        <Loader2 className="w-5 h-5 text-flame-400 animate-spin ml-auto" />
+                      </div>
+                      <div 
+                        ref={thinkingRef}
+                        className="p-4 max-h-[300px] overflow-y-auto space-y-2.5 scrollbar-thin"
+                      >
+                        {thinkingMessages.map((msg) => (
+                          <motion.div
+                            key={msg.id}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3 }}
+                            className="flex items-start gap-3 py-1"
+                          >
+                            <div className="mt-0.5 flex-shrink-0 w-5 h-5 rounded bg-iron-800 flex items-center justify-center">
+                              {getThinkingIcon(msg.icon)}
+                            </div>
+                            <p className="text-sm text-iron-300 leading-relaxed">{msg.text}</p>
+                          </motion.div>
+                        ))}
+                        <div className="flex items-center gap-1.5 pt-2">
+                          <span className="w-1.5 h-1.5 bg-flame-400 rounded-full animate-pulse" />
+                          <span className="w-1.5 h-1.5 bg-flame-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+                          <span className="w-1.5 h-1.5 bg-flame-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {error && (
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                        <p className="text-sm text-red-400">{error}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : !result ? (
                   <div className="space-y-4">
                     {/* Prompt */}
                     <div>
@@ -437,8 +589,7 @@ export default function GenerateGroupWorkoutModal({
                             }`}
                         >
                           <div className="font-medium flex items-center gap-2">
-                            <Zap className="w-3 h-3" />
-                            Standard
+                            <Zap className="w-3 h-3" />Standard
                           </div>
                           <div className="text-xs text-iron-500">Fast</div>
                         </button>
@@ -454,8 +605,7 @@ export default function GenerateGroupWorkoutModal({
                             }`}
                         >
                           <div className="font-medium flex items-center gap-2">
-                            <Sparkles className="w-3 h-3" />
-                            Premium
+                            <Sparkles className="w-3 h-3" />Premium
                             {!isAdmin && <Lock className="w-3 h-3" />}
                           </div>
                           <div className="text-xs text-iron-500">Higher quality</div>
@@ -514,7 +664,6 @@ export default function GenerateGroupWorkoutModal({
                                 </button>
                               </button>
                               
-                              {/* Expanded details */}
                               <AnimatePresence>
                                 {isExpanded && ctx && (
                                   <motion.div
@@ -524,7 +673,6 @@ export default function GenerateGroupWorkoutModal({
                                     className="border-t border-iron-700 bg-iron-800/30"
                                   >
                                     <div className="p-3 text-xs space-y-2">
-                                      {/* Top lifts */}
                                       {Object.keys(ctx.maxLifts || {}).length > 0 && (
                                         <div>
                                           <p className="text-iron-500 mb-1">Top Lifts</p>
@@ -540,8 +688,6 @@ export default function GenerateGroupWorkoutModal({
                                           </div>
                                         </div>
                                       )}
-                                      
-                                      {/* Pain */}
                                       {Object.keys(ctx.painHistory || {}).length > 0 && (
                                         <div>
                                           <p className="text-amber-400 mb-1">Pain History</p>
@@ -554,8 +700,6 @@ export default function GenerateGroupWorkoutModal({
                                           </div>
                                         </div>
                                       )}
-                                      
-                                      {/* Goals */}
                                       {ctx.goals?.length > 0 && (
                                         <div>
                                           <p className="text-iron-500 mb-1">Goals</p>
@@ -592,18 +736,25 @@ export default function GenerateGroupWorkoutModal({
                       </p>
                       {result.usage && (
                         <p className="text-xs text-iron-500 mt-1">
-                          {result.usage.tokens} tokens • {result.usage.responseMs}ms • {result.usage.cost}
+                          {result.usage.tokens} tokens · {result.usage.responseMs}ms · {result.usage.cost}
                         </p>
                       )}
                     </div>
 
+                    {/* Coaching Notes — scrollable */}
                     {result.coachingNotes && (
-                      <div className="p-4 bg-iron-800/50 rounded-lg">
-                        <h3 className="text-sm font-medium text-iron-200 mb-2">Coaching Notes</h3>
-                        <p className="text-sm text-iron-400">{result.coachingNotes}</p>
+                      <div className="bg-iron-800/50 rounded-lg overflow-hidden">
+                        <div className="flex items-center gap-2 p-3 border-b border-iron-700/50">
+                          <Brain className="w-4 h-4 text-flame-400" />
+                          <h3 className="text-sm font-medium text-iron-200">AI Coaching Notes</h3>
+                        </div>
+                        <div className="p-3 max-h-32 overflow-y-auto">
+                          <p className="text-sm text-iron-400 leading-relaxed">{result.coachingNotes}</p>
+                        </div>
                       </div>
                     )}
 
+                    {/* Base exercises */}
                     <div className="p-4 bg-iron-800/50 rounded-lg">
                       <h3 className="font-medium text-iron-100 mb-2">{result.workoutName}</h3>
                       <div className="space-y-1">
@@ -612,22 +763,37 @@ export default function GenerateGroupWorkoutModal({
                             <Dumbbell className="w-4 h-4" />
                             <span>{ex.name}</span>
                             <span className="text-iron-600">{ex.defaultSets}×{ex.defaultReps}</span>
+                            {ex.type && ex.type !== 'weight' && (
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                ex.type === 'time' ? 'bg-blue-500/20 text-blue-400' : 
+                                ex.type === 'bodyweight' ? 'bg-emerald-500/20 text-emerald-400' : ''
+                              }`}>{ex.type === 'time' ? 'Time' : 'BW'}</span>
+                            )}
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    <div className="space-y-3 max-h-[200px] overflow-y-auto">
+                    {/* Athlete workouts with personal notes */}
+                    <div className="space-y-3 max-h-[250px] overflow-y-auto">
                       {Object.entries(result.athleteWorkouts || {}).map(([id, aw]) => (
                         <div key={id} className="p-3 bg-iron-800/30 rounded-lg">
                           <h4 className="font-medium text-iron-200">{aw.athleteName}</h4>
                           {aw.personalNotes && (
-                            <p className="text-xs text-iron-500 mt-1">{aw.personalNotes}</p>
+                            <p className="text-xs text-iron-500 mt-1 leading-relaxed">{aw.personalNotes}</p>
                           )}
                           <div className="mt-2 flex flex-wrap gap-1">
                             {aw.exercises?.slice(0, 4).map((ex, i) => (
-                              <span key={i} className={`text-xs px-2 py-0.5 rounded ${ex.substitution ? 'bg-amber-500/20 text-amber-400' : 'bg-iron-700 text-iron-400'}`}>
-                                {ex.substitution?.replacement || ex.name}: {ex.sets?.[0]?.prescribedWeight}lb
+                              <span key={i} className={`text-xs px-2 py-0.5 rounded ${
+                                ex.substitution ? 'bg-amber-500/20 text-amber-400' : 'bg-iron-700 text-iron-400'
+                              }`}>
+                                {ex.substitution?.replacement || ex.name}: {
+                                  ex.type === 'time' 
+                                    ? `${ex.sets?.[0]?.prescribedTime || '?'}s` 
+                                    : ex.type === 'bodyweight'
+                                      ? `${ex.sets?.[0]?.prescribedReps || '?'} reps`
+                                      : `${ex.sets?.[0]?.prescribedWeight || '?'}lb`
+                                }
                               </span>
                             ))}
                           </div>
@@ -659,7 +825,7 @@ export default function GenerateGroupWorkoutModal({
               </>
             ) : (
               <>
-                <button onClick={() => setResult(null)} className="btn-secondary flex-1">
+                <button onClick={() => { setResult(null); setThinkingMessages([]); }} className="btn-secondary flex-1">
                   Generate Another
                 </button>
                 <button onClick={handleDone} className="btn-primary flex-1 flex items-center justify-center gap-2">

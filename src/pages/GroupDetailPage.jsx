@@ -21,7 +21,10 @@ import {
   ChevronRight,
   Edit2,
   Search,
-  Sparkles
+  Sparkles,
+  MessageSquare,
+  ChevronUp,
+  FileText
 } from 'lucide-react'
 import { groupService, workoutService, attendanceService, groupWorkoutService, userService, goalService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
@@ -115,6 +118,8 @@ export default function GroupDetailPage() {
   const [expandedWorkout, setExpandedWorkout] = useState(null)
   // Editing mode - stores the workout IDs being edited: { memberId: workoutId }
   const [editingWorkoutIds, setEditingWorkoutIds] = useState(null)
+  // Notes state for AI-generated workouts
+  const [workoutCoachingNotes, setWorkoutCoachingNotes] = useState('')
   
   // AI Generate modal state
   const [showAIGenerateModal, setShowAIGenerateModal] = useState(false)
@@ -237,11 +242,13 @@ export default function GroupDetailPage() {
     setSelectedMembers(allMembers)
     setWorkoutDate(new Date().toISOString().split('T')[0])
     setWorkoutName('')
+    setWorkoutCoachingNotes('')
     // Initialize prescriptions for each member
     const initialPrescriptions = {}
     allMembers.forEach(memberId => {
       initialPrescriptions[memberId] = {
-        exercises: [{ id: Date.now() + Math.random(), name: '', sets: [{ weight: '', reps: '' }] }]
+        personalNotes: '',
+        exercises: [{ id: Date.now() + Math.random(), name: '', type: 'weight', notes: '', sets: [{ weight: '', reps: '' }] }]
       }
     })
     setMemberPrescriptions(initialPrescriptions)
@@ -269,6 +276,10 @@ export default function GroupDetailPage() {
     const initialPrescriptions = {}
     const workoutIds = {}
     
+    // Load coaching notes from the first workout (they share the same coachingNotes)
+    const firstWorkout = groupWorkouts.find(w => w.id === workoutGroup.assignments[0]?.id)
+    setWorkoutCoachingNotes(firstWorkout?.coachingNotes || '')
+    
     workoutGroup.assignments.forEach(assignment => {
       // Find the actual workout data
       const memberWorkout = groupWorkouts.find(w => w.id === assignment.id)
@@ -276,12 +287,14 @@ export default function GroupDetailPage() {
       
       if (memberWorkout?.exercises?.length) {
         initialPrescriptions[assignment.memberId] = {
+          personalNotes: memberWorkout.personalNotes || '',
           exercises: memberWorkout.exercises.map(ex => {
             const type = ex.type || (ex.sets?.[0]?.prescribedTime ? 'time' : 'weight')
             return {
               id: Date.now() + Math.random(),
               name: ex.name,
               type: type,
+              notes: ex.notes || '',
               sets: ex.sets?.map(s => {
                 if (type === 'time') {
                   return { time: s.prescribedTime || '' }
@@ -296,7 +309,8 @@ export default function GroupDetailPage() {
         }
       } else {
         initialPrescriptions[assignment.memberId] = {
-          exercises: [{ id: Date.now() + Math.random(), name: '', type: 'weight', sets: [{ weight: '', reps: '' }] }]
+          personalNotes: memberWorkout?.personalNotes || '',
+          exercises: [{ id: Date.now() + Math.random(), name: '', type: 'weight', notes: '', sets: [{ weight: '', reps: '' }] }]
         }
       }
     })
@@ -331,7 +345,7 @@ export default function GroupDetailPage() {
         ...prev[memberId],
         exercises: [
           ...(prev[memberId]?.exercises || []),
-          { id: Date.now() + Math.random(), name: '', type: 'weight', sets: [{ weight: '', reps: '' }] }
+          { id: Date.now() + Math.random(), name: '', type: 'weight', notes: '', sets: [{ weight: '', reps: '' }] }
         ]
       }
     }))
@@ -438,8 +452,30 @@ export default function GroupDetailPage() {
     }))
   }
 
+  const addSetToAllExercises = (memberId) => {
+    setMemberPrescriptions(prev => ({
+      ...prev,
+      [memberId]: {
+        ...prev[memberId],
+        exercises: prev[memberId].exercises.map(e => {
+          const lastSet = e.sets[e.sets.length - 1]
+          let newSet
+          if (e.type === 'time') {
+            newSet = { time: lastSet?.time || '' }
+          } else if (e.type === 'bodyweight') {
+            newSet = { reps: lastSet?.reps || '' }
+          } else {
+            newSet = { weight: lastSet?.weight || '', reps: lastSet?.reps || '' }
+          }
+          return { ...e, sets: [...e.sets, newSet] }
+        })
+      }
+    }))
+  }
+
   const copyPrescriptionToAll = (sourceMemberId) => {
-    const sourceExercises = memberPrescriptions[sourceMemberId]?.exercises || []
+    const source = memberPrescriptions[sourceMemberId] || {}
+    const sourceExercises = source.exercises || []
     const copied = JSON.parse(JSON.stringify(sourceExercises))
     
     setMemberPrescriptions(prev => {
@@ -448,6 +484,7 @@ export default function GroupDetailPage() {
         if (memberId !== sourceMemberId) {
           // Deep copy with new IDs
           updated[memberId] = {
+            ...updated[memberId],
             exercises: copied.map(e => ({
               ...e,
               id: Date.now() + Math.random(),
@@ -471,7 +508,8 @@ export default function GroupDetailPage() {
         setMemberPrescriptions(p => ({
           ...p,
           [memberId]: {
-            exercises: [{ id: Date.now(), name: '', sets: [{ weight: '', reps: '' }] }]
+            personalNotes: '',
+            exercises: [{ id: Date.now(), name: '', type: 'weight', notes: '', sets: [{ weight: '', reps: '' }] }]
           }
         }))
       }
@@ -499,6 +537,7 @@ export default function GroupDetailPage() {
           .map(e => ({
             name: e.name,
             type: e.type || 'weight',
+            notes: e.notes || '',
             sets: e.sets.map((s, i) => {
               const baseSet = {
                 id: Date.now() + i,
@@ -542,7 +581,9 @@ export default function GroupDetailPage() {
           await groupWorkoutService.update(workoutId, {
             name: workoutName,
             date: localDate,
-            exercises: formattedExercises
+            exercises: formattedExercises,
+            coachingNotes: workoutCoachingNotes || '',
+            personalNotes: prescription?.personalNotes || ''
           })
         }
       } else {
@@ -572,6 +613,7 @@ export default function GroupDetailPage() {
 
       setShowWorkoutModal(false)
       setEditingWorkoutIds(null)
+      setWorkoutCoachingNotes('')
       
       if (editingWorkoutIds) {
         alert('Workout updated!')
@@ -852,6 +894,19 @@ export default function GroupDetailPage() {
                       {/* Expanded Content */}
                       {isExpanded && (
                         <div className="border-t border-iron-800">
+                          {/* Coaching Notes (if AI-generated) */}
+                          {(() => {
+                            const firstWorkout = groupWorkouts.find(w => w.id === workoutGroup.assignments[0]?.id)
+                            return firstWorkout?.coachingNotes ? (
+                              <div className="p-4 bg-flame-500/5 border-b border-iron-800">
+                                <p className="text-xs text-flame-400 flex items-center gap-1.5 mb-1.5">
+                                  <Sparkles className="w-3 h-3" />AI Coaching Notes
+                                </p>
+                                <p className="text-sm text-iron-400 leading-relaxed">{firstWorkout.coachingNotes}</p>
+                              </div>
+                            ) : null
+                          })()}
+
                           {/* Exercise Summary */}
                           <div className="p-4 bg-iron-800/20 border-b border-iron-800">
                             <p className="text-xs text-iron-500 uppercase tracking-wide mb-2">Exercises</p>
@@ -1145,7 +1200,7 @@ export default function GroupDetailPage() {
                 {editingWorkoutIds ? 'Edit Group Workout' : 'Assign Group Workout'}
               </h2>
               <button
-                onClick={() => { setShowWorkoutModal(false); setEditingWorkoutIds(null); }}
+                onClick={() => { setShowWorkoutModal(false); setEditingWorkoutIds(null); setWorkoutCoachingNotes(''); }}
                 className="p-2 text-iron-400 hover:text-iron-200 transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -1185,6 +1240,30 @@ export default function GroupDetailPage() {
                 <label className="block text-sm font-medium text-iron-300 mb-3">
                   {editingWorkoutIds ? 'Assigned Members' : 'Assign to Members'}
                 </label>
+                {editingWorkoutIds && workoutCoachingNotes && (
+                  <div className="mb-4">
+                    <button
+                      onClick={() => {
+                        const el = document.getElementById('coaching-notes-section')
+                        if (el) el.classList.toggle('hidden')
+                      }}
+                      className="flex items-center gap-2 text-sm text-flame-400 hover:text-flame-300 mb-2"
+                    >
+                      <FileText className="w-4 h-4" />
+                      AI Coaching Notes
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    <div id="coaching-notes-section">
+                      <textarea
+                        value={workoutCoachingNotes}
+                        onChange={(e) => setWorkoutCoachingNotes(e.target.value)}
+                        rows={3}
+                        className="input-field w-full text-sm resize-none"
+                        placeholder="Coaching notes..."
+                      />
+                    </div>
+                  </div>
+                )}
                 {editingWorkoutIds && (
                   <p className="text-xs text-iron-500 mb-2">Members cannot be changed when editing. Create a new workout to assign to different members.</p>
                 )}
@@ -1271,6 +1350,39 @@ export default function GroupDetailPage() {
                   {/* Active Member's Exercises */}
                   {activeMemberTab && memberPrescriptions[activeMemberTab] && (
                     <div className="space-y-4">
+                      {/* Personal Notes for this member */}
+                      {(editingWorkoutIds || memberPrescriptions[activeMemberTab]?.personalNotes) && (
+                        <div className="bg-iron-800/30 rounded-lg p-3">
+                          <label className="flex items-center gap-2 text-xs text-iron-500 mb-2">
+                            <MessageSquare className="w-3 h-3" />
+                            Personal Notes for {members.find(m => m.uid === activeMemberTab)?.displayName?.split(' ')[0] || 'Member'}
+                          </label>
+                          <textarea
+                            value={memberPrescriptions[activeMemberTab]?.personalNotes || ''}
+                            onChange={(e) => setMemberPrescriptions(prev => ({
+                              ...prev,
+                              [activeMemberTab]: {
+                                ...prev[activeMemberTab],
+                                personalNotes: e.target.value
+                              }
+                            }))}
+                            rows={2}
+                            className="input-field w-full text-sm resize-none"
+                            placeholder="Notes specific to this athlete..."
+                          />
+                        </div>
+                      )}
+
+                      {/* Bulk action: Add 1 set to all exercises */}
+                      {memberPrescriptions[activeMemberTab].exercises.length > 1 && (
+                        <button
+                          onClick={() => addSetToAllExercises(activeMemberTab)}
+                          className="w-full py-2 text-xs text-flame-400 hover:text-flame-300 bg-flame-500/5 hover:bg-flame-500/10 border border-flame-500/20 rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Add 1 Set to Each Exercise
+                        </button>
+                      )}
                       {memberPrescriptions[activeMemberTab].exercises.map((exercise, exIndex) => (
                         <div key={exercise.id} className="bg-iron-800/50 rounded-lg p-4">
                           <div className="flex items-center gap-2 mb-4">
@@ -1283,6 +1395,10 @@ export default function GroupDetailPage() {
                               className="input-field flex-1 text-base py-2"
                             >
                               <option value="">Select exercise</option>
+                              {/* Show current value if it's not in any predefined list */}
+                              {exercise.name && ![...allWeightExercises, ...allBodyweightExercises, ...allTimeExercises].includes(exercise.name) && (
+                                <option value={exercise.name}>{exercise.name} (custom)</option>
+                              )}
                               <optgroup label="Weight Exercises">
                                 {allWeightExercises.map(ex => (
                                   <option key={ex} value={ex}>{ex}</option>
@@ -1307,6 +1423,40 @@ export default function GroupDetailPage() {
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             )}
+                          </div>
+
+                          {/* Exercise type indicator */}
+                          <div className="flex items-center gap-1.5 mb-3 ml-9">
+                            {['weight', 'bodyweight', 'time'].map(t => (
+                              <button
+                                key={t}
+                                onClick={() => {
+                                  const newSets = exercise.sets.map(s => {
+                                    if (t === 'time') return { time: s.time || '' }
+                                    if (t === 'bodyweight') return { reps: s.reps || '' }
+                                    return { weight: s.weight || '', reps: s.reps || '' }
+                                  })
+                                  setMemberPrescriptions(prev => ({
+                                    ...prev,
+                                    [activeMemberTab]: {
+                                      ...prev[activeMemberTab],
+                                      exercises: prev[activeMemberTab].exercises.map(e =>
+                                        e.id === exercise.id ? { ...e, type: t, sets: newSets } : e
+                                      )
+                                    }
+                                  }))
+                                }}
+                                className={`text-xs px-2 py-0.5 rounded transition-colors ${
+                                  exercise.type === t 
+                                    ? t === 'time' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                      : t === 'bodyweight' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                      : 'bg-iron-600/30 text-iron-300 border border-iron-500/30'
+                                    : 'text-iron-600 hover:text-iron-400'
+                                }`}
+                              >
+                                {t === 'weight' ? 'Weight' : t === 'bodyweight' ? 'BW' : 'Time'}
+                              </button>
+                            ))}
                           </div>
 
                           {/* Sets */}
@@ -1440,6 +1590,19 @@ export default function GroupDetailPage() {
                               Add Set
                             </button>
                           </div>
+
+                          {/* Exercise Notes */}
+                          {(exercise.notes || editingWorkoutIds) && (
+                            <div className="mt-3 pt-3 border-t border-iron-700/50">
+                              <input
+                                type="text"
+                                value={exercise.notes || ''}
+                                onChange={(e) => updateExerciseForMember(activeMemberTab, exercise.id, 'notes', e.target.value)}
+                                placeholder="Form cues, modifications, warnings..."
+                                className="input-field w-full text-xs py-1.5 px-2 bg-iron-800/30 placeholder:text-iron-600"
+                              />
+                            </div>
+                          )}
                         </div>
                       ))}
 
