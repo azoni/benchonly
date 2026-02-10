@@ -13,6 +13,8 @@ import {
   Target,
   Users,
   Award,
+  SkipForward,
+  Undo2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { workoutService, scheduleService, attendanceService, goalService, groupWorkoutService } from '../services/firestore';
@@ -28,6 +30,8 @@ import {
   startOfWeek,
   endOfWeek,
   isToday,
+  isPast,
+  startOfDay,
 } from 'date-fns';
 import { toDateString, getDisplayDate } from '../utils/dateUtils';
 
@@ -109,8 +113,15 @@ export default function CalendarPage() {
     });
   };
 
+  // Check if a recurring schedule is skipped on a date
+  const isScheduleSkipped = (schedule, dateStr) => {
+    return (schedule.skippedDates || []).includes(dateStr);
+  };
+
   const getDateStatus = (date) => {
     const dateStr = toDateString(date);
+    const dayOfWeek = format(date, 'EEEE').toLowerCase();
+    const dayIsPast = isPast(startOfDay(date)) && !isToday(date);
     
     // Check for completed workout
     const hasWorkout = workouts.some((w) => {
@@ -136,19 +147,22 @@ export default function CalendarPage() {
       (a) => a.date === dateStr && a.status === 'missed'
     );
 
-    // Check for scheduled workout
-    const isScheduled = schedules.some((s) => {
+    // Check for scheduled workout (excluding skipped)
+    const activeSchedules = schedules.filter((s) => {
       if (s.type === 'recurring') {
-        const dayOfWeek = format(date, 'EEEE').toLowerCase();
-        return s.days?.includes(dayOfWeek);
+        return s.days?.includes(dayOfWeek) && !isScheduleSkipped(s, dateStr);
       }
       return s.date === dateStr;
     });
+    const isScheduled = activeSchedules.length > 0;
+
+    // Auto-complete: past recurring schedules that aren't skipped count as completed
+    const hasAutoCompleted = dayIsPast && activeSchedules.some(s => s.type === 'recurring');
 
     // Check for completed goal on this date
     const hasCompletedGoal = !!getCompletedGoal(date);
 
-    return { hasWorkout, hasGroupWorkout, isVacation, isMissed, isScheduled, hasCompletedGoal };
+    return { hasWorkout, hasGroupWorkout, isVacation, isMissed, isScheduled, hasCompletedGoal, hasAutoCompleted };
   };
 
   const getSelectedDateWorkouts = () => {
@@ -178,7 +192,46 @@ export default function CalendarPage() {
         return s.days?.includes(dayOfWeek);
       }
       return s.date === dateStr;
-    });
+    }).map(s => ({
+      ...s,
+      isSkipped: isScheduleSkipped(s, dateStr),
+    }));
+  };
+
+  const handleSkipSchedule = async (scheduleId, dateStr) => {
+    try {
+      const schedule = schedules.find(s => s.id === scheduleId);
+      const currentSkips = schedule?.skippedDates || [];
+      await scheduleService.update(scheduleId, {
+        skippedDates: [...currentSkips, dateStr]
+      });
+      // Update local state
+      setSchedules(prev => prev.map(s => 
+        s.id === scheduleId 
+          ? { ...s, skippedDates: [...(s.skippedDates || []), dateStr] }
+          : s
+      ));
+    } catch (error) {
+      console.error('Error skipping schedule:', error);
+    }
+  };
+
+  const handleUnskipSchedule = async (scheduleId, dateStr) => {
+    try {
+      const schedule = schedules.find(s => s.id === scheduleId);
+      const currentSkips = schedule?.skippedDates || [];
+      await scheduleService.update(scheduleId, {
+        skippedDates: currentSkips.filter(d => d !== dateStr)
+      });
+      // Update local state
+      setSchedules(prev => prev.map(s => 
+        s.id === scheduleId 
+          ? { ...s, skippedDates: (s.skippedDates || []).filter(d => d !== dateStr) }
+          : s
+      ));
+    } catch (error) {
+      console.error('Error unskipping schedule:', error);
+    }
   };
 
   const handleMarkVacation = async () => {
@@ -284,7 +337,10 @@ export default function CalendarPage() {
                         {status.hasGroupWorkout && (
                           <div className="w-1.5 h-1.5 rounded-full bg-cyan-500" title="Group Workout" />
                         )}
-                        {status.isScheduled && !status.hasWorkout && (
+                        {status.hasAutoCompleted && !status.hasWorkout && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-500/60" title="Auto-completed" />
+                        )}
+                        {status.isScheduled && !status.hasWorkout && !status.hasAutoCompleted && (
                           <div className="w-1.5 h-1.5 rounded-full bg-flame-500/50" />
                         )}
                         {status.isVacation && (
@@ -311,6 +367,10 @@ export default function CalendarPage() {
               <div className="flex items-center gap-2 text-xs text-iron-400">
                 <div className="w-2 h-2 rounded-full bg-green-500" />
                 Completed
+              </div>
+              <div className="flex items-center gap-2 text-xs text-iron-400">
+                <div className="w-2 h-2 rounded-full bg-green-500/60" />
+                Auto-done
               </div>
               <div className="flex items-center gap-2 text-xs text-iron-400">
                 <div className="w-2 h-2 rounded-full bg-cyan-500" />
@@ -370,24 +430,71 @@ export default function CalendarPage() {
                   <Repeat className="w-3.5 h-3.5" />
                   Scheduled
                 </h4>
-                {selectedSchedule.map((schedule) => (
-                  <div
-                    key={schedule.id}
-                    className="flex items-center gap-3 p-3 bg-iron-800/50 rounded-plate"
-                  >
-                    <div className="w-8 h-8 rounded-plate bg-flame-500/20 flex items-center justify-center">
-                      <Dumbbell className="w-4 h-4 text-flame-400" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-iron-100">
-                        {schedule.name || 'Workout'}
-                      </p>
-                      <p className="text-xs text-iron-500">
-                        {schedule.type === 'recurring' ? 'Recurring' : 'One-time'}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                <div className="space-y-2">
+                  {selectedSchedule.map((schedule) => {
+                    const dateStr = toDateString(selectedDate);
+                    const dayIsPast = isPast(startOfDay(selectedDate)) && !isToday(selectedDate);
+                    const isAutoCompleted = dayIsPast && schedule.type === 'recurring' && !schedule.isSkipped;
+                    
+                    return (
+                      <div
+                        key={schedule.id}
+                        className={`flex items-center gap-3 p-3 rounded-plate transition-colors ${
+                          schedule.isSkipped
+                            ? 'bg-iron-800/30 opacity-50'
+                            : isAutoCompleted
+                              ? 'bg-green-500/10 border border-green-500/20'
+                              : 'bg-iron-800/50'
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-plate flex items-center justify-center ${
+                          schedule.isSkipped
+                            ? 'bg-iron-700/50'
+                            : isAutoCompleted
+                              ? 'bg-green-500/20'
+                              : 'bg-flame-500/20'
+                        }`}>
+                          {isAutoCompleted ? (
+                            <Check className="w-4 h-4 text-green-400" />
+                          ) : (
+                            <Dumbbell className={`w-4 h-4 ${schedule.isSkipped ? 'text-iron-500' : 'text-flame-400'}`} />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${
+                            schedule.isSkipped ? 'text-iron-500 line-through' : 'text-iron-100'
+                          }`}>
+                            {schedule.name || 'Workout'}
+                          </p>
+                          <p className="text-xs text-iron-500">
+                            {schedule.isSkipped ? 'Skipped' : isAutoCompleted ? 'Completed' : schedule.type === 'recurring' ? 'Recurring' : 'One-time'}
+                          </p>
+                        </div>
+                        
+                        {/* Skip / Undo buttons for recurring schedules */}
+                        {schedule.type === 'recurring' && !isGuest && (
+                          schedule.isSkipped ? (
+                            <button
+                              onClick={() => handleUnskipSchedule(schedule.id, dateStr)}
+                              className="p-1.5 text-iron-500 hover:text-iron-300 hover:bg-iron-700 rounded-lg transition-colors"
+                              title="Undo skip"
+                            >
+                              <Undo2 className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleSkipSchedule(schedule.id, dateStr)}
+                              className="p-1.5 text-iron-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                              title="Skip this day"
+                            >
+                              <SkipForward className="w-4 h-4" />
+                            </button>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
