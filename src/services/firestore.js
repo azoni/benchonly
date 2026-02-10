@@ -386,41 +386,39 @@ export const workoutService = {
             const startValue = parseFloat(goal.startValue) || parseFloat(goal.startWeight) || 0;
             const currentValue = parseFloat(goal.currentValue) || parseFloat(goal.currentWeight) || startValue;
             
-            // Calculate progress percentage
-            let progress = 0;
-            if (targetValue > startValue) {
-              progress = Math.min(100, Math.round(((bestValue - startValue) / (targetValue - startValue)) * 100));
-            }
-            
-            // Update goal with new progress and current value
-            const updates = {
-              currentValue: bestValue,
-              currentWeight: metricType === 'weight' ? bestValue : goal.currentWeight, // Keep for backward compat
-              progress: Math.max(goal.progress || 0, progress), // Only increase, never decrease
-              updatedAt: serverTimestamp(),
-            };
-            
-            // Mark as completed if target reached
-            if (bestValue >= targetValue && targetValue > 0) {
-              updates.status = 'completed';
-              updates.completedAt = serverTimestamp();
-              
-              // Create feed item for goal completion
-              try {
-                await feedService.createFeedItem(userId, FEED_TYPES.GOAL_COMPLETED, {
-                  goalId: goalDoc.id,
-                  lift: goal.lift,
-                  targetValue: targetValue,
-                  metricType,
-                  unit: metricType === 'weight' ? 'lbs' : metricType === 'reps' ? 'reps' : 'sec'
-                });
-              } catch (e) {
-                console.error('Feed error:', e);
+            // Only update if this is a new personal best
+            if (bestValue > currentValue) {
+              // Calculate progress percentage
+              let progress = 0;
+              if (targetValue > startValue) {
+                progress = Math.min(100, Math.round(((bestValue - startValue) / (targetValue - startValue)) * 100));
               }
-            }
+              
+              const updates = {
+                currentValue: bestValue,
+                currentWeight: metricType === 'weight' ? bestValue : goal.currentWeight,
+                progress: Math.max(goal.progress || 0, progress),
+                updatedAt: serverTimestamp(),
+              };
             
-            // Only update if this is a new PR or first entry
-            if (bestValue >= currentValue) {
+              // Mark as completed if target reached
+              if (bestValue >= targetValue && targetValue > 0) {
+                updates.status = 'completed';
+                updates.completedAt = serverTimestamp();
+                
+                try {
+                  await feedService.createFeedItem(userId, FEED_TYPES.GOAL_COMPLETED, {
+                    goalId: goalDoc.id,
+                    lift: goal.lift,
+                    targetValue: targetValue,
+                    metricType,
+                    unit: metricType === 'weight' ? 'lbs' : metricType === 'reps' ? 'reps' : 'sec'
+                  });
+                } catch (e) {
+                  console.error('Feed error:', e);
+                }
+              }
+              
               await updateDoc(doc(db, 'goals', goalDoc.id), updates);
               console.log(`Goal updated: ${goal.lift} - new value: ${bestValue}`);
             }
@@ -1071,6 +1069,17 @@ export const groupWorkoutService = {
     }
     
     await updateDoc(docRef, updateData);
+    
+    // Check and update goals for the assigned athlete
+    const targetUserId = assignedToUid || completedByUid;
+    if (targetUserId && actualData.exercises) {
+      try {
+        await workoutService.checkAndUpdateGoals(targetUserId, { exercises: actualData.exercises });
+      } catch (e) {
+        console.error('Goal check error:', e);
+      }
+    }
+    
     return { id: workoutId, status: 'completed', ...updateData };
   },
 
