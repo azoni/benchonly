@@ -17,10 +17,11 @@ import {
   Users,
   Eye,
   ThumbsUp,
+  Repeat,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { workoutService, groupWorkoutService } from '../services/firestore'
-import { format, isToday, isPast, isFuture } from 'date-fns'
+import { workoutService, groupWorkoutService, scheduleService } from '../services/firestore'
+import { format, isToday, isPast, isFuture, subDays, eachDayOfInterval, startOfDay } from 'date-fns'
 import { getDisplayDate, toDateString } from '../utils/dateUtils'
 
 export default function WorkoutsPage() {
@@ -47,11 +48,12 @@ export default function WorkoutsPage() {
         return
       }
       
-      // Load both personal and group workouts
-      const [personalWorkouts, groupWorkouts, reviews] = await Promise.all([
+      // Load both personal and group workouts, plus schedules
+      const [personalWorkouts, groupWorkouts, reviews, schedulesData] = await Promise.all([
         workoutService.getByUser(user.uid, 100),
         groupWorkoutService.getByUser(user.uid).catch(() => []),
-        groupWorkoutService.getPendingReviews(user.uid).catch(() => [])
+        groupWorkoutService.getPendingReviews(user.uid).catch(() => []),
+        scheduleService.getByUser(user.uid).catch(() => [])
       ])
       
       setPendingReviews(reviews)
@@ -61,9 +63,39 @@ export default function WorkoutsPage() {
         ...w,
         isGroupWorkout: true
       }))
+
+      // Generate virtual completed entries for past recurring schedules
+      const recurringSchedules = schedulesData.filter(s => s.type === 'recurring' && s.days?.length > 0)
+      const virtualCompleted = []
+      if (recurringSchedules.length > 0) {
+        const today = startOfDay(new Date())
+        const thirtyDaysAgo = subDays(today, 30)
+        const pastDays = eachDayOfInterval({ start: thirtyDaysAgo, end: subDays(today, 1) })
+        
+        for (const schedule of recurringSchedules) {
+          const skippedDates = schedule.skippedDates || []
+          for (const day of pastDays) {
+            const dayOfWeek = format(day, 'EEEE').toLowerCase()
+            const dateStr = toDateString(day)
+            if (schedule.days.includes(dayOfWeek) && !skippedDates.includes(dateStr)) {
+              virtualCompleted.push({
+                id: `recurring_${schedule.id}_${dateStr}`,
+                name: schedule.name || 'Recurring Activity',
+                date: dateStr,
+                status: 'completed',
+                isRecurring: true,
+                scheduleId: schedule.id,
+                workoutType: schedule.workoutType || 'cardio',
+                duration: schedule.duration,
+                exercises: [],
+              })
+            }
+          }
+        }
+      }
       
       // Merge and sort by date
-      const allWorkouts = [...personalWorkouts, ...markedGroupWorkouts].sort((a, b) => {
+      const allWorkouts = [...personalWorkouts, ...markedGroupWorkouts, ...virtualCompleted].sort((a, b) => {
         const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date)
         const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date)
         return dateB - dateA
@@ -300,6 +332,15 @@ export default function WorkoutsPage() {
         <div className="space-y-3">
           {displayedWorkouts.map((workout, index) => {
             const overdue = activeTab === 'todo' && isOverdue(workout.date)
+            const isRecurring = workout.isRecurring
+            const CardWrapper = isRecurring ? 'div' : Link
+            const cardProps = isRecurring 
+              ? { className: 'flex items-center gap-4 p-4 pr-12' }
+              : { 
+                  to: workout.isGroupWorkout ? `/workouts/group/${workout.id}` : `/workouts/${workout.id}`,
+                  state: { from: '/workouts', fromLabel: 'Back to Workouts' },
+                  className: 'flex items-center gap-4 p-4 pr-12'
+                }
             
             return (
               <motion.div
@@ -311,24 +352,24 @@ export default function WorkoutsPage() {
                   overdue ? 'border-red-500/50' : ''
                 }`}
               >
-                <Link
-                  to={workout.isGroupWorkout ? `/workouts/group/${workout.id}` : `/workouts/${workout.id}`}
-                  state={{ from: '/workouts', fromLabel: 'Back to Workouts' }}
-                  className="flex items-center gap-4 p-4 pr-12"
-                >
+                <CardWrapper {...cardProps}>
                   {/* Icon */}
                   <div className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                    workout.isGroupWorkout
-                      ? 'bg-cyan-500/10'
-                      : overdue
-                        ? 'bg-red-500/10'
-                        : activeTab === 'todo'
-                          ? 'bg-yellow-500/10'
-                          : workout.workoutType === 'cardio'
-                            ? 'bg-orange-500/10'
-                            : 'bg-green-500/10'
+                    isRecurring
+                      ? 'bg-emerald-500/10'
+                      : workout.isGroupWorkout
+                        ? 'bg-cyan-500/10'
+                        : overdue
+                          ? 'bg-red-500/10'
+                          : activeTab === 'todo'
+                            ? 'bg-yellow-500/10'
+                            : workout.workoutType === 'cardio'
+                              ? 'bg-orange-500/10'
+                              : 'bg-green-500/10'
                   }`}>
-                    {workout.isGroupWorkout ? (
+                    {isRecurring ? (
+                      <Repeat className="w-7 h-7 text-emerald-400" />
+                    ) : workout.isGroupWorkout ? (
                       <Users className="w-7 h-7 text-cyan-400" />
                     ) : (
                       <Dumbbell className={`w-7 h-7 ${
@@ -349,6 +390,11 @@ export default function WorkoutsPage() {
                       <h3 className="font-semibold text-iron-100 group-hover:text-flame-400 transition-colors">
                         {workout.name || 'Untitled Workout'}
                       </h3>
+                      {isRecurring && (
+                        <span className="px-2 py-0.5 text-xs font-medium bg-emerald-500/20 text-emerald-400 rounded">
+                          Recurring
+                        </span>
+                      )}
                       {workout.isGroupWorkout && (
                         <span className="px-2 py-0.5 text-xs font-medium bg-cyan-500/20 text-cyan-400 rounded">
                           Group
@@ -359,7 +405,7 @@ export default function WorkoutsPage() {
                           Overdue
                         </span>
                       )}
-                      {workout.workoutType === 'cardio' && (
+                      {workout.workoutType === 'cardio' && !isRecurring && (
                         <span className="px-2 py-0.5 text-xs font-medium bg-orange-500/20 text-orange-400 rounded">
                           Cardio
                         </span>
@@ -371,12 +417,13 @@ export default function WorkoutsPage() {
                         <Calendar className="w-3.5 h-3.5" />
                         {getDateLabel(workout.date)}
                       </span>
-                      {workout.workoutType === 'cardio' ? (
+                      {workout.duration && (
                         <span className="flex items-center gap-1">
                           <Clock className="w-3.5 h-3.5" />
                           {workout.duration} min
                         </span>
-                      ) : (
+                      )}
+                      {!isRecurring && !workout.duration && (
                         <span className="flex items-center gap-1">
                           <Dumbbell className="w-3.5 h-3.5" />
                           {workout.exercises?.length || 0} exercises
@@ -409,10 +456,13 @@ export default function WorkoutsPage() {
                     )}
                   </div>
 
-                  <ChevronRight className="w-5 h-5 text-iron-600 group-hover:text-iron-400 transition-colors flex-shrink-0" />
-                </Link>
+                  {!isRecurring && (
+                    <ChevronRight className="w-5 h-5 text-iron-600 group-hover:text-iron-400 transition-colors flex-shrink-0" />
+                  )}
+                </CardWrapper>
 
-                {/* Actions Menu */}
+                {/* Actions Menu - not for recurring */}
+                {!isRecurring && (
                   <>
                     <button
                       onClick={(e) => {
@@ -457,6 +507,7 @@ export default function WorkoutsPage() {
                       )}
                     </AnimatePresence>
                   </>
+                )}
               </motion.div>
             )
           })}
