@@ -14,7 +14,9 @@ import {
   Edit2,
   CheckCircle2,
   AlertCircle,
-  Users
+  Users,
+  Eye,
+  ThumbsUp,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { workoutService, groupWorkoutService } from '../services/firestore'
@@ -24,6 +26,7 @@ import { getDisplayDate, toDateString } from '../utils/dateUtils'
 export default function WorkoutsPage() {
   const { user, isGuest } = useAuth()
   const [workouts, setWorkouts] = useState([])
+  const [pendingReviews, setPendingReviews] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMenu, setActiveMenu] = useState(null)
@@ -45,10 +48,13 @@ export default function WorkoutsPage() {
       }
       
       // Load both personal and group workouts
-      const [personalWorkouts, groupWorkouts] = await Promise.all([
+      const [personalWorkouts, groupWorkouts, reviews] = await Promise.all([
         workoutService.getByUser(user.uid, 100),
-        groupWorkoutService.getByUser(user.uid).catch(() => [])
+        groupWorkoutService.getByUser(user.uid).catch(() => []),
+        groupWorkoutService.getPendingReviews(user.uid).catch(() => [])
       ])
+      
+      setPendingReviews(reviews)
       
       // Mark group workouts so we can link to correct page
       const markedGroupWorkouts = groupWorkouts.map(w => ({
@@ -89,6 +95,15 @@ export default function WorkoutsPage() {
       } catch (error) {
         console.error('Error deleting workout:', error)
       }
+    }
+  }
+
+  const handleQuickApprove = async (reviewId) => {
+    try {
+      await groupWorkoutService.approveReview(reviewId)
+      setPendingReviews(prev => prev.filter(r => r.id !== reviewId))
+    } catch (error) {
+      console.error('Error approving:', error)
     }
   }
 
@@ -192,6 +207,55 @@ export default function WorkoutsPage() {
           className="input-field pl-12"
         />
       </div>
+
+      {/* Pending Reviews */}
+      {pendingReviews.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-xs text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Eye className="w-3.5 h-3.5" />
+            Needs Your Review ({pendingReviews.length})
+          </h3>
+          <div className="space-y-2">
+            {pendingReviews.map((review) => {
+              let dateStr = ''
+              try {
+                dateStr = format(getDisplayDate(review.date), 'MMM d')
+              } catch { /* ignore */ }
+
+              return (
+                <div
+                  key={review.id}
+                  className="card-steel p-3 border-amber-500/20 bg-amber-500/5 flex items-center gap-3"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                    <Eye className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-iron-100 truncate">{review.name || 'Group Workout'}</p>
+                    <p className="text-xs text-iron-500">{dateStr} · Coach logged for you</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => handleQuickApprove(review.id)}
+                      className="p-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-colors"
+                      title="Approve"
+                    >
+                      <ThumbsUp className="w-4 h-4" />
+                    </button>
+                    <Link
+                      to={`/workouts/group/${review.id}`}
+                      className="p-2 bg-iron-800 hover:bg-iron-700 text-iron-300 rounded-lg transition-colors"
+                      title="Review details"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Link>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">

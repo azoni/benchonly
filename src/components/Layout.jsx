@@ -22,13 +22,14 @@ import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
 import AIChatPanel from './AIChatPanel';
 import { analyticsService } from '../services/analyticsService';
+import { groupWorkoutService } from '../services/firestore';
 
 const ADMIN_EMAILS = ['charltonuw@gmail.com'];
 
 const baseNavItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/feed', icon: MessageCircle, label: 'Feed' },
-  { path: '/workouts', icon: Dumbbell, label: 'Workouts' },
+  { path: '/workouts', icon: Dumbbell, label: 'Workouts', badgeKey: 'workouts' },
   { path: '/calendar', icon: Calendar, label: 'Calendar' },
   { path: '/groups', icon: Users, label: 'Groups' },
   { path: '/goals', icon: Target, label: 'Goals' },
@@ -43,6 +44,16 @@ export default function Layout() {
   const { user, userProfile, signOut, isGuest } = useAuth();
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [pendingReviewCount, setPendingReviewCount] = useState(0);
+
+  // Load pending review count
+  useEffect(() => {
+    if (user && !isGuest) {
+      groupWorkoutService.getPendingReviews(user.uid)
+        .then(reviews => setPendingReviewCount(reviews.length))
+        .catch(() => {});
+    }
+  }, [user, isGuest, location.pathname]);
 
   // Track page views
   useEffect(() => {
@@ -124,7 +135,14 @@ export default function Layout() {
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-flame-500 rounded-r"
                   />
                 )}
-                <item.icon className="w-5 h-5 flex-shrink-0" />
+                <div className="relative flex-shrink-0">
+                  <item.icon className="w-5 h-5" />
+                  {item.badgeKey === 'workouts' && pendingReviewCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {pendingReviewCount > 9 ? '9+' : pendingReviewCount}
+                    </span>
+                  )}
+                </div>
                 {sidebarOpen && (
                   <span className="font-medium">{item.label}</span>
                 )}
@@ -252,7 +270,14 @@ export default function Layout() {
                           : 'text-iron-400 hover:text-iron-100 hover:bg-iron-800/50'
                         }`}
                     >
-                      <item.icon className="w-6 h-6" />
+                      <div className="relative">
+                        <item.icon className="w-6 h-6" />
+                        {item.badgeKey === 'workouts' && pendingReviewCount > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                            {pendingReviewCount > 9 ? '9+' : pendingReviewCount}
+                          </span>
+                        )}
+                      </div>
                       <span className="font-medium text-lg">{item.label}</span>
                     </Link>
                   );

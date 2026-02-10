@@ -1053,15 +1053,47 @@ export const groupWorkoutService = {
   },
 
   // Mark workout as completed with actual values
-  async complete(workoutId, actualData) {
+  async complete(workoutId, actualData, completedByUid = null, assignedToUid = null) {
     const docRef = doc(db, 'groupWorkouts', workoutId);
-    await updateDoc(docRef, {
+    const updateData = {
       ...actualData,
       status: 'completed',
       completedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+    };
+    
+    // If completed by someone other than the assignee, mark for review
+    if (completedByUid && assignedToUid && completedByUid !== assignedToUid) {
+      updateData.completedBy = completedByUid;
+      updateData.reviewStatus = 'pending'; // pending | approved | edited
+    } else {
+      updateData.reviewStatus = 'self';
+    }
+    
+    await updateDoc(docRef, updateData);
+    return { id: workoutId, status: 'completed', ...updateData };
+  },
+
+  // Approve a coach-completed workout
+  async approveReview(workoutId) {
+    const docRef = doc(db, 'groupWorkouts', workoutId);
+    await updateDoc(docRef, {
+      reviewStatus: 'approved',
+      reviewedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
-    return { id: workoutId, status: 'completed', ...actualData };
+    return { id: workoutId, reviewStatus: 'approved' };
+  },
+
+  // Get pending reviews for a user
+  async getPendingReviews(userId) {
+    const q = query(
+      collection(db, 'groupWorkouts'),
+      where('assignedTo', '==', userId),
+      where('reviewStatus', '==', 'pending')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   },
 
   // Delete a group workout

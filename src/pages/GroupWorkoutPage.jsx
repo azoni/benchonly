@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { format } from 'date-fns'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft,
   Users,
@@ -12,7 +13,15 @@ import {
   Calendar,
   MessageSquare,
   Pencil,
-  Trash2
+  Trash2,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  Brain,
+  Sparkles,
+  AlertCircle,
+  ThumbsUp,
+  Eye,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { groupWorkoutService, groupService } from '../services/firestore'
@@ -24,6 +33,25 @@ const calculateE1RM = (weight, reps) => {
   if (reps === 1) return weight
   if (reps > 30) return null
   return Math.round(weight * (1 + reps / 30))
+}
+
+// Determine exercise type from data
+const getExerciseType = (exercise) => {
+  if (exercise.type) return exercise.type
+  const sets = exercise.sets || []
+  if (sets.some(s => s.prescribedTime || s.actualTime)) return 'time'
+  const hasWeight = sets.some(s => s.prescribedWeight || s.actualWeight)
+  if (!hasWeight && sets.some(s => s.prescribedReps || s.actualReps)) return 'bodyweight'
+  return 'weight'
+}
+
+// Get type label and color
+const getTypeTag = (type) => {
+  switch (type) {
+    case 'time': return { label: 'Time', color: 'bg-blue-500/20 text-blue-400' }
+    case 'bodyweight': return { label: 'BW', color: 'bg-emerald-500/20 text-emerald-400' }
+    default: return null
+  }
 }
 
 export default function GroupWorkoutPage() {
@@ -38,7 +66,9 @@ export default function GroupWorkoutPage() {
   const [isLogging, setIsLogging] = useState(false)
   const [exercises, setExercises] = useState([])
   const [workoutNotes, setWorkoutNotes] = useState('')
+  const [personalNotes, setPersonalNotes] = useState('')
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
+  const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
 
   useEffect(() => {
     loadWorkout()
@@ -50,9 +80,11 @@ export default function GroupWorkoutPage() {
       if (data) {
         setWorkout(data)
         setWorkoutNotes(data.notes || '')
+        setPersonalNotes(data.personalNotes || '')
         if (data.exercises) {
           setExercises(data.exercises.map(ex => ({
             ...ex,
+            type: getExerciseType(ex),
             notes: ex.notes || '',
             sets: ex.sets?.map(set => ({ ...set })) || []
           })))
@@ -68,11 +100,9 @@ export default function GroupWorkoutPage() {
   }
 
   const handleBack = () => {
-    // If we came from a group page, go back there with the right tab
     if (location.state?.from) {
       navigate(location.state.from, { state: location.state?.backState })
     } else if (workout?.groupId) {
-      // Default: go to group workouts tab
       navigate(`/groups/${workout.groupId}`, { state: { activeTab: 'workouts' } })
     } else {
       navigate(-1)
@@ -81,10 +111,8 @@ export default function GroupWorkoutPage() {
 
   const handleDelete = async () => {
     if (!confirm('Delete this workout? This cannot be undone.')) return
-    
     try {
       await groupWorkoutService.delete(id)
-      // Navigate back to group
       if (workout?.groupId) {
         navigate(`/groups/${workout.groupId}`, { state: { activeTab: 'workouts' } })
       } else {
@@ -117,11 +145,70 @@ export default function GroupWorkoutPage() {
     })
   }
 
+  const addSet = (exerciseIndex) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      const exercise = newExercises[exerciseIndex]
+      const lastSet = exercise.sets[exercise.sets.length - 1]
+      const type = exercise.type || 'weight'
+
+      let newSet = {
+        id: Date.now() + Math.random(),
+        rpe: '',
+        painLevel: 0,
+        completed: false,
+      }
+
+      if (type === 'time') {
+        newSet = { ...newSet, prescribedTime: lastSet?.prescribedTime || '', actualTime: '' }
+      } else if (type === 'bodyweight') {
+        newSet = { ...newSet, prescribedReps: lastSet?.prescribedReps || '', actualReps: '' }
+      } else {
+        newSet = {
+          ...newSet,
+          prescribedWeight: lastSet?.prescribedWeight || '',
+          prescribedReps: lastSet?.prescribedReps || '',
+          actualWeight: '',
+          actualReps: '',
+        }
+      }
+
+      newExercises[exerciseIndex] = { ...exercise, sets: [...exercise.sets, newSet] }
+      return newExercises
+    })
+  }
+
+  const removeSet = (exerciseIndex, setIndex) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      const exercise = newExercises[exerciseIndex]
+      if (exercise.sets.length <= 1) return prev
+      newExercises[exerciseIndex] = {
+        ...exercise,
+        sets: exercise.sets.filter((_, i) => i !== setIndex),
+      }
+      return newExercises
+    })
+  }
+
+  // Build save payload preserving ALL notes fields
+  const buildSavePayload = (exerciseData) => {
+    const payload = {
+      exercises: exerciseData,
+      notes: workoutNotes,
+      personalNotes,
+    }
+    if (workout.coachingNotes) payload.coachingNotes = workout.coachingNotes
+    if (workout.description) payload.description = workout.description
+    return payload
+  }
+
   const handleSaveProgress = async () => {
     setSaving(true)
     try {
-      await groupWorkoutService.update(id, { exercises, notes: workoutNotes })
-      setWorkout(prev => ({ ...prev, exercises, notes: workoutNotes }))
+      const payload = buildSavePayload(exercises)
+      await groupWorkoutService.update(id, payload)
+      setWorkout(prev => ({ ...prev, ...payload }))
       setIsLogging(false)
     } catch (error) {
       console.error('Error saving workout:', error)
@@ -134,26 +221,42 @@ export default function GroupWorkoutPage() {
   const handleComplete = async () => {
     setSaving(true)
     try {
-      // Auto-fill blank fields with prescribed values
-      const filledExercises = exercises.map(ex => ({
-        ...ex,
-        sets: ex.sets.map(set => {
-          const isTimeExercise = ex.type === 'time' || set.prescribedTime || set.actualTime
-          if (isTimeExercise) {
+      const filledExercises = exercises.map(ex => {
+        const type = ex.type || getExerciseType(ex)
+        return {
+          ...ex,
+          sets: ex.sets.map(set => {
+            if (type === 'time') {
+              return { ...set, actualTime: set.actualTime || set.prescribedTime || '' }
+            }
+            if (type === 'bodyweight') {
+              return { ...set, actualReps: set.actualReps || set.prescribedReps || '' }
+            }
             return {
               ...set,
-              actualTime: set.actualTime || set.prescribedTime || ''
+              actualWeight: set.actualWeight || set.prescribedWeight || '',
+              actualReps: set.actualReps || set.prescribedReps || '',
             }
-          }
-          return {
-            ...set,
-            actualWeight: set.actualWeight || set.prescribedWeight || '',
-            actualReps: set.actualReps || set.prescribedReps || ''
-          }
-        })
+          })
+        }
+      })
+      const payload = buildSavePayload(filledExercises)
+      
+      // If athlete is re-completing a coach-logged workout, mark as 'edited'
+      const wasCoachCompleted = workout.completedBy && workout.completedBy !== workout.assignedTo
+      if (wasCoachCompleted && user.uid === workout.assignedTo) {
+        payload.reviewStatus = 'edited'
+        payload.reviewedAt = new Date()
+      }
+      
+      await groupWorkoutService.complete(id, payload, user.uid, workout.assignedTo)
+      setWorkout(prev => ({ 
+        ...prev, 
+        ...payload, 
+        status: 'completed',
+        completedBy: user.uid !== workout.assignedTo ? user.uid : undefined,
+        reviewStatus: user.uid !== workout.assignedTo ? 'pending' : 'self',
       }))
-      await groupWorkoutService.complete(id, { exercises: filledExercises, notes: workoutNotes })
-      setWorkout(prev => ({ ...prev, exercises: filledExercises, notes: workoutNotes, status: 'completed' }))
       setExercises(filledExercises)
       setIsLogging(false)
     } catch (error) {
@@ -162,6 +265,24 @@ export default function GroupWorkoutPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleApproveReview = async () => {
+    setSaving(true)
+    try {
+      await groupWorkoutService.approveReview(id)
+      setWorkout(prev => ({ ...prev, reviewStatus: 'approved' }))
+    } catch (error) {
+      console.error('Error approving review:', error)
+      alert('Failed to approve')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEditReview = () => {
+    // Enter logging mode so athlete can make changes, then re-complete
+    setIsLogging(true)
   }
 
   const safeFormatDate = (date) => {
@@ -212,6 +333,10 @@ export default function GroupWorkoutPage() {
   const isOwner = workout.assignedTo === user?.uid
   const isAdmin = group?.admins?.includes(user?.uid)
   const canLog = isOwner || isAdmin
+  const hasAiNotes = workout.coachingNotes || workout.personalNotes || workout.description
+  const needsReview = isOwner && workout.reviewStatus === 'pending' && workout.completedBy
+  const wasApproved = workout.reviewStatus === 'approved'
+  const wasEditedByAthlete = workout.reviewStatus === 'edited'
 
   // ============ VIEW MODE ============
   if (!isLogging) {
@@ -239,6 +364,9 @@ export default function GroupWorkoutPage() {
               ) : (
                 <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm font-medium">Assigned</span>
               )}
+              {needsReview && (
+                <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-sm font-medium animate-pulse">Review</span>
+              )}
             </div>
           </div>
         </div>
@@ -246,6 +374,9 @@ export default function GroupWorkoutPage() {
         {/* Workout Title */}
         <div className="mb-6">
           <h1 className="text-3xl font-display text-iron-50 mb-2">{workout.name}</h1>
+          {workout.description && (
+            <p className="text-iron-400 mb-2">{workout.description}</p>
+          )}
           <div className="flex flex-wrap gap-4 text-sm">
             <div className="flex items-center gap-2 text-iron-400">
               <Calendar className="w-4 h-4 text-flame-400" />
@@ -255,6 +386,12 @@ export default function GroupWorkoutPage() {
               <Users className="w-4 h-4 text-cyan-400" />
               <span>{group?.name || 'Group Workout'}</span>
             </div>
+            {workout.generatedByAI && (
+              <div className="flex items-center gap-1.5 text-iron-500">
+                <Sparkles className="w-3.5 h-3.5 text-flame-400" />
+                <span>AI Generated</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -270,6 +407,100 @@ export default function GroupWorkoutPage() {
           </div>
         )}
 
+        {/* Review Banner - shown to athlete when coach completed for them */}
+        {needsReview && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 overflow-hidden"
+          >
+            <div className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                  <Eye className="w-5 h-5 text-amber-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-amber-300">Review Required</h3>
+                  <p className="text-sm text-iron-400 mt-1">
+                    Your coach logged this workout for you. Review the results and either approve or make changes.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={handleApproveReview}
+                  disabled={saving}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <ThumbsUp className="w-4 h-4" />
+                  Approve
+                </button>
+                <button
+                  onClick={handleEditReview}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-iron-800 hover:bg-iron-700 text-iron-300 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Pencil className="w-4 h-4" />
+                  Edit & Fix
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Approved/Edited Badge */}
+        {isOwner && (wasApproved || wasEditedByAthlete) && (
+          <div className={`card-steel p-3 mb-6 flex items-center gap-2 ${
+            wasApproved ? 'border-green-500/20 bg-green-500/5' : 'border-blue-500/20 bg-blue-500/5'
+          }`}>
+            <Check className={`w-4 h-4 ${wasApproved ? 'text-green-400' : 'text-blue-400'}`} />
+            <p className={`text-sm ${wasApproved ? 'text-green-400' : 'text-blue-400'}`}>
+              {wasApproved ? 'You approved this workout logged by your coach.' : 'You edited and updated this workout.'}
+            </p>
+          </div>
+        )}
+
+        {/* AI Coaching Notes — collapsible */}
+        {hasAiNotes && (
+          <div className="card-steel mb-6 overflow-hidden">
+            <button
+              onClick={() => setAiNotesExpanded(!aiNotesExpanded)}
+              className="w-full flex items-center justify-between p-4 hover:bg-iron-800/30 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4 text-flame-400" />
+                <span className="text-sm font-medium text-iron-200">AI Coaching Notes</span>
+              </div>
+              {aiNotesExpanded ? <ChevronUp className="w-4 h-4 text-iron-500" /> : <ChevronDown className="w-4 h-4 text-iron-500" />}
+            </button>
+            <AnimatePresence>
+              {aiNotesExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-4 pb-4 max-h-64 overflow-y-auto space-y-3">
+                    {workout.coachingNotes && (
+                      <div>
+                        <p className="text-xs text-iron-500 uppercase tracking-wider mb-1">Coaching Notes</p>
+                        <p className="text-sm text-iron-300 leading-relaxed">{workout.coachingNotes}</p>
+                      </div>
+                    )}
+                    {workout.personalNotes && (
+                      <div>
+                        <p className="text-xs text-iron-500 uppercase tracking-wider mb-1">Your Notes</p>
+                        <p className="text-sm text-iron-300 leading-relaxed">{workout.personalNotes}</p>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {/* User workout notes */}
         {workout.notes && (
           <div className="card-steel p-4 mb-6">
             <p className="text-iron-300 text-sm">{workout.notes}</p>
@@ -279,23 +510,28 @@ export default function GroupWorkoutPage() {
         {/* Exercises */}
         <div className="space-y-4">
           {workout.exercises?.map((exercise, exerciseIndex) => {
-            const isTimeExercise = exercise.type === 'time' || exercise.sets?.some(s => s.prescribedTime || s.actualTime)
+            const type = getExerciseType(exercise)
+            const typeTag = getTypeTag(type)
             
             return (
             <div key={exerciseIndex} className="card-steel overflow-hidden">
               <div className="p-4 border-b border-iron-800">
                 <div className="flex items-center gap-2">
                   <h3 className="text-xl font-semibold text-iron-50">{exercise.name}</h3>
-                  {isTimeExercise && (
-                    <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded">Time</span>
+                  {typeTag && (
+                    <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
                   )}
                 </div>
                 <p className="text-sm text-iron-500 mt-1">{exercise.sets?.length || 0} sets</p>
               </div>
               <div className="divide-y divide-iron-800/50">
                 {exercise.sets?.map((set, setIndex) => {
-                  const hasActual = isTimeExercise ? set.actualTime : (set.actualWeight || set.actualReps)
-                  const e1rm = !isTimeExercise && hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
+                  const hasActual = type === 'time' 
+                    ? set.actualTime 
+                    : type === 'bodyweight'
+                      ? set.actualReps
+                      : (set.actualWeight || set.actualReps)
+                  const e1rm = type === 'weight' && hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
                     ? calculateE1RM(parseFloat(set.actualWeight), parseInt(set.actualReps))
                     : null
                   return (
@@ -305,35 +541,37 @@ export default function GroupWorkoutPage() {
                           <span className="text-lg font-bold text-iron-400">{setIndex + 1}</span>
                         </div>
                         <div className="flex-1">
-                          {isTimeExercise ? (
-                            /* TIME EXERCISE */
+                          {type === 'time' ? (
                             !isCompleted ? (
-                              <div className="text-2xl font-bold text-iron-100">
-                                {set.prescribedTime || '—'} seconds
-                              </div>
+                              <div className="text-2xl font-bold text-iron-100">{set.prescribedTime || '—'} seconds</div>
                             ) : (
                               <>
-                                <div className="text-sm text-iron-500 mb-1">
-                                  Target: {set.prescribedTime || '—'}s
-                                </div>
+                                <div className="text-sm text-iron-500 mb-1">Target: {set.prescribedTime || '—'}s</div>
                                 {hasActual ? (
-                                  <span className="text-2xl font-bold text-flame-400">
-                                    {set.actualTime || '—'} seconds
-                                  </span>
+                                  <span className="text-2xl font-bold text-flame-400">{set.actualTime || '—'} seconds</span>
+                                ) : (
+                                  <span className="text-lg text-iron-600">Not logged</span>
+                                )}
+                              </>
+                            )
+                          ) : type === 'bodyweight' ? (
+                            !isCompleted ? (
+                              <div className="text-2xl font-bold text-iron-100">{set.prescribedReps || '—'} reps</div>
+                            ) : (
+                              <>
+                                <div className="text-sm text-iron-500 mb-1">Target: {set.prescribedReps || '—'} reps</div>
+                                {hasActual ? (
+                                  <span className="text-2xl font-bold text-flame-400">{set.actualReps || '—'} reps</span>
                                 ) : (
                                   <span className="text-lg text-iron-600">Not logged</span>
                                 )}
                               </>
                             )
                           ) : !isCompleted ? (
-                            /* SCHEDULED: Show target prominently */
-                            <div className="flex items-center gap-3 flex-wrap">
-                              <span className="text-2xl font-bold text-iron-100">
-                                {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'}
-                              </span>
-                            </div>
+                            <span className="text-2xl font-bold text-iron-100">
+                              {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'}
+                            </span>
                           ) : (
-                            /* COMPLETED: Show target small, actual big */
                             <>
                               <div className="text-sm text-iron-500 mb-1">
                                 Target: {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'} reps
@@ -354,6 +592,9 @@ export default function GroupWorkoutPage() {
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {set.targetRpe && !set.rpe && (
+                            <span className="text-xs text-iron-500">Target RPE {set.targetRpe}</span>
+                          )}
                           {set.rpe && <span className={`text-sm font-semibold ${getRPEColor(set.rpe)}`}>RPE {set.rpe}</span>}
                           {set.painLevel > 0 && (
                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(set.painLevel)}`}>Pain {set.painLevel}</span>
@@ -414,6 +655,48 @@ export default function GroupWorkoutPage() {
         </div>
       </div>
 
+      {/* AI Notes — collapsed by default in log mode, scrollable */}
+      {hasAiNotes && (
+        <div className="card-steel mb-4 overflow-hidden">
+          <button
+            onClick={() => setAiNotesExpanded(!aiNotesExpanded)}
+            className="w-full flex items-center justify-between p-3 hover:bg-iron-800/30 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-flame-400" />
+              <span className="text-sm font-medium text-iron-300">AI Coaching Notes</span>
+            </div>
+            {aiNotesExpanded ? <ChevronUp className="w-4 h-4 text-iron-500" /> : <ChevronDown className="w-4 h-4 text-iron-500" />}
+          </button>
+          <AnimatePresence>
+            {aiNotesExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="px-3 pb-3 max-h-48 overflow-y-auto space-y-2">
+                  {workout.coachingNotes && (
+                    <div>
+                      <p className="text-xs text-iron-500 uppercase tracking-wider mb-1">Coaching</p>
+                      <p className="text-xs text-iron-400 leading-relaxed">{workout.coachingNotes}</p>
+                    </div>
+                  )}
+                  {workout.personalNotes && (
+                    <div>
+                      <p className="text-xs text-iron-500 uppercase tracking-wider mb-1">For You</p>
+                      <p className="text-xs text-iron-400 leading-relaxed">{workout.personalNotes}</p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Workout Notes */}
       <div className="card-steel p-4 mb-4">
         <label className="block text-sm text-iron-400 mb-2">Workout Notes</label>
         <textarea
@@ -425,26 +708,49 @@ export default function GroupWorkoutPage() {
         />
       </div>
 
+      {/* Exercises */}
       <div className="space-y-4">
         {exercises.map((exercise, exerciseIndex) => {
-          const isTimeExercise = exercise.type === 'time' || exercise.sets?.some(s => s.prescribedTime || s.actualTime)
+          const type = exercise.type || getExerciseType(exercise)
+          const typeTag = getTypeTag(type)
           
           return (
           <div key={exerciseIndex} className="card-steel p-4">
-            <h3 className="font-semibold text-iron-100 text-xl mb-4">{exercise.name}</h3>
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="font-semibold text-iron-100 text-xl flex-1">{exercise.name}</h3>
+              {typeTag && (
+                <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
+              )}
+            </div>
+            
             <div className="space-y-4">
               {exercise.sets?.map((set, setIndex) => (
                 <div key={setIndex} className="bg-iron-800/30 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-lg font-medium text-iron-200">Set {setIndex + 1}</span>
-                    <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded">
-                      Target: {isTimeExercise 
-                        ? `${set.prescribedTime || '—'}s`
-                        : `${set.prescribedWeight || '—'} × ${set.prescribedReps || '—'}`
-                      }
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded">
+                        Target: {type === 'time' 
+                          ? `${set.prescribedTime || '—'}s`
+                          : type === 'bodyweight'
+                            ? `${set.prescribedReps || '—'} reps`
+                            : `${set.prescribedWeight || '—'} × ${set.prescribedReps || '—'}`
+                        }
+                        {set.targetRpe ? ` @ RPE ${set.targetRpe}` : ''}
+                      </span>
+                      {exercise.sets.length > 1 && (
+                        <button
+                          onClick={() => removeSet(exerciseIndex, setIndex)}
+                          className="p-1 text-iron-600 hover:text-red-400 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {isTimeExercise ? (
+
+                  {/* Input fields based on exercise type */}
+                  {type === 'time' ? (
                     <div className="mb-3">
                       <label className="block text-xs text-flame-400 mb-1 font-medium">Time (seconds)</label>
                       <input
@@ -453,6 +759,18 @@ export default function GroupWorkoutPage() {
                         value={set.actualTime || ''}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualTime', e.target.value)}
                         placeholder={set.prescribedTime || '—'}
+                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                      />
+                    </div>
+                  ) : type === 'bodyweight' ? (
+                    <div className="mb-3">
+                      <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={set.actualReps || ''}
+                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
+                        placeholder={set.prescribedReps || '—'}
                         className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
                       />
                     </div>
@@ -481,6 +799,8 @@ export default function GroupWorkoutPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* RPE & Pain */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs text-iron-500 mb-1">RPE</label>
@@ -508,6 +828,19 @@ export default function GroupWorkoutPage() {
                 </div>
               ))}
             </div>
+
+            {/* Add Set Button */}
+            <button
+              onClick={() => addSet(exerciseIndex)}
+              className="mt-3 w-full py-2.5 border border-dashed border-iron-700 rounded-lg
+                text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600
+                flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Set
+            </button>
+
+            {/* Exercise Notes */}
             <div className="mt-4">
               <label className="block text-xs text-iron-500 mb-1">Notes for {exercise.name}</label>
               <textarea
@@ -522,15 +855,20 @@ export default function GroupWorkoutPage() {
         )})}
       </div>
 
+      {/* Bottom Actions */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
         <div className="flex gap-3 mb-3">
           <button onClick={() => setIsLogging(false)} className="btn-secondary flex-1 py-3">Cancel</button>
           <button onClick={handleSaveProgress} disabled={saving} className="btn-secondary flex-1 py-3">Save Progress</button>
         </div>
         <button onClick={handleComplete} disabled={saving} className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2">
-          {saving ? 'Saving...' : <><Check className="w-5 h-5" />{isCompleted ? 'Update' : 'Complete'}</>}
+          {saving ? 'Saving...' : <><Check className="w-5 h-5" />{
+            needsReview ? 'Save Changes' : isCompleted ? 'Update' : 'Complete'
+          }</>}
         </button>
-        <p className="text-xs text-iron-500 text-center mt-2">Empty fields filled with targets</p>
+        <p className="text-xs text-iron-500 text-center mt-2">
+          {needsReview ? 'Your changes will replace coach data' : 'Empty fields filled with targets'}
+        </p>
       </div>
 
       {/* RPE Info Modal */}
