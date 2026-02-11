@@ -12,7 +12,11 @@ import {
   Trophy,
   ChevronLeft,
   ChevronRight,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Heart,
+  LayoutDashboard,
+  MessageCircle,
+  Settings,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { userService, workoutService, goalService, groupWorkoutService } from '../services/firestore'
@@ -221,14 +225,16 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-2xl mx-auto pb-24">
-      {/* Back button */}
-      <button 
-        onClick={handleBack}
-        className="inline-flex items-center gap-2 text-iron-400 hover:text-iron-200 mb-6"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        {backLabel}
-      </button>
+      {/* Back button - only when navigated from another page, not from nav */}
+      {location.state?.from && (
+        <button 
+          onClick={handleBack}
+          className="inline-flex items-center gap-2 text-iron-400 hover:text-iron-200 mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          {backLabel}
+        </button>
+      )}
 
       {/* Profile Header */}
       <div className="card-steel p-6 mb-6">
@@ -425,6 +431,36 @@ export default function ProfilePage() {
           View all activity
         </Link>
       </div>
+
+      {/* Quick Links — own profile only */}
+      {isOwnProfile && (
+        <div className="mt-6">
+          <div className="card-steel overflow-hidden divide-y divide-iron-800">
+            {[
+              { to: '/calendar', icon: CalendarIcon, label: 'Calendar', desc: 'Monthly view & scheduling' },
+              { to: '/health', icon: Heart, label: 'Health', desc: 'Weight, sleep & body metrics' },
+              { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', desc: 'Customizable widget view' },
+              { to: '/settings', icon: Settings, label: 'Settings', desc: 'Preferences & account' },
+            ].map(item => (
+              <Link
+                key={item.to}
+                to={item.to}
+                state={{ from: '/profile', fromLabel: 'Back to Profile' }}
+                className="flex items-center gap-4 p-4 hover:bg-iron-800/50 transition-colors"
+              >
+                <div className="w-9 h-9 rounded-lg bg-iron-800 flex items-center justify-center flex-shrink-0">
+                  <item.icon className="w-5 h-5 text-iron-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-iron-200">{item.label}</p>
+                  <p className="text-xs text-iron-500">{item.desc}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-iron-600" />
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

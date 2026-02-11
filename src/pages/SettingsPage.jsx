@@ -25,7 +25,7 @@ import {
   Dumbbell,
   Plus,
   X,
-  Timer
+  Timer,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
@@ -377,13 +377,18 @@ export default function SettingsPage() {
                 @{userProfile.username}
               </p>
             )}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingPhoto}
-              className="text-xs text-flame-400 hover:text-flame-300 mt-1"
-            >
-              {uploadingPhoto ? 'Uploading...' : 'Change photo'}
-            </button>
+            <div className="flex gap-3 mt-1">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                className="text-xs text-flame-400 hover:text-flame-300"
+              >
+                {uploadingPhoto ? 'Uploading...' : 'Change photo'}
+              </button>
+              <Link to="/profile" className="text-xs text-iron-500 hover:text-iron-300">
+                View profile →
+              </Link>
+            </div>
           </div>
         </div>
       </div>

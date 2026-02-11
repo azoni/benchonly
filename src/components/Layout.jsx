@@ -2,11 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutDashboard,
-  Calendar,
   Users,
   Target,
-  BarChart3,
   Settings,
   MessageCircle,
   Menu,
@@ -15,8 +12,8 @@ import {
   Dumbbell,
   ChevronRight,
   Eye,
-  Calculator,
-  Heart,
+  Home,
+  User,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
@@ -27,15 +24,11 @@ import { groupWorkoutService } from '../services/firestore';
 const ADMIN_EMAILS = ['charltonuw@gmail.com'];
 
 const baseNavItems = [
-  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/feed', icon: MessageCircle, label: 'Feed' },
-  { path: '/workouts', icon: Dumbbell, label: 'Workouts', badgeKey: 'workouts' },
-  { path: '/calendar', icon: Calendar, label: 'Calendar' },
+  { path: '/today', icon: Home, label: 'Today', badgeKey: 'workouts' },
+  { path: '/workouts', icon: Dumbbell, label: 'Workouts' },
   { path: '/groups', icon: Users, label: 'Groups' },
   { path: '/goals', icon: Target, label: 'Goals' },
-  { path: '/health', icon: Heart, label: 'Health' },
-  { path: '/tools', icon: Calculator, label: 'Tools' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
+  { path: '/profile', icon: User, label: 'Profile' },
 ];
 
 export default function Layout() {
@@ -98,7 +91,7 @@ export default function Layout() {
       >
         {/* Logo */}
         <div className="h-16 flex items-center px-4 border-b border-iron-800">
-          <Link to="/dashboard" className="flex items-center gap-3">
+          <Link to="/today" className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-plate bg-flame-500 flex items-center justify-center">
               <Dumbbell className="w-5 h-5 text-white" />
             </div>
@@ -117,7 +110,7 @@ export default function Layout() {
         {/* Navigation */}
         <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
+            const isActive = location.pathname === item.path || (item.path === '/today' && (location.pathname === '/' || location.pathname === '/today'));
             return (
               <Link
                 key={item.path}
@@ -199,7 +192,7 @@ export default function Layout() {
       <header className="lg:hidden fixed top-0 inset-x-0 bg-iron-900 border-b border-iron-800 z-40"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <div className="h-14 flex items-center justify-between px-4">
-          <Link to="/dashboard" className="flex items-center gap-3">
+          <Link to="/today" className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-flame-500 flex items-center justify-center flex-shrink-0">
               <Dumbbell className="w-5 h-5 text-white" />
             </div>
@@ -257,7 +250,7 @@ export default function Layout() {
               
               <nav className="flex-1 py-4 px-3 space-y-1">
                 {navItems.map((item) => {
-                  const isActive = location.pathname === item.path;
+                  const isActive = location.pathname === item.path || (item.path === '/today' && (location.pathname === '/' || location.pathname === '/today'));
                   return (
                     <Link
                       key={item.path}

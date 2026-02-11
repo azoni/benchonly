@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
+import TodayPage from './pages/TodayPage'
 import DashboardPage from './pages/DashboardPage'
 import WorkoutsPage from './pages/WorkoutsPage'
 import NewWorkoutPage from './pages/NewWorkoutPage'
@@ -78,7 +79,7 @@ function GuestRoute() {
   }
   
   if (user) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to="/today" replace />
   }
   
   return null
@@ -106,7 +107,8 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<DashboardPage />} />
+        <Route index element={<TodayPage />} />
+        <Route path="today" element={<TodayPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="workouts" element={<WorkoutsPage />} />
         <Route path="workouts/new" element={<NewWorkoutPage />} />
