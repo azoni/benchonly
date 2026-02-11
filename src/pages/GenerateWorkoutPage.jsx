@@ -57,6 +57,7 @@ export default function GenerateWorkoutPage() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   
   const [analysisSteps, setAnalysisSteps] = useState([]);
   const [currentStep, setCurrentStep] = useState(null);
@@ -442,6 +443,8 @@ export default function GenerateWorkoutPage() {
     { value: 'lower', label: 'Lower' },
     { value: 'full', label: 'Full Body' },
     { value: 'bench', label: 'Bench Focus' },
+    { value: 'no-equipment', label: 'No Equipment' },
+    { value: 'vacation', label: 'Hotel / Travel' },
   ];
   
   const intensityOptions = [
@@ -468,14 +471,24 @@ export default function GenerateWorkoutPage() {
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column - Analysis */}
-        <div className="lg:col-span-1">
+        {/* Left column - Analysis (shows second on mobile, first on desktop) */}
+        <div className="lg:col-span-1 order-2 lg:order-1">
           <div className="card-steel rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-4">
+            <button 
+              onClick={() => setAnalysisOpen(!analysisOpen)}
+              className="flex items-center gap-2 w-full lg:cursor-default"
+            >
               <Brain className="w-5 h-5 text-flame-400" />
-              <h3 className="font-medium text-iron-200">Analysis</h3>
-            </div>
+              <h3 className="font-medium text-iron-200 flex-1 text-left">Analysis</h3>
+              {!loadingContext && analysisSteps.length > 0 && (
+                <span className="text-xs text-iron-500 lg:hidden">
+                  {analysisSteps.filter(s => s.status === 'complete').length}/{analysisSteps.length}
+                </span>
+              )}
+              <ChevronDown className={`w-4 h-4 text-iron-500 lg:hidden transition-transform ${analysisOpen ? 'rotate-180' : ''}`} />
+            </button>
             
+            <div className={`${analysisOpen ? '' : 'hidden'} lg:block mt-4`}>
             <div className="space-y-3">
               {analysisSteps.map((step, i) => (
                 <motion.div
@@ -575,11 +588,12 @@ export default function GenerateWorkoutPage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
         
-        {/* Right column - Options & Results */}
-        <div className="lg:col-span-2">
+        {/* Right column - Options & Results (shows first on mobile) */}
+        <div className="lg:col-span-2 order-1 lg:order-2">
           {loading ? (
             /* Full-panel AI Thinking Display */
             <div className="space-y-4">
@@ -635,7 +649,7 @@ export default function GenerateWorkoutPage() {
               </div>
               
               <div className="mb-4">
-                <label className="block text-sm text-iron-400 mb-2">Focus</label>
+                <label className="block text-sm text-iron-400 mb-2">Style</label>
                 <div className="flex flex-wrap gap-2">
                   {focusOptions.map(opt => (
                     <button

@@ -45,7 +45,7 @@ export async function handler(event) {
   }
 
   try {
-    const { userId, prompt, workoutFocus, intensity, context, model, settings } = JSON.parse(event.body);
+    const { userId, prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput } = JSON.parse(event.body);
 
     if (!userId) {
       return {
@@ -176,7 +176,7 @@ OUTPUT JSON only, no markdown:
     }
 
     // Save to Firestore (skip if draft mode)
-    const draftMode = body.draftMode === true;
+    const draftMode = draftModeInput === true;
     const workoutData = {
       name: workout.name || 'AI Workout',
       description: workout.description || '',
@@ -296,7 +296,13 @@ function buildContext(ctx, focus, intensity, settings = {}) {
   const painThresholdCount = settings.painThresholdCount || 2;
   
   let s = '';
-  if (focus && focus !== 'auto') s += `FOCUS: ${focus}\n`;
+  if (focus === 'no-equipment') {
+    s += `FOCUS: Bodyweight only — NO equipment whatsoever. Use exercises like push-ups, pull-ups (if available), squats, lunges, planks, burpees, dips, glute bridges, mountain climbers, etc. Set type to 'bodyweight' or 'time' for all exercises.\n`;
+  } else if (focus === 'vacation') {
+    s += `FOCUS: Hotel/travel workout — minimal or no equipment. Assume only bodyweight and maybe a single set of light dumbbells or resistance band. Keep it 20-35 min. Prioritize compound movements and circuits. Set type to 'bodyweight' or 'time' for exercises without weights.\n`;
+  } else if (focus && focus !== 'auto') {
+    s += `FOCUS: ${focus}\n`;
+  }
   
   const intMap = { light: 'Light (RPE 5-6)', moderate: 'Moderate (RPE 7-8)', heavy: 'Heavy (RPE 8-9)', max: 'Max (RPE 9-10)' };
   s += `INTENSITY: ${intMap[intensity] || 'Moderate'}\n\n`;

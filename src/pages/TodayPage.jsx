@@ -242,7 +242,7 @@ export default function TodayPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto pb-24">
+    <div className="max-w-2xl mx-auto pb-24 overflow-x-hidden">
       {/* Greeting */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -326,7 +326,7 @@ export default function TodayPage() {
                 key={notif.id}
                 to="/feed"
                 onClick={() => notificationService.markAsRead(notif.id)}
-                className="card-steel p-3 border-cyan-500/20 bg-cyan-500/5 flex items-center gap-3 block"
+                className="card-steel p-3 border-cyan-500/20 bg-cyan-500/5 flex items-center gap-3"
               >
                 <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
                   <MessageCircle className="w-5 h-5 text-cyan-400" />
@@ -455,7 +455,7 @@ export default function TodayPage() {
             </div>
             <h3 className="text-lg font-display text-iron-200 mb-1">Nothing scheduled today</h3>
             <p className="text-sm text-iron-500 mb-6">Generate a workout with AI or log one manually.</p>
-            <div className="flex gap-3 justify-center">
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-center">
               <Link
                 to="/workouts/generate"
                 className="btn-primary flex items-center gap-2"

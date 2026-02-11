@@ -15,6 +15,7 @@ import {
   Home,
   User,
   LayoutDashboard,
+  Activity,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
@@ -28,6 +29,7 @@ const baseNavItems = [
   { path: '/today', icon: Home, label: 'Today', badgeKey: 'workouts' },
   { path: '/workouts', icon: Dumbbell, label: 'Workouts' },
   { path: '/groups', icon: Users, label: 'Groups' },
+  { path: '/feed', icon: Activity, label: 'Feed' },
   { path: '/goals', icon: Target, label: 'Goals' },
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/profile', icon: User, label: 'Profile' },
@@ -311,7 +313,7 @@ export default function Layout() {
         ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}
         ${isGuest ? 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem+2.5rem)] lg:pt-16' : 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem)] lg:pt-0'}`}
       >
-        <div className="min-h-screen p-4 lg:p-6">
+        <div className="min-h-screen p-4 lg:p-6 overflow-x-hidden">
           <Outlet />
         </div>
       </main>

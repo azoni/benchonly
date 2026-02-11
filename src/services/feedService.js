@@ -222,7 +222,7 @@ export const notificationService = {
       const snapshot = await getDocs(q)
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
     } catch (error) {
-      console.error('Error getting notifications:', error)
+      // Silently handle - notifications collection may not have rules set up yet
       return []
     }
   },
