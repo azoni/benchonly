@@ -230,6 +230,13 @@ export default function FeedPage() {
             See what the community is up to
           </p>
         </div>
+        {Object.keys(users).length > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-iron-800/50 rounded-full border border-iron-700/50">
+            <Users className="w-4 h-4 text-flame-400" />
+            <span className="text-sm font-medium text-iron-300">{Object.keys(users).length}</span>
+            <span className="text-xs text-iron-500">Active</span>
+          </div>
+        )}
       </div>
 
       {/* Search */}

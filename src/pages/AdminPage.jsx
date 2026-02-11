@@ -189,7 +189,19 @@ export default function AdminPage() {
         limit(200)
       )
       const snapshot = await getDocs(q)
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      const data = snapshot.docs.map(doc => {
+        const d = { id: doc.id, ...doc.data() }
+        // Calculate cost for records missing it (old ask-assistant records)
+        if (!d.estimatedCost && d.promptTokens && d.completionTokens) {
+          if (d.model === 'gpt-4o') {
+            d.estimatedCost = (d.promptTokens / 1e6) * 2.50 + (d.completionTokens / 1e6) * 10.00
+          } else {
+            // gpt-4o-mini default
+            d.estimatedCost = (d.promptTokens / 1e6) * 0.15 + (d.completionTokens / 1e6) * 0.60
+          }
+        }
+        return d
+      })
       setUsageData(data)
     } catch (error) {
       console.error('Error loading usage:', error)
@@ -766,6 +778,21 @@ export default function AdminPage() {
                 const totalTokens = filtered.reduce((sum, u) => sum + (u.totalTokens || 0), 0)
                 const totalCost = filtered.reduce((sum, u) => sum + (u.estimatedCost || 0), 0)
                 
+                // Feature breakdown
+                const byFeature = {}
+                const FEATURE_LABELS = {
+                  'generate-workout': 'Workout Gen',
+                  'generate-group-workout': 'Group Gen',
+                  'ask-assistant': 'AI Chat',
+                }
+                filtered.forEach(r => {
+                  const label = FEATURE_LABELS[r.feature] || r.feature || 'other'
+                  if (!byFeature[label]) byFeature[label] = { tokens: 0, requests: 0, cost: 0 }
+                  byFeature[label].tokens += r.totalTokens || 0
+                  byFeature[label].requests += 1
+                  byFeature[label].cost += r.estimatedCost || 0
+                })
+                
                 return (
                   <>
                     <div className="grid grid-cols-3 gap-4">
@@ -778,10 +805,38 @@ export default function AdminPage() {
                         <p className="text-sm text-iron-500">Tokens Used</p>
                       </div>
                       <div className="card-steel p-4 text-center">
-                        <p className="text-3xl font-display text-green-400">${totalCost.toFixed(2)}</p>
+                        <p className="text-3xl font-display text-green-400">${totalCost.toFixed(4)}</p>
                         <p className="text-sm text-iron-500">Est. Cost</p>
                       </div>
                     </div>
+                    
+                    {/* Feature Breakdown */}
+                    {Object.keys(byFeature).length > 0 && (
+                      <div className="card-steel p-4">
+                        <p className="text-xs text-iron-500 font-medium uppercase tracking-wider mb-3">Cost by Feature</p>
+                        <div className="space-y-2">
+                          {Object.entries(byFeature)
+                            .sort((a, b) => b[1].cost - a[1].cost)
+                            .map(([feature, data]) => (
+                              <div key={feature} className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${
+                                    feature === 'AI Chat' ? 'bg-purple-400' 
+                                    : feature === 'Workout Gen' ? 'bg-blue-400' 
+                                    : feature === 'Group Gen' ? 'bg-cyan-400' 
+                                    : 'bg-iron-400'
+                                  }`} />
+                                  <span className="text-sm text-iron-300">{feature}</span>
+                                </div>
+                                <div className="text-right text-sm">
+                                  <span className="text-green-400">${data.cost.toFixed(4)}</span>
+                                  <span className="text-iron-500 ml-2">({data.requests})</span>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Usage Table */}
                     <div className="card-steel overflow-hidden">
@@ -817,9 +872,14 @@ export default function AdminPage() {
                                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                         usage.feature === 'ask-assistant' 
                                           ? 'bg-purple-500/20 text-purple-400'
-                                          : 'bg-blue-500/20 text-blue-400'
+                                          : usage.feature === 'generate-group-workout'
+                                            ? 'bg-cyan-500/20 text-cyan-400'
+                                            : 'bg-blue-500/20 text-blue-400'
                                       }`}>
-                                        {usage.feature || 'unknown'}
+                                        {usage.feature === 'generate-workout' ? 'Workout Gen'
+                                          : usage.feature === 'generate-group-workout' ? 'Group Gen'
+                                          : usage.feature === 'ask-assistant' ? 'AI Chat'
+                                          : usage.feature || 'unknown'}
                                       </span>
                                     </td>
                                     <td className="p-3 text-iron-500">
@@ -829,7 +889,7 @@ export default function AdminPage() {
                                       {usage.totalTokens?.toLocaleString()}
                                     </td>
                                     <td className="p-3 text-right text-green-400">
-                                      ${usage.estimatedCost?.toFixed(4)}
+                                      ${(usage.estimatedCost || 0).toFixed(4)}
                                     </td>
                                   </tr>
                                   {isExpanded && (

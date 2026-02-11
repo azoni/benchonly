@@ -196,9 +196,8 @@ ${contextString}`
       promptTokens: usage.prompt_tokens,
       completionTokens: usage.completion_tokens,
       totalTokens: usage.total_tokens,
+      estimatedCost: cost,
       responseTimeMs: responseTime,
-      userMessage: message,
-      assistantResponse: cleanMessage,
       createdAt: new Date().toISOString()
     }
 

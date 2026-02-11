@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { 
   User, 
   Bell, 
-  Moon, 
   Scale,
   LogOut,
   ChevronRight,
@@ -31,7 +30,7 @@ import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
 import { auth } from '../services/firebase'
 import { ACTIVITY_LEVELS } from '../services/calorieService'
-import { userService } from '../services/firestore'
+import { userService, tokenUsageService } from '../services/firestore'
 
 export default function SettingsPage() {
   const { user, userProfile, updateProfile } = useAuth()
@@ -41,6 +40,9 @@ export default function SettingsPage() {
   const fileInputRef = useRef(null)
   const [showProfileSection, setShowProfileSection] = useState(false)
   const [showExercisesSection, setShowExercisesSection] = useState(false)
+  const [showUsageSection, setShowUsageSection] = useState(false)
+  const [usageStats, setUsageStats] = useState(null)
+  const [usageLoading, setUsageLoading] = useState(false)
   
   // Custom exercises state
   const [customExercises, setCustomExercises] = useState({
@@ -313,6 +315,39 @@ export default function SettingsPage() {
   const handleDeleteAccount = () => {
     if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
       alert('Account deletion coming soon. Contact support for now.')
+    }
+  }
+
+  const loadUsageStats = async () => {
+    if (usageStats || usageLoading || !user) return
+    setUsageLoading(true)
+    try {
+      const records = await tokenUsageService.getByUser(user.uid, 200)
+      const byFeature = {}
+      let totalTokens = 0
+      let totalRequests = 0
+      
+      const FEATURE_LABELS = {
+        'generate-workout': 'Workout Generation',
+        'generate-group-workout': 'Group Workout',
+        'ask-assistant': 'AI Chat',
+      }
+      
+      records.forEach(r => {
+        const feature = r.feature || 'other'
+        const label = FEATURE_LABELS[feature] || feature
+        if (!byFeature[label]) byFeature[label] = { tokens: 0, requests: 0 }
+        byFeature[label].tokens += r.totalTokens || 0
+        byFeature[label].requests += 1
+        totalTokens += r.totalTokens || 0
+        totalRequests += 1
+      })
+      
+      setUsageStats({ totalTokens, totalRequests, byFeature })
+    } catch (e) {
+      console.error('Error loading usage:', e)
+    } finally {
+      setUsageLoading(false)
     }
   }
 
@@ -849,34 +884,78 @@ export default function SettingsPage() {
           </div>
         </button>
 
-        {/* Usage Stats Link */}
-        <Link
-          to="/usage"
-          className="card-steel p-4 flex items-center gap-4 hover:border-iron-600 transition-colors"
-        >
-          <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-            <BarChart3 className="w-5 h-5 text-cyan-400" />
-          </div>
-          <div className="flex-1">
-            <p className="font-medium text-iron-200">AI Usage Stats</p>
-            <p className="text-sm text-iron-500">View your AI token usage</p>
-          </div>
-          <ChevronRight className="w-4 h-4 text-iron-500" />
-        </Link>
+        {/* AI Usage Stats */}
+        <div className="card-steel overflow-hidden">
+          <button
+            onClick={() => {
+              setShowUsageSection(!showUsageSection)
+              if (!showUsageSection) loadUsageStats()
+            }}
+            className="w-full p-4 flex items-center gap-4"
+          >
+            <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+              <BarChart3 className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium text-iron-200">AI Usage</p>
+              <p className="text-sm text-iron-500">View your token usage</p>
+            </div>
+            <ChevronDown className={`w-5 h-5 text-iron-500 transition-transform ${showUsageSection ? 'rotate-180' : ''}`} />
+          </button>
 
-        {/* Theme */}
-        <div className="card-steel p-4 opacity-50">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <Moon className="w-5 h-5 text-purple-400" />
+          {showUsageSection && (
+            <div className="px-4 pb-4 border-t border-iron-800 pt-4">
+              {usageLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="w-5 h-5 text-flame-500 animate-spin" />
+                </div>
+              ) : usageStats ? (
+                <div className="space-y-4">
+                  <div className="flex gap-3">
+                    <div className="flex-1 bg-iron-800/50 rounded-lg p-3 text-center">
+                      <p className="text-xl font-display text-iron-100">{usageStats.totalRequests}</p>
+                      <p className="text-xs text-iron-500">Requests</p>
+                    </div>
+                    <div className="flex-1 bg-iron-800/50 rounded-lg p-3 text-center">
+                      <p className="text-xl font-display text-iron-100">
+                        {usageStats.totalTokens >= 1000000 
+                          ? `${(usageStats.totalTokens / 1000000).toFixed(1)}M`
+                          : usageStats.totalTokens >= 1000 
+                            ? `${(usageStats.totalTokens / 1000).toFixed(1)}k`
+                            : usageStats.totalTokens}
+                      </p>
+                      <p className="text-xs text-iron-500">Total Tokens</p>
+                    </div>
+                  </div>
+                  
+                  {Object.keys(usageStats.byFeature).length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-iron-500 font-medium uppercase tracking-wider">By Feature</p>
+                      {Object.entries(usageStats.byFeature)
+                        .sort((a, b) => b[1].tokens - a[1].tokens)
+                        .map(([feature, data]) => (
+                          <div key={feature} className="flex items-center justify-between py-1.5">
+                            <span className="text-sm text-iron-300">{feature}</span>
+                            <div className="text-right">
+                              <span className="text-sm text-iron-200 font-medium">
+                                {data.tokens >= 1000 ? `${(data.tokens / 1000).toFixed(1)}k` : data.tokens}
+                              </span>
+                              <span className="text-xs text-iron-500 ml-2">({data.requests} reqs)</span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                  
+                  {usageStats.totalRequests === 0 && (
+                    <p className="text-sm text-iron-500 text-center py-2">No AI usage yet</p>
+                  )}
+                </div>
+              ) : null}
             </div>
-            <div className="flex-1">
-              <p className="font-medium text-iron-200">Dark Mode</p>
-              <p className="text-sm text-iron-500">Always on (more themes coming)</p>
-            </div>
-            <Check className="w-5 h-5 text-flame-400" />
-          </div>
+          )}
         </div>
+
       </div>
 
       {/* Account */}
@@ -927,7 +1006,7 @@ export default function SettingsPage() {
 
       {/* Version */}
       <div className="mt-12 text-center text-sm text-iron-600">
-        <p>Bench Only v1.0.0</p>
+        <p>Bench Only v1.2.0</p>
         <p className="mt-1">Made with 💪 for serious lifters</p>
       </div>
     </div>
