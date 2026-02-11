@@ -177,26 +177,35 @@ export default function WorkoutsPage() {
   const sortedTodoWorkouts = [...todoWorkouts].sort((a, b) => {
     const dateA = getDisplayDate(a.date)
     const dateB = getDisplayDate(b.date)
-    return dateA - dateB
+    return (dateA?.getTime() || 0) - (dateB?.getTime() || 0)
   })
 
   // Sort completed workouts by date (newest first)
   const sortedCompletedWorkouts = [...completedWorkouts].sort((a, b) => {
     const dateA = getDisplayDate(a.date)
     const dateB = getDisplayDate(b.date)
-    return dateB - dateA
+    return (dateB?.getTime() || 0) - (dateA?.getTime() || 0)
   })
 
   const getDateLabel = (date) => {
-    const dateObj = getDisplayDate(date)
-    if (isToday(dateObj)) return 'Today'
-    if (isPast(dateObj)) return format(dateObj, 'EEE, MMM d')
-    return format(dateObj, 'EEE, MMM d')
+    try {
+      const dateObj = getDisplayDate(date)
+      if (isNaN(dateObj.getTime())) return '—'
+      if (isToday(dateObj)) return 'Today'
+      return format(dateObj, 'EEE, MMM d')
+    } catch {
+      return '—'
+    }
   }
 
   const isOverdue = (date) => {
-    const dateObj = getDisplayDate(date)
-    return isPast(dateObj) && !isToday(dateObj)
+    try {
+      const dateObj = getDisplayDate(date)
+      if (isNaN(dateObj.getTime())) return false
+      return isPast(dateObj) && !isToday(dateObj)
+    } catch {
+      return false
+    }
   }
 
   if (loading) {
@@ -257,7 +266,8 @@ export default function WorkoutsPage() {
             {pendingReviews.map((review) => {
               let dateStr = ''
               try {
-                dateStr = format(getDisplayDate(review.date), 'MMM d')
+                const d = getDisplayDate(review.date)
+                if (!isNaN(d.getTime())) dateStr = format(d, 'MMM d')
               } catch { /* ignore */ }
 
               return (

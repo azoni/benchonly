@@ -20,9 +20,23 @@ export function parseLocalDate(dateString) {
   // If it's a Firestore Timestamp
   if (dateString?.toDate) return dateString.toDate()
   
+  // Handle ISO strings (2025-01-15T00:00:00.000Z)
+  if (typeof dateString === 'string' && dateString.includes('T')) {
+    const d = new Date(dateString)
+    if (!isNaN(d.getTime())) {
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0)
+    }
+  }
+  
   // Parse YYYY-MM-DD string and create date at noon local time
-  const [year, month, day] = dateString.split('-').map(Number)
-  return new Date(year, month - 1, day, 12, 0, 0)
+  const parts = String(dateString).split('-').map(Number)
+  if (parts.length >= 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0)
+  }
+  
+  // Last resort: try native parsing
+  const fallback = new Date(dateString)
+  return isNaN(fallback.getTime()) ? new Date() : fallback
 }
 
 /**
@@ -104,12 +118,14 @@ export function getDisplayDate(date) {
     const year = dateObj.getUTCFullYear()
     const month = dateObj.getUTCMonth()
     const day = dateObj.getUTCDate()
-    return new Date(year, month, day, 12, 0, 0)
+    const result = new Date(year, month, day, 12, 0, 0)
+    return isNaN(result.getTime()) ? new Date() : result
   }
   
   // For dates with time component, use local date
   const year = dateObj.getFullYear()
   const month = dateObj.getMonth()
   const day = dateObj.getDate()
-  return new Date(year, month, day, 12, 0, 0)
+  const result = new Date(year, month, day, 12, 0, 0)
+  return isNaN(result.getTime()) ? new Date() : result
 }
