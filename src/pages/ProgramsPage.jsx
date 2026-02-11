@@ -61,6 +61,7 @@ const DAY_TYPE_COLORS = {
 export default function ProgramsPage() {
   const navigate = useNavigate()
   const { user, userProfile, updateProfile } = useAuth()
+  const isAdmin = user?.email === 'charltonuw@gmail.com'
   const [programs, setPrograms] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -96,15 +97,17 @@ export default function ProgramsPage() {
       setPrograms(progs)
       setExistingGoals(goals.filter(g => g.status === 'active'))
 
-      // Load user context for defaults
+      // Load user context for defaults — only completed workouts
       const maxLiftsSnap = await getDocs(
         query(collection(db, 'workouts'), where('userId', '==', user.uid), limit(50))
       )
       const maxLifts = {}
       maxLiftsSnap.docs.forEach(d => {
         const w = d.data()
+        if (w.status !== 'completed') return
         ;(w.exercises || []).forEach(ex => {
           ;(ex.sets || []).forEach(s => {
+            if (!s.actualWeight && !s.actualReps && s.prescribedWeight) return
             const weight = parseFloat(s.actualWeight || s.prescribedWeight || 0)
             const reps = parseInt(s.actualReps || s.prescribedReps || 0)
             if (weight > 0 && reps > 0) {
@@ -163,10 +166,10 @@ export default function ProgramsPage() {
       return
     }
 
-    // Credit check: 10 credits for program generation
+    // Credit check: 10 credits for program generation (admin bypasses)
     const credits = userProfile?.credits ?? 0
     const cost = 10
-    if (credits < cost) {
+    if (!isAdmin && credits < cost) {
       setError(`Not enough credits. Program generation costs ${cost} credits, you have ${credits}.`)
       return
     }
@@ -177,10 +180,12 @@ export default function ProgramsPage() {
     startThinking()
 
     try {
-      await creditService.deduct(user.uid, 'generate-program')
-      updateProfile({ credits: credits - cost })
+      if (!isAdmin) {
+        await creditService.deduct(user.uid, 'generate-program')
+        updateProfile({ credits: credits - cost })
+      }
 
-      // Load context for AI
+      // Load context for AI — only completed workouts
       const maxLifts = {}
       const painHistory = {}
       const rpeAverages = {}
@@ -190,8 +195,10 @@ export default function ProgramsPage() {
       )
       workoutsSnap.docs.forEach(d => {
         const w = d.data()
+        if (w.status !== 'completed') return
         ;(w.exercises || []).forEach(ex => {
           ;(ex.sets || []).forEach(s => {
+            if (!s.actualWeight && !s.actualReps && s.prescribedWeight) return
             const weight = parseFloat(s.actualWeight || s.prescribedWeight || 0)
             const reps = parseInt(s.actualReps || s.prescribedReps || 0)
             if (weight > 0 && reps > 0) {
@@ -229,7 +236,7 @@ export default function ProgramsPage() {
           trainingDays,
           prompt: prompt || undefined,
           context: { maxLifts, painHistory, rpeAverages: rpeAvg },
-          model: user?.email === 'charltonuw@gmail.com' ? 'premium' : 'standard',
+          model: isAdmin ? 'premium' : 'standard',
         }),
       })
 
@@ -247,8 +254,10 @@ export default function ProgramsPage() {
       setError(err.message)
       stopThinking()
       // Refund credits
-      await creditService.add(user.uid, cost).catch(() => {})
-      updateProfile({ credits })
+      if (!isAdmin) {
+        await creditService.add(user.uid, cost).catch(() => {})
+        updateProfile({ credits })
+      }
     } finally {
       setGenerating(false)
     }

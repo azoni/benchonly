@@ -113,9 +113,10 @@ export default function ProgramDetailPage() {
   }
 
   const handleGenerateWorkout = async (weekNumber, day) => {
+    const isAdmin = user?.email === 'charltonuw@gmail.com'
     const credits = userProfile?.credits ?? 0
     const cost = CREDIT_COSTS['generate-workout']
-    if (credits < cost) {
+    if (!isAdmin && credits < cost) {
       alert(`Not enough credits. Need ${cost}, have ${credits}.`)
       return
     }
@@ -124,8 +125,10 @@ export default function ProgramDetailPage() {
     setGeneratingDay(dayKey)
 
     try {
-      await creditService.deduct(user.uid, 'generate-workout')
-      updateProfile({ credits: credits - cost })
+      if (!isAdmin) {
+        await creditService.deduct(user.uid, 'generate-workout')
+        updateProfile({ credits: credits - cost })
+      }
 
       const maxLifts = {}
       const painHistory = {}
@@ -134,8 +137,11 @@ export default function ProgramDetailPage() {
       )
       workoutsSnap.docs.forEach(d => {
         const w = d.data()
+        if (w.status !== 'completed') return // Only completed workouts
         ;(w.exercises || []).forEach(ex => {
           ;(ex.sets || []).forEach(s => {
+            // Skip sets with only prescribed data (not actually performed)
+            if (!s.actualWeight && !s.actualReps && s.prescribedWeight) return
             const weight = parseFloat(s.actualWeight || s.prescribedWeight || 0)
             const reps = parseInt(s.actualReps || s.prescribedReps || 0)
             if (weight > 0 && reps > 0) {
@@ -174,7 +180,7 @@ Use actual working weights based on the athlete's data. Calculate from their e1R
           workoutFocus: day.type === 'test' ? 'Testing' : day.type === 'deload' ? 'Recovery' : 'Strength',
           intensity: day.type === 'deload' ? 'recovery' : day.type === 'volume' ? 'moderate' : 'heavy',
           context: { maxLifts, painHistory, recentWorkouts: workoutsSnap.docs.slice(0, 5).map(d => d.data()) },
-          model: user?.email === 'charltonuw@gmail.com' ? 'premium' : 'standard',
+          model: isAdmin ? 'premium' : 'standard',
           settings: {},
           draftMode: false,
         }),
@@ -205,9 +211,11 @@ Use actual working weights based on the athlete's data. Calculate from their e1R
       navigate(`/workouts/${saved.id}`)
     } catch (err) {
       console.error('Generate error:', err)
-      await creditService.add(user.uid, CREDIT_COSTS['generate-workout']).catch(() => {})
-      updateProfile({ credits })
-      alert('Failed to generate workout. Credits refunded.')
+      if (!isAdmin) {
+        await creditService.add(user.uid, CREDIT_COSTS['generate-workout']).catch(() => {})
+        updateProfile({ credits })
+      }
+      alert('Failed to generate workout.' + (!isAdmin ? ' Credits refunded.' : ''))
     } finally {
       setGeneratingDay(null)
     }

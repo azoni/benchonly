@@ -5,7 +5,7 @@ import {
   signOut as firebaseSignOut,
   GoogleAuthProvider
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../services/firebase';
 
 const AuthContext = createContext({});
@@ -181,9 +181,17 @@ export function AuthProvider({ children }) {
         const userSnap = await getDoc(userRef);
         
         if (userSnap.exists()) {
-          setUserProfile(userSnap.data());
+          const profileData = userSnap.data();
+          setUserProfile(profileData);
+          
+          // Ensure existing users have credits field (pre-credit-system users)
+          if (profileData.credits == null) {
+            await updateDoc(doc(db, 'users', firebaseUser.uid), { credits: 50 });
+            profileData.credits = 50;
+            setUserProfile({ ...profileData, credits: 50 });
+          }
         } else {
-          // Create new user profile
+          // Create new user profile — onboarding not complete
           const newProfile = {
             uid: firebaseUser.uid,
             email: firebaseUser.email,
@@ -193,6 +201,8 @@ export function AuthProvider({ children }) {
             lastActive: serverTimestamp(),
             role: 'member',
             groups: [],
+            credits: 0, // gets 50 after onboarding
+            onboardingComplete: false,
             settings: {
               notifications: true,
               units: 'lbs',

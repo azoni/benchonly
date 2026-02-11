@@ -232,6 +232,9 @@ export default function GenerateWorkoutPage() {
             const rpe = parseInt(s.rpe) || 0;
             const pain = parseInt(s.painLevel) || 0;
 
+            // Skip sets with only prescribed data (not actually performed)
+            if (!s.actualWeight && !s.actualReps && s.prescribedWeight) return;
+
             if (weight > 0 && reps > 0 && reps <= 12) {
               const e1rm = Math.round(weight * (1 + reps / 30));
               if (!maxLifts[ex.name] || e1rm > maxLifts[ex.name].e1rm) {
@@ -321,10 +324,10 @@ export default function GenerateWorkoutPage() {
   };
   
   const handleGenerate = async () => {
-    // Check credits
+    // Check credits (admin bypasses)
     const credits = userProfile?.credits ?? 0;
     const cost = CREDIT_COSTS['generate-workout'];
-    if (credits < cost) {
+    if (!isAdmin && credits < cost) {
       setError(`Not enough credits. You need ${cost} credits but have ${credits}. Check Settings for your usage.`);
       return;
     }
@@ -335,9 +338,11 @@ export default function GenerateWorkoutPage() {
     startThinkingAnimation();
     
     try {
-      // Deduct credits upfront
-      await creditService.deduct(user.uid, 'generate-workout');
-      updateProfile({ credits: credits - cost });
+      // Deduct credits upfront (admin bypasses)
+      if (!isAdmin) {
+        await creditService.deduct(user.uid, 'generate-workout');
+        updateProfile({ credits: credits - cost });
+      }
 
       const response = await fetch('/.netlify/functions/generate-workout', {
         method: 'POST',
@@ -373,8 +378,10 @@ export default function GenerateWorkoutPage() {
       console.error('Generation error:', err);
       setError(err.message);
       // Refund credits on failure
-      await creditService.add(user.uid, cost).catch(() => {});
-      updateProfile({ credits });
+      if (!isAdmin) {
+        await creditService.add(user.uid, cost).catch(() => {});
+        updateProfile({ credits });
+      }
       stopThinkingAnimation();
       setThinkingMessages(prev => [...prev, { 
         text: `Error: ${err.message}`, icon: 'error', id: prev.length 
@@ -820,7 +827,7 @@ export default function GenerateWorkoutPage() {
               
               <button
                 onClick={handleGenerate}
-                disabled={loading || loadingContext || (userProfile?.credits ?? 0) < CREDIT_COSTS['generate-workout']}
+                disabled={loading || loadingContext || (!isAdmin && (userProfile?.credits ?? 0) < CREDIT_COSTS['generate-workout'])}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 {loading ? (

@@ -19,6 +19,8 @@ import {
 import { format } from 'date-fns';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { useAuth } from '../context/AuthContext';
+import { creditService, CREDIT_COSTS } from '../services/firestore';
 
 // Simulated thinking messages that rotate during AI generation
 const THINKING_MESSAGES = [
@@ -49,6 +51,7 @@ export default function GenerateGroupWorkoutModal({
   onSuccess 
 }) {
   const [prompt, setPrompt] = useState('');
+  const { user, userProfile, updateProfile } = useAuth();
   const [workoutDate, setWorkoutDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedAthletes, setSelectedAthletes] = useState([]);
   const [athleteContexts, setAthleteContexts] = useState({});
@@ -204,6 +207,8 @@ export default function GenerateGroupWorkoutModal({
       (w.exercises || []).forEach(ex => {
         if (!ex.name) return;
         (ex.sets || []).forEach(s => {
+          // Skip sets with only prescribed data (not actually performed)
+          if (!s.actualWeight && !s.actualReps && s.prescribedWeight) return;
           const weight = parseFloat(s.actualWeight) || parseFloat(s.prescribedWeight) || 0;
           const reps = parseInt(s.actualReps) || parseInt(s.prescribedReps) || 0;
           const rpe = parseInt(s.rpe) || 0;
@@ -267,12 +272,26 @@ export default function GenerateGroupWorkoutModal({
       return;
     }
 
+    // Check credits (5 per athlete) — admin bypasses
+    const creditCost = CREDIT_COSTS['generate-group-workout'] * selectedAthletes.length;
+    const credits = userProfile?.credits ?? 0;
+    if (!isAdmin && credits < creditCost) {
+      setError(`Not enough credits. Need ${creditCost} (${CREDIT_COSTS['generate-group-workout']} × ${selectedAthletes.length} athletes) but you have ${credits}.`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     addStep('Generating workouts', 'loading');
     startThinkingAnimation();
 
     try {
+      // Deduct credits upfront (admin bypasses)
+      if (!isAdmin) {
+        await creditService.deduct(user.uid, 'generate-group-workout', selectedAthletes.length);
+        updateProfile({ credits: credits - creditCost });
+      }
+
       const athleteData = selectedAthletes.map(uid => ({
         id: uid,
         name: athleteContexts[uid]?.name || 'Unknown',
@@ -316,6 +335,11 @@ export default function GenerateGroupWorkoutModal({
     } catch (err) {
       console.error('Error:', err);
       setError(err.message);
+      // Refund credits on failure
+      if (!isAdmin) {
+        await creditService.add(user.uid, creditCost).catch(() => {});
+        updateProfile({ credits });
+      }
       stopThinkingAnimation();
       setThinkingMessages(prev => [...prev, { 
         text: `Error: ${err.message}`, icon: 'error', id: prev.length 
@@ -813,13 +837,13 @@ export default function GenerateGroupWorkoutModal({
                 <button onClick={handleClose} className="btn-secondary flex-1">Cancel</button>
                 <button
                   onClick={handleGenerate}
-                  disabled={loading || loadingContext || selectedAthletes.length === 0}
+                  disabled={loading || loadingContext || selectedAthletes.length === 0 || (!isAdmin && (userProfile?.credits ?? 0) < CREDIT_COSTS['generate-group-workout'] * selectedAthletes.length)}
                   className="btn-primary flex-1 flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <><Loader2 className="w-5 h-5 animate-spin" />Generating...</>
                   ) : (
-                    <><Sparkles className="w-5 h-5" />Generate for {selectedAthletes.length}</>
+                    <><Sparkles className="w-5 h-5" />Generate for {selectedAthletes.length} <span className="text-xs opacity-70">({CREDIT_COSTS['generate-group-workout'] * selectedAthletes.length} cr)</span></>
                   )}
                 </button>
               </>

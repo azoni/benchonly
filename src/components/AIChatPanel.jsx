@@ -5,14 +5,14 @@ import { X, Send, Loader2, Sparkles, Bot, User, Plus, Dumbbell } from 'lucide-re
 import { useUIStore } from '../store';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { workoutService, goalService, healthService, userService, scheduleService, recurringActivityService } from '../services/firestore';
+import { workoutService, goalService, healthService, userService, scheduleService, recurringActivityService, creditService, CREDIT_COSTS } from '../services/firestore';
 import { collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 export default function AIChatPanel() {
   const navigate = useNavigate();
   const { chatOpen, setChatOpen } = useUIStore();
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, updateProfile } = useAuth();
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -62,26 +62,28 @@ export default function AIChatPanel() {
         recurringActivityService.getByUser(user.uid).catch(() => []),
       ]);
 
-      // Load workouts (strength + cardio together)
+      // Load workouts (strength + cardio together) — ONLY completed
       let allWorkouts = [];
       try {
         const snap = await getDocs(query(
           collection(db, 'workouts'), where('userId', '==', user.uid), limit(50)
         ));
-        allWorkouts = snap.docs.map(doc => {
+        snap.docs.forEach(doc => {
           const d = doc.data();
+          if (d.status !== 'completed') return; // Skip scheduled/draft workouts
           const workoutDate = d.date?.toDate?.() || new Date(d.date);
-          return { ...d, date: workoutDate.toISOString().split('T')[0] };
+          allWorkouts.push({ ...d, date: workoutDate.toISOString().split('T')[0] });
         });
       } catch (e) { console.error(e); }
 
-      // Load group workouts
+      // Load group workouts — ONLY completed
       try {
         const snap = await getDocs(query(
           collection(db, 'groupWorkouts'), where('assignedTo', '==', user.uid), limit(30)
         ));
         snap.docs.forEach(doc => {
           const d = doc.data();
+          if (d.status !== 'completed') return; // Skip unfinished group workouts
           const workoutDate = d.date?.toDate?.() || new Date(d.date);
           allWorkouts.push({ ...d, date: workoutDate.toISOString().split('T')[0], isGroup: true });
         });
@@ -102,10 +104,14 @@ export default function AIChatPanel() {
         (w.exercises || []).forEach(ex => {
           if (!ex.name) return;
           (ex.sets || []).forEach(s => {
+            // Prefer actual performance data; only fall back to prescribed for completed workouts
             const weight = parseFloat(s.actualWeight) || parseFloat(s.prescribedWeight) || 0;
             const reps = parseInt(s.actualReps) || parseInt(s.prescribedReps) || 0;
             const rpe = parseInt(s.rpe) || 0;
             const pain = parseInt(s.painLevel) || 0;
+            
+            // Skip sets with no actual data recorded (prescribed-only means not really performed)
+            if (!s.actualWeight && !s.actualReps && s.prescribedWeight) return;
 
             if (weight > 0 && reps > 0 && reps <= 12) {
               const e1rm = Math.round(weight * (1 + reps / 30));
@@ -273,7 +279,22 @@ export default function AIChatPanel() {
   const sendMessage = async (messageText) => {
     if (!messageText.trim() || loading) return;
     
-    // Check rate limit
+    // Check credits first (admin bypasses)
+    const isAdmin = user?.email === 'charltonuw@gmail.com';
+    const credits = userProfile?.credits ?? 0;
+    if (!isAdmin && credits < CREDIT_COSTS['ask-assistant']) {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'user', content: messageText },
+        {
+          role: 'assistant',
+          content: "You're out of AI credits. More credits coming soon — check Settings for your usage.",
+        },
+      ]);
+      return;
+    }
+
+    // Secondary rate limit check (anti-abuse)
     const limitHit = checkRateLimit();
     if (limitHit) {
       const minutesLeft = limitHit === 'daily' 
@@ -298,6 +319,13 @@ export default function AIChatPanel() {
 
     try {
       incrementRateLimit();
+      
+      // Deduct credit (admin bypasses)
+      if (user?.uid && !isAdmin) {
+        await creditService.deduct(user.uid, 'ask-assistant');
+        updateProfile({ credits: credits - CREDIT_COSTS['ask-assistant'] });
+      }
+
       const response = await api.askAssistant(messageText, {
         userId: user?.uid,
         ...(context || {}),
@@ -312,6 +340,11 @@ export default function AIChatPanel() {
         },
       ]);
     } catch (error) {
+      // Refund credit on failure
+      if (user?.uid && !isAdmin) {
+        await creditService.add(user.uid, CREDIT_COSTS['ask-assistant']).catch(() => {});
+        updateProfile({ credits: credits });
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -586,8 +619,8 @@ export default function AIChatPanel() {
             {/* Input */}
             <div className="border-t border-iron-800">
               <div className="px-4 pt-2 flex justify-between text-[10px] text-iron-600">
-                <span>{getRemainingMessages()} messages left</span>
-                <span>gpt-4o-mini</span>
+                <span>{userProfile?.credits ?? 0} credits left</span>
+                <span>1 credit / msg</span>
               </div>
               <form
                 onSubmit={handleSubmit}
