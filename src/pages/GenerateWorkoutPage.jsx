@@ -669,7 +669,7 @@ export default function GenerateWorkoutPage() {
               
               <div className="mb-6">
                 <label className="block text-sm text-iron-400 mb-2">Intensity</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {intensityOptions.map(opt => (
                     <button
                       key={opt.value}

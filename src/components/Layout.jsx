@@ -16,12 +16,14 @@ import {
   User,
   LayoutDashboard,
   Activity,
+  Bell,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
 import AIChatPanel from './AIChatPanel';
 import { analyticsService } from '../services/analyticsService';
 import { groupWorkoutService } from '../services/firestore';
+import { notificationService } from '../services/feedService';
 
 const ADMIN_EMAILS = ['charltonuw@gmail.com'];
 
@@ -42,12 +44,22 @@ export default function Layout() {
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   // Load pending review count
   useEffect(() => {
     if (user && !isGuest) {
       groupWorkoutService.getPendingReviews(user.uid)
         .then(reviews => setPendingReviewCount(reviews.length))
+        .catch(() => {});
+    }
+  }, [user, isGuest, location.pathname]);
+
+  // Load unread notification count
+  useEffect(() => {
+    if (user && !isGuest) {
+      notificationService.getUnread(user.uid)
+        .then(notifs => setUnreadNotifCount(notifs.length))
         .catch(() => {});
     }
   }, [user, isGuest, location.pathname]);
@@ -139,6 +151,11 @@ export default function Layout() {
                       {pendingReviewCount > 9 ? '9+' : pendingReviewCount}
                     </span>
                   )}
+                  {item.path === '/feed' && unreadNotifCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-flame-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                    </span>
+                  )}
                 </div>
                 {sidebarOpen && (
                   <span className="font-medium">{item.label}</span>
@@ -203,12 +220,25 @@ export default function Layout() {
             <span className="font-display text-xl text-iron-50 tracking-wide">BENCH ONLY</span>
           </Link>
           
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="w-12 h-12 flex items-center justify-center text-iron-300 active:bg-iron-800 rounded-xl transition-colors"
-          >
-            <Menu className="w-7 h-7" />
-          </button>
+          <div className="flex items-center gap-1">
+            {unreadNotifCount > 0 && (
+              <Link
+                to="/feed"
+                className="w-10 h-10 flex items-center justify-center text-iron-300 relative"
+              >
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-flame-500 rounded-full text-[10px] text-white flex items-center justify-center font-medium">
+                  {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                </span>
+              </Link>
+            )}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="w-12 h-12 flex items-center justify-center text-iron-300 active:bg-iron-800 rounded-xl transition-colors"
+            >
+              <Menu className="w-7 h-7" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -272,6 +302,11 @@ export default function Layout() {
                         {item.badgeKey === 'workouts' && pendingReviewCount > 0 && (
                           <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                             {pendingReviewCount > 9 ? '9+' : pendingReviewCount}
+                          </span>
+                        )}
+                        {item.path === '/feed' && unreadNotifCount > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-flame-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                            {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
                           </span>
                         )}
                       </div>

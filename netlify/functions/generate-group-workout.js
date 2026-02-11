@@ -102,13 +102,20 @@ WEIGHT PROGRESSION LOGIC:
 - Missed reps or RPE 9+: Keep same weight or reduce 5%
 - Pain reported on exercise: DO NOT increase weight, add note about monitoring
 
+EXERCISE TYPES:
+- "weight": Standard weighted exercises (bench press, squat, rows). Sets have prescribedWeight and prescribedReps.
+- "bodyweight": No external weight (pull-ups, push-ups, dips). Sets have prescribedReps only (NO prescribedWeight).
+- "time": Time-based exercises (planks, dead hangs, wall sits). Sets have prescribedTime (in seconds) only.
+
 OUTPUT JSON only, no markdown:
 {
   "name": "Workout Name",
   "description": "Brief description",
   "coachingNotes": "Explanation of workout focus, exercise selection, and programming intent. Include any warnings about pain or form issues.",
   "baseExercises": [
-    { "name": "Bench Press", "type": "weight", "defaultSets": 4, "defaultReps": 8 }
+    { "name": "Bench Press", "type": "weight", "defaultSets": 4, "defaultReps": 8 },
+    { "name": "Pull-ups", "type": "bodyweight", "defaultSets": 3, "defaultReps": 10 },
+    { "name": "Dead Hang", "type": "time", "defaultSets": 3, "defaultTime": 30 }
   ],
   "athleteWorkouts": {
     "ATHLETE_ID": {
@@ -118,14 +125,43 @@ OUTPUT JSON only, no markdown:
         {
           "name": "Bench Press",
           "type": "weight",
-          "sets": [{ "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 }],
+          "sets": [
+            { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 },
+            { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 },
+            { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 8 },
+            { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 8 }
+          ],
           "notes": "Form cues or warnings",
+          "substitution": null
+        },
+        {
+          "name": "Pull-ups",
+          "type": "bodyweight",
+          "sets": [
+            { "prescribedReps": 10, "targetRpe": 7 },
+            { "prescribedReps": 10, "targetRpe": 7 },
+            { "prescribedReps": 10, "targetRpe": 8 }
+          ],
+          "notes": "Full ROM",
+          "substitution": null
+        },
+        {
+          "name": "Dead Hang",
+          "type": "time",
+          "sets": [
+            { "prescribedTime": 30, "targetRpe": 7 },
+            { "prescribedTime": 30, "targetRpe": 7 },
+            { "prescribedTime": 30, "targetRpe": 8 }
+          ],
+          "notes": "Active shoulders",
           "substitution": null
         }
       ]
     }
   }
 }
+
+IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array matching the defaultSets count. If defaultSets is 4, include 4 individual objects. NEVER return just 1 set object — always return the full number of sets. This is critical.
 
 For pain substitutions (only when allowed): "substitution": { "reason": "shoulder pain", "original": "Bench Press", "replacement": "Floor Press" }`;
 
@@ -140,7 +176,7 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
       ],
       response_format: { type: 'json_object' },
       temperature: 0.7,
-      max_tokens: 3000,
+      max_tokens: 6000,
     });
 
     const responseTime = Date.now() - startTime;
@@ -155,6 +191,24 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         body: JSON.stringify({ error: 'AI returned invalid JSON' }),
       };
+    }
+
+    // Post-processing: expand exercises that only have 1 set (AI sometimes gets lazy)
+    if (result.athleteWorkouts) {
+      for (const aw of Object.values(result.athleteWorkouts)) {
+        if (aw.exercises && Array.isArray(aw.exercises)) {
+          aw.exercises = aw.exercises.map(ex => {
+            if (ex.sets && ex.sets.length === 1) {
+              const template = ex.sets[0];
+              // Use defaultSets from baseExercises if available, otherwise default to 3-4
+              const baseEx = (result.baseExercises || []).find(b => b.name === ex.name);
+              const targetSets = baseEx?.defaultSets || (ex.type === 'time' ? 3 : 4);
+              ex.sets = Array.from({ length: targetSets }, () => ({ ...template }));
+            }
+            return ex;
+          });
+        }
+      }
     }
 
     if (!result.athleteWorkouts) {
@@ -184,17 +238,36 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
           id: Date.now() + i,
           name: ex.substitution?.replacement || ex.name,
           type: ex.type || 'weight',
-          sets: (ex.sets || []).map((s, j) => ({
-            id: Date.now() + i * 100 + j,
-            prescribedWeight: String(s.prescribedWeight || ''),
-            prescribedReps: String(s.prescribedReps || ''),
-            targetRpe: s.targetRpe || null,
-            actualWeight: '',
-            actualReps: '',
-            rpe: '',
-            painLevel: 0,
-            completed: false,
-          })),
+          sets: (ex.sets || []).map((s, j) => {
+            const base = {
+              id: Date.now() + i * 100 + j,
+              targetRpe: s.targetRpe || null,
+              rpe: '',
+              painLevel: 0,
+              completed: false,
+            };
+            if (ex.type === 'time') {
+              return {
+                ...base,
+                prescribedTime: String(s.prescribedTime || ''),
+                actualTime: '',
+              };
+            }
+            if (ex.type === 'bodyweight') {
+              return {
+                ...base,
+                prescribedReps: String(s.prescribedReps || ''),
+                actualReps: '',
+              };
+            }
+            return {
+              ...base,
+              prescribedWeight: String(s.prescribedWeight || ''),
+              prescribedReps: String(s.prescribedReps || ''),
+              actualWeight: '',
+              actualReps: '',
+            };
+          }),
           notes: ex.notes || (ex.substitution ? `Modified: ${ex.substitution.reason}` : ''),
           expanded: true,
         })),

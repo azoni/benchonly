@@ -116,26 +116,41 @@ OUTPUT JSON only, no markdown:
     {
       "name": "Bench Press",
       "type": "weight",
-      "sets": [{ "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 }],
+      "sets": [
+        { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 },
+        { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 },
+        { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 8 },
+        { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 8 }
+      ],
       "restSeconds": 90,
       "notes": "Form cues or warnings"
     },
     {
       "name": "Pull-ups",
       "type": "bodyweight",
-      "sets": [{ "prescribedReps": 10, "targetRpe": 7 }],
+      "sets": [
+        { "prescribedReps": 10, "targetRpe": 7 },
+        { "prescribedReps": 10, "targetRpe": 7 },
+        { "prescribedReps": 10, "targetRpe": 8 }
+      ],
       "restSeconds": 90,
       "notes": "Strict form, full ROM"
     },
     {
       "name": "Dead Hang",
       "type": "time",
-      "sets": [{ "prescribedTime": 45, "targetRpe": 7 }],
+      "sets": [
+        { "prescribedTime": 45, "targetRpe": 7 },
+        { "prescribedTime": 45, "targetRpe": 7 },
+        { "prescribedTime": 45, "targetRpe": 8 }
+      ],
       "restSeconds": 60,
       "notes": "Active shoulders, full grip"
     }
   ]
-}`;
+}
+
+IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array. If you prescribe 4x8 for bench press, the "sets" array must contain 4 individual objects. NEVER return just 1 set object — always return the full number of sets. This is critical.`;
 
     const userPrompt = `Create a workout:\n\n${contextStr}\n\n${prompt ? `USER REQUEST: ${prompt}` : ''}`;
 
@@ -148,7 +163,7 @@ OUTPUT JSON only, no markdown:
       ],
       response_format: { type: 'json_object' },
       temperature: 0.7,
-      max_tokens: 2000,
+      max_tokens: 4000,
     });
 
     const responseTime = Date.now() - startTime;
@@ -163,6 +178,19 @@ OUTPUT JSON only, no markdown:
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         body: JSON.stringify({ error: 'AI returned invalid JSON' }),
       };
+    }
+
+    // Post-processing: expand exercises that only have 1 set (AI sometimes gets lazy)
+    // If an exercise has only 1 set, duplicate it to 3 or 4 sets
+    if (workout.exercises && Array.isArray(workout.exercises)) {
+      workout.exercises = workout.exercises.map(ex => {
+        if (ex.sets && ex.sets.length === 1) {
+          const template = ex.sets[0];
+          const targetSets = ex.type === 'time' ? 3 : 4;
+          ex.sets = Array.from({ length: targetSets }, () => ({ ...template }));
+        }
+        return ex;
+      });
     }
 
     // Calculate cost based on model

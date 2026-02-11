@@ -26,57 +26,112 @@ export async function handler(event) {
   try {
     const { message, context, userId } = JSON.parse(event.body)
 
-    // Build user context summary
+    // Build rich user context summary
     const userContext = []
     
     // Profile info
     if (context?.profile) {
       const p = context.profile
-      if (p.weight) userContext.push(`Weight: ${p.weight}lbs`)
-      if (p.age) userContext.push(`Age: ${p.age}`)
-      if (p.activityLevel) userContext.push(`Activity level: ${p.activityLevel}`)
+      const profileBits = []
+      if (p.displayName) profileBits.push(`Name: ${p.displayName}`)
+      if (p.weight) profileBits.push(`Weight: ${p.weight}lbs`)
+      if (p.height) profileBits.push(`Height: ${p.height}`)
+      if (p.age) profileBits.push(`Age: ${p.age}`)
+      if (p.activityLevel) profileBits.push(`Activity level: ${p.activityLevel}`)
+      if (profileBits.length) userContext.push(profileBits.join(' | '))
     }
     
-    // Recent strength workouts
-    const strengthWorkouts = context?.recentWorkouts?.filter(w => w.workoutType !== 'cardio') || []
+    // Max lifts (most useful for the AI)
+    if (context?.maxLifts && Object.keys(context.maxLifts).length > 0) {
+      const lifts = Object.entries(context.maxLifts)
+        .sort((a, b) => b[1].e1rm - a[1].e1rm)
+        .slice(0, 10)
+        .map(([name, d]) => `${name}: ${d.e1rm}lb e1RM (best: ${d.weight}lb x ${d.reps})`)
+      userContext.push(`MAX LIFTS:\n${lifts.join('\n')}`)
+    }
+    
+    // Pain history
+    if (context?.painHistory && Object.keys(context.painHistory).length > 0) {
+      const pains = Object.entries(context.painHistory)
+        .map(([name, d]) => `${name}: ${d.maxPain}/10 pain (${d.count} occurrences)`)
+      userContext.push(`PAIN HISTORY:\n${pains.join('\n')}`)
+    }
+    
+    // RPE averages
+    if (context?.rpeAverages && Object.keys(context.rpeAverages).length > 0) {
+      const rpes = Object.entries(context.rpeAverages)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([name, avg]) => `${name}: avg RPE ${avg}`)
+      userContext.push(`RPE AVERAGES:\n${rpes.join('\n')}`)
+    }
+    
+    // Recent strength workouts (names + dates)
+    const strengthWorkouts = context?.recentWorkouts || []
     if (strengthWorkouts.length) {
-      userContext.push(`Recent strength: ${strengthWorkouts.slice(0, 3).map(w => w.name).join(', ')}`)
+      const summary = strengthWorkouts.slice(0, 5).map(w => 
+        `${w.date}: ${w.name} (${w.exercises?.length || 0} exercises)`
+      ).join('\n')
+      userContext.push(`RECENT WORKOUTS:\n${summary}`)
     }
     
     // Recent cardio
-    const cardioWorkouts = context?.recentWorkouts?.filter(w => w.workoutType === 'cardio') || []
+    const cardioWorkouts = context?.cardioWorkouts || context?.recentWorkouts?.filter(w => w.workoutType === 'cardio') || []
     if (cardioWorkouts.length) {
       const cardioSummary = cardioWorkouts.slice(0, 5).map(w => 
-        `${w.name || 'Cardio'} (${w.duration}min)`
-      ).join(', ')
-      userContext.push(`Recent cardio: ${cardioSummary}`)
+        `${w.date}: ${w.name || w.cardioType || 'Cardio'} (${w.duration}min${w.distance ? `, ${w.distance}mi` : ''}${w.calories ? `, ${w.calories}cal` : ''})`
+      ).join('\n')
+      userContext.push(`RECENT CARDIO:\n${cardioSummary}`)
     }
     
     // Goals
     if (context?.goals?.length) {
-      userContext.push(`Goals: ${context.goals.map(g => `${g.lift} ${g.targetWeight || g.targetValue}`).join(', ')}`)
+      const goalsSummary = context.goals.map(g => {
+        const current = g.currentWeight || g.currentValue || '?'
+        const target = g.targetWeight || g.targetValue || '?'
+        return `${g.lift || g.metricType}: ${current} → ${target}${g.targetDate ? ` by ${g.targetDate}` : ''}`
+      }).join('\n')
+      userContext.push(`ACTIVE GOALS:\n${goalsSummary}`)
     }
     
     // Health data
-    if (context?.health) {
+    if (context?.health && Object.keys(context.health).length > 0) {
       const h = context.health
       const healthInfo = []
-      if (h.avgSleep) healthInfo.push(`${h.avgSleep}hrs sleep avg`)
-      if (h.avgProtein) healthInfo.push(`${h.avgProtein}g protein avg`)
-      if (healthInfo.length) userContext.push(`Health: ${healthInfo.join(', ')}`)
+      if (h.recentWeight) healthInfo.push(`Current weight: ${h.recentWeight}lbs`)
+      if (h.avgSleep) healthInfo.push(`Avg sleep: ${h.avgSleep}hrs`)
+      if (h.avgProtein) healthInfo.push(`Avg protein: ${h.avgProtein}g`)
+      if (h.avgCalories) healthInfo.push(`Avg calories: ${h.avgCalories}`)
+      if (healthInfo.length) userContext.push(`HEALTH METRICS:\n${healthInfo.join('\n')}`)
+    }
+    
+    // Scheduled activities
+    if (context?.schedules?.length) {
+      const schedSummary = context.schedules.map(s => 
+        `${s.name}${s.days ? ` (${Array.isArray(s.days) ? s.days.join(', ') : s.days})` : ''}${s.duration ? ` ${s.duration}min` : ''}`
+      ).join(', ')
+      userContext.push(`SCHEDULED ACTIVITIES: ${schedSummary}`)
+    }
+    
+    // Recurring activities
+    if (context?.recurringActivities?.length) {
+      const recurSummary = context.recurringActivities.map(r => 
+        `${r.name} (${r.type || 'activity'}${r.days ? `, ${Array.isArray(r.days) ? r.days.join(', ') : r.days}` : ''})`
+      ).join(', ')
+      userContext.push(`RECURRING HABITS: ${recurSummary}`)
     }
 
-    const contextString = userContext.length ? `\n\nUser context:\n${userContext.join('\n')}` : ''
+    const contextString = userContext.length ? `\n\nUser data:\n${userContext.join('\n\n')}` : ''
 
     // Check if user is asking for a workout suggestion/generation
     const isWorkoutRequest = /generate|create|make|suggest|give me|plan|recommend/i.test(message) && 
                              /workout|routine|session|exercises|program/i.test(message)
 
     const systemPrompt = isWorkoutRequest 
-      ? `You are a strength training coach for Bench Only. The user wants a workout recommendation.
+      ? `You are a knowledgeable strength training coach. You have full access to the user's training data including their max lifts, pain history, RPE trends, recent workouts, cardio, health metrics, goals, and scheduled activities.
 
 Generate a workout and respond with BOTH:
-1. A brief explanation (2-3 sentences)
+1. A brief explanation (2-3 sentences) referencing their specific data
 2. A JSON workout block in this exact format:
 
 \`\`\`workout
@@ -87,6 +142,8 @@ Generate a workout and respond with BOTH:
       "name": "Exercise Name",
       "sets": [
         { "prescribedWeight": 135, "prescribedReps": "8" },
+        { "prescribedWeight": 135, "prescribedReps": "8" },
+        { "prescribedWeight": 135, "prescribedReps": "8" },
         { "prescribedWeight": 135, "prescribedReps": "8" }
       ]
     }
@@ -94,15 +151,15 @@ Generate a workout and respond with BOTH:
 }
 \`\`\`
 
-Base the workout on their history, goals, and recovery needs. Consider their cardio activity when programming volume. Use appropriate weights based on their recent performance.
+Each exercise MUST have 3-5 set objects. Use their e1RM data to calculate working weights (70-85%). Avoid exercises where they've reported pain. Consider their recent training to avoid overtraining the same muscle groups.
 ${contextString}
 
-${context?.recentWorkouts?.length ? `\nDetailed recent workouts: ${JSON.stringify(strengthWorkouts.slice(0, 3))}` : ''}`
-      : `You are a strength training assistant for Bench Only. Be brief and direct - 2-3 sentences max unless asked to elaborate.
+${context?.recentWorkouts?.length ? `\nDetailed recent workouts: ${JSON.stringify((context.recentWorkouts || []).slice(0, 3))}` : ''}`
+      : `You are a knowledgeable strength training assistant. You have full access to the user's training data including their max lifts (e1RM), pain history, RPE trends, recent workouts, cardio activity, health metrics, goals, and scheduled activities.
 
-You help with: workout programs, exercise form, programming, recovery, nutrition basics, cardio integration, and interpreting training data.
+Answer questions using their actual data. Reference specific numbers, exercises, and dates when relevant. Be direct and specific — not generic. 2-4 sentences unless they ask for detail.
 
-Keep responses short and actionable. Skip fluff. Use numbers when relevant. Consider their full activity picture (strength + cardio) when giving advice. Say "want me to expand?" if there's more to share.
+If they ask about their lifts, pain, goals, cardio, health, schedule, or progress — answer with their real data. If they ask "what's my bench max?" look at their max lifts data and tell them.
 ${contextString}`
 
     const startTime = Date.now()
@@ -114,7 +171,7 @@ ${contextString}`
         { role: 'user', content: message }
       ],
       temperature: 0.7,
-      max_tokens: isWorkoutRequest ? 800 : 300
+      max_tokens: isWorkoutRequest ? 1200 : 500
     })
 
     const responseTime = Date.now() - startTime

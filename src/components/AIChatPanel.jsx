@@ -5,22 +5,25 @@ import { X, Send, Loader2, Sparkles, Bot, User, Plus, Dumbbell } from 'lucide-re
 import { useUIStore } from '../store';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { workoutService, goalService } from '../services/firestore';
+import { workoutService, goalService, healthService, userService, scheduleService, recurringActivityService } from '../services/firestore';
+import { collection, query, where, limit, getDocs } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
 export default function AIChatPanel() {
   const navigate = useNavigate();
   const { chatOpen, setChatOpen } = useUIStore();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: "Hey! I'm your workout assistant. Ask me about your training, or say 'generate a workout' and I'll create one you can save.",
+      content: "Hey! I'm your workout assistant. I have access to your full training data — ask me about your lifts, pain history, goals, or say 'generate a workout' and I'll create one you can save.",
     },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [savingWorkout, setSavingWorkout] = useState(null);
-  const [context, setContext] = useState({ recentWorkouts: [], goals: [] });
+  const [context, setContext] = useState(null);
+  const [contextLoading, setContextLoading] = useState(false);
   const [rateLimitInfo, setRateLimitInfo] = useState({ count: 0, resetTime: null });
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -39,40 +42,182 @@ export default function AIChatPanel() {
   useEffect(() => {
     if (chatOpen) {
       inputRef.current?.focus();
-      // Load user context when chat opens
-      loadUserContext();
+      if (!context && !contextLoading) {
+        loadUserContext();
+      }
     }
   }, [chatOpen]);
 
   const loadUserContext = async () => {
     if (!user) return;
+    setContextLoading(true);
     try {
-      const [workouts, goals] = await Promise.all([
-        workoutService.getByUser(user.uid, 10),
-        goalService.getByUser(user.uid),
+      // Load everything in parallel
+      const [goals, healthEntries, schedules, recurring] = await Promise.all([
+        goalService.getByUser(user.uid).catch(() => []),
+        healthService.getByUser(user.uid, 14).catch(() => []),
+        scheduleService.getByUser(user.uid).catch(() => []),
+        recurringActivityService.getByUser(user.uid).catch(() => []),
       ]);
-      setContext({
-        recentWorkouts: workouts.map(w => ({
+
+      // Load workouts (strength + cardio together)
+      let allWorkouts = [];
+      try {
+        const snap = await getDocs(query(
+          collection(db, 'workouts'), where('userId', '==', user.uid), limit(50)
+        ));
+        allWorkouts = snap.docs.map(doc => {
+          const d = doc.data();
+          const workoutDate = d.date?.toDate?.() || new Date(d.date);
+          return { ...d, date: workoutDate.toISOString().split('T')[0] };
+        });
+      } catch (e) { console.error(e); }
+
+      // Load group workouts
+      try {
+        const snap = await getDocs(query(
+          collection(db, 'groupWorkouts'), where('assignedTo', '==', user.uid), limit(30)
+        ));
+        snap.docs.forEach(doc => {
+          const d = doc.data();
+          const workoutDate = d.date?.toDate?.() || new Date(d.date);
+          allWorkouts.push({ ...d, date: workoutDate.toISOString().split('T')[0], isGroup: true });
+        });
+      } catch (e) { console.error(e); }
+
+      allWorkouts.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+      // Separate cardio vs strength
+      const cardioWorkouts = allWorkouts.filter(w => w.workoutType === 'cardio').slice(0, 10);
+      const strengthWorkouts = allWorkouts.filter(w => w.workoutType !== 'cardio');
+
+      // Build max lifts, pain history, RPE data from strength workouts
+      const maxLifts = {};
+      const painHistory = {};
+      const rpeData = {};
+
+      strengthWorkouts.slice(0, 25).forEach(w => {
+        (w.exercises || []).forEach(ex => {
+          if (!ex.name) return;
+          (ex.sets || []).forEach(s => {
+            const weight = parseFloat(s.actualWeight) || parseFloat(s.prescribedWeight) || 0;
+            const reps = parseInt(s.actualReps) || parseInt(s.prescribedReps) || 0;
+            const rpe = parseInt(s.rpe) || 0;
+            const pain = parseInt(s.painLevel) || 0;
+
+            if (weight > 0 && reps > 0 && reps <= 12) {
+              const e1rm = Math.round(weight * (1 + reps / 30));
+              if (!maxLifts[ex.name] || e1rm > maxLifts[ex.name].e1rm) {
+                maxLifts[ex.name] = { weight, reps, e1rm };
+              }
+            }
+            if (pain > 0) {
+              if (!painHistory[ex.name]) painHistory[ex.name] = { count: 0, maxPain: 0 };
+              painHistory[ex.name].count++;
+              painHistory[ex.name].maxPain = Math.max(painHistory[ex.name].maxPain, pain);
+            }
+            if (rpe > 0) {
+              if (!rpeData[ex.name]) rpeData[ex.name] = { total: 0, count: 0 };
+              rpeData[ex.name].total += rpe;
+              rpeData[ex.name].count++;
+            }
+          });
+        });
+      });
+
+      // Build RPE averages
+      const rpeAverages = {};
+      Object.entries(rpeData).forEach(([name, d]) => {
+        rpeAverages[name] = Math.round(d.total / d.count * 10) / 10;
+      });
+
+      // Build health summary from recent entries
+      const healthSummary = {};
+      if (healthEntries.length > 0) {
+        const sleepEntries = healthEntries.filter(h => h.sleep).slice(0, 7);
+        if (sleepEntries.length) {
+          healthSummary.avgSleep = Math.round(sleepEntries.reduce((sum, h) => sum + h.sleep, 0) / sleepEntries.length * 10) / 10;
+        }
+        const proteinEntries = healthEntries.filter(h => h.protein).slice(0, 7);
+        if (proteinEntries.length) {
+          healthSummary.avgProtein = Math.round(proteinEntries.reduce((sum, h) => sum + h.protein, 0) / proteinEntries.length);
+        }
+        const calorieEntries = healthEntries.filter(h => h.calories).slice(0, 7);
+        if (calorieEntries.length) {
+          healthSummary.avgCalories = Math.round(calorieEntries.reduce((sum, h) => sum + h.calories, 0) / calorieEntries.length);
+        }
+        const weightEntries = healthEntries.filter(h => h.weight).slice(0, 3);
+        if (weightEntries.length) {
+          healthSummary.recentWeight = weightEntries[0].weight;
+        }
+      }
+
+      // Profile data
+      const profile = {};
+      if (userProfile) {
+        if (userProfile.weight) profile.weight = userProfile.weight;
+        if (userProfile.height) profile.height = userProfile.height;
+        if (userProfile.age) profile.age = userProfile.age;
+        if (userProfile.activityLevel) profile.activityLevel = userProfile.activityLevel;
+        if (userProfile.displayName) profile.displayName = userProfile.displayName;
+      }
+      // Override weight with latest health entry if available
+      if (healthSummary.recentWeight) profile.weight = healthSummary.recentWeight;
+
+      const builtContext = {
+        profile,
+        recentWorkouts: strengthWorkouts.slice(0, 10).map(w => ({
           name: w.name,
-          date: w.date?.toDate ? w.date.toDate().toISOString().split('T')[0] : w.date,
+          date: w.date,
+          workoutType: w.workoutType || 'strength',
           exercises: w.exercises?.map(e => ({
             name: e.name,
+            type: e.type || 'weight',
             sets: e.sets?.map(s => ({
               weight: s.actualWeight || s.prescribedWeight,
               reps: s.actualReps || s.prescribedReps,
-              rpe: s.rpe
+              rpe: s.rpe,
+              painLevel: s.painLevel,
             }))
           }))
         })),
+        cardioWorkouts: cardioWorkouts.map(w => ({
+          name: w.name,
+          date: w.date,
+          duration: w.duration,
+          cardioType: w.cardioType,
+          distance: w.distance,
+          calories: w.calories,
+        })),
         goals: goals.filter(g => g.status === 'active').map(g => ({
           lift: g.lift,
-          currentWeight: g.currentWeight,
-          targetWeight: g.targetWeight,
-          targetDate: g.targetDate
-        }))
-      });
+          metricType: g.metricType,
+          currentWeight: g.currentWeight || g.currentValue,
+          targetWeight: g.targetWeight || g.targetValue,
+          targetDate: g.targetDate,
+        })),
+        maxLifts,
+        painHistory,
+        rpeAverages,
+        health: healthSummary,
+        schedules: schedules.filter(s => s.active !== false).map(s => ({
+          name: s.name,
+          days: s.days,
+          duration: s.duration,
+        })),
+        recurringActivities: recurring.filter(r => r.active).map(r => ({
+          name: r.name,
+          type: r.type,
+          days: r.days,
+        })),
+      };
+
+      setContext(builtContext);
     } catch (error) {
       console.error('Error loading user context:', error);
+      setContext({ recentWorkouts: [], goals: [] }); // fallback
+    } finally {
+      setContextLoading(false);
     }
   };
 
@@ -129,8 +274,7 @@ export default function AIChatPanel() {
       incrementRateLimit();
       const response = await api.askAssistant(messageText, {
         userId: user?.uid,
-        recentWorkouts: context.recentWorkouts,
-        goals: context.goals,
+        ...(context || {}),
       });
 
       setMessages((prev) => [
@@ -261,6 +405,19 @@ export default function AIChatPanel() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
+              {/* Context loading indicator */}
+              {contextLoading && (
+                <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-iron-500">
+                  <Loader2 className="w-3 h-3 animate-spin text-flame-400" />
+                  Loading your training data...
+                </div>
+              )}
+              {context && !contextLoading && (
+                <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-iron-600">
+                  <Sparkles className="w-3 h-3 text-green-500" />
+                  Connected to your workout data
+                </div>
+              )}
               {messages.map((message, index) => (
                 <motion.div
                   key={index}
