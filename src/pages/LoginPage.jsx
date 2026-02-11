@@ -279,6 +279,13 @@ export default function LoginPage() {
               <span className="font-display text-xl text-iron-50 tracking-wider">BENCH ONLY</span>
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                to="/docs"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-iron-400 hover:text-iron-200 transition-colors"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Docs</span>
+              </Link>
               <button
                 onClick={handleGuestSignIn}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm text-iron-400 hover:text-iron-200 transition-colors"
@@ -343,6 +350,13 @@ export default function LoginPage() {
                   Try Demo
                 </button>
               </div>
+              <Link
+                to="/docs"
+                className="inline-flex items-center gap-1.5 text-sm text-iron-500 hover:text-iron-300 transition-colors mt-4"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                Read the docs — how it works, calculations, AI system
+              </Link>
             </motion.div>
           </div>
         </section>

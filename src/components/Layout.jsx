@@ -45,7 +45,7 @@ const baseNavItems = [
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, userProfile, signOut, isGuest, isAppAdmin, impersonating, stopImpersonating } = useAuth();
+  const { user, userProfile, signOut, signInWithGoogle, isGuest, isAppAdmin, impersonating, stopImpersonating } = useAuth();
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
@@ -92,14 +92,29 @@ export default function Layout() {
     <div className="min-h-screen bg-iron-950 flex overflow-x-hidden">
       {/* Guest Mode Banner - positioned below mobile header */}
       {isGuest && (
-        <div className="fixed left-0 right-0 z-30 bg-gradient-to-r from-flame-600 to-flame-500 text-white py-2 px-4 text-center text-sm
+        <div className="fixed left-0 right-0 z-30 bg-gradient-to-r from-flame-600 to-flame-500 text-white py-2.5 px-4
           top-14 lg:top-0">
-          <Eye className="w-4 h-4 inline mr-2" />
-          <span className="hidden sm:inline">Guest Mode - Data won't be saved. </span>
-          <span className="sm:hidden">Guest Mode </span>
-          <button onClick={handleSignOut} className="underline ml-1 font-semibold hover:no-underline">
-            Sign in
-          </button>
+          <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm min-w-0">
+              <Eye className="w-4 h-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Demo Mode — your data won't be saved</span>
+              <span className="sm:hidden truncate">Demo Mode</span>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={handleSignOut}
+                className="px-3 py-1 text-xs font-semibold bg-white/20 hover:bg-white/30 rounded-md transition-colors"
+              >
+                Exit Demo
+              </button>
+              <button
+                onClick={signInWithGoogle}
+                className="px-3 py-1 text-xs font-semibold bg-white text-flame-600 hover:bg-white/90 rounded-md transition-colors"
+              >
+                Sign Up Free
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {/* Desktop Sidebar */}
