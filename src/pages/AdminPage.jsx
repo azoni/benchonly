@@ -329,7 +329,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className="max-w-7xl mx-auto px-4 py-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -344,7 +344,7 @@ export default function AdminPage() {
       </div>
 
       {/* Tabs */}
-      <div className="card-steel p-1 mb-6 flex gap-1 max-w-md">
+      <div className="card-steel p-1 mb-6 flex gap-1 max-w-md overflow-x-auto">
         <button
           onClick={() => setActiveTab('users')}
           className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
@@ -393,7 +393,7 @@ export default function AdminPage() {
 
       {/* Impersonation Banner */}
       {impersonating && (
-        <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl flex items-center justify-between">
+        <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <Eye className="w-5 h-5 text-purple-400" />
             <span className="text-purple-200">
@@ -499,7 +499,7 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="text-center p-3 bg-iron-800/50 rounded-lg">
                     <Dumbbell className="w-5 h-5 text-flame-400 mx-auto mb-1" />
                     <p className="text-lg font-display text-iron-100">{userWorkouts.length}</p>
@@ -525,43 +525,47 @@ export default function AdminPage() {
                 </div>
 
                 {/* Credit Management */}
-                <div className="mt-4 flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-flame-400 flex-shrink-0" />
-                  <span className="text-sm text-iron-400 flex-shrink-0">Add credits:</span>
-                  <div className="flex gap-1.5 flex-shrink-0">
-                    {[10, 25, 50, 100].map(amt => (
-                      <button
-                        key={amt}
-                        onClick={() => setCreditAmount(String(amt))}
-                        className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                          creditAmount === String(amt)
-                            ? 'bg-flame-500 text-white'
-                            : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
-                        }`}
-                      >
-                        +{amt}
-                      </button>
-                    ))}
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-flame-400 flex-shrink-0" />
+                    <span className="text-sm text-iron-400">Add credits:</span>
                   </div>
-                  <input
-                    type="number"
-                    value={creditAmount}
-                    onChange={(e) => setCreditAmount(e.target.value)}
-                    placeholder="Custom"
-                    className="input-field w-20 text-sm py-1"
-                  />
-                  <button
-                    onClick={handleAddCredits}
-                    disabled={creditLoading || !creditAmount}
-                    className="btn-primary text-sm py-1 px-3 flex items-center gap-1 disabled:opacity-40"
-                  >
-                    {creditLoading ? (
-                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Plus className="w-3 h-3" />
-                    )}
-                    Add
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex gap-1.5">
+                      {[10, 25, 50, 100].map(amt => (
+                        <button
+                          key={amt}
+                          onClick={() => setCreditAmount(String(amt))}
+                          className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                            creditAmount === String(amt)
+                              ? 'bg-flame-500 text-white'
+                              : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                          }`}
+                        >
+                          +{amt}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="number"
+                      value={creditAmount}
+                      onChange={(e) => setCreditAmount(e.target.value)}
+                      placeholder="Custom"
+                      className="input-field w-20 text-sm py-1"
+                    />
+                    <button
+                      onClick={handleAddCredits}
+                      disabled={creditLoading || !creditAmount}
+                      className="btn-primary text-sm py-1 px-3 flex items-center gap-1 disabled:opacity-40"
+                    >
+                      {creditLoading ? (
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Plus className="w-3 h-3" />
+                      )}
+                      Add
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -919,8 +923,8 @@ export default function AdminPage() {
 
                     {/* Usage Table */}
                     <div className="card-steel overflow-hidden">
-                      <div className="max-h-[600px] overflow-y-auto">
-                        <table className="w-full text-sm">
+                      <div className="max-h-[600px] overflow-auto">
+                        <table className="w-full text-sm min-w-[600px]">
                           <thead className="bg-iron-800 sticky top-0">
                             <tr>
                               <th className="text-left p-3 text-iron-400 w-8"></th>

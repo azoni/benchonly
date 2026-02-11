@@ -19,8 +19,17 @@ const openai = new OpenAI({
 })
 
 export async function handler(event) {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  }
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers: corsHeaders, body: '' }
+  }
+
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' }
+    return { statusCode: 405, headers: corsHeaders, body: 'Method Not Allowed' }
   }
 
   try {
@@ -189,6 +198,9 @@ ${contextString}`
     // Clean up the message (remove the JSON block for display)
     const cleanMessage = responseText.replace(/```workout[\s\S]*?```/g, '').trim()
 
+    // GPT-4o-mini: $0.15/$0.60 per 1M tokens
+    const cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60
+
     const tokenLog = {
       userId,
       feature: 'ask-assistant',
@@ -200,9 +212,6 @@ ${contextString}`
       responseTimeMs: responseTime,
       createdAt: new Date().toISOString()
     }
-
-    // GPT-4o-mini: $0.15/$0.60 per 1M tokens
-    const cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60
 
     // Log to portfolio activity feed
     logActivity({
@@ -230,7 +239,11 @@ ${contextString}`
     console.error('Ask assistant error:', error)
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to get response' })
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
+      body: JSON.stringify({ error: 'Failed to get response', detail: error.message })
     }
   }
 }
