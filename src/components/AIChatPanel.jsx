@@ -12,7 +12,7 @@ import { db } from '../services/firebase';
 export default function AIChatPanel() {
   const navigate = useNavigate();
   const { chatOpen, setChatOpen } = useUIStore();
-  const { user, userProfile, updateProfile } = useAuth();
+  const { user, userProfile, updateProfile, isAppAdmin } = useAuth();
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -24,7 +24,20 @@ export default function AIChatPanel() {
   const [savingWorkout, setSavingWorkout] = useState(null);
   const [context, setContext] = useState(null);
   const [contextLoading, setContextLoading] = useState(false);
-  const [rateLimitInfo, setRateLimitInfo] = useState({ count: 0, resetTime: null });
+  const [rateLimitInfo, setRateLimitInfo] = useState(() => {
+    const now = Date.now();
+    const HOUR = 60 * 60 * 1000;
+    const DAY = 24 * 60 * 60 * 1000;
+    try {
+      const stored = localStorage.getItem('ai_rate_limit');
+      const dailyStored = localStorage.getItem('ai_daily_limit');
+      let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + HOUR };
+      let dailyData = dailyStored ? JSON.parse(dailyStored) : { count: 0, resetTime: now + DAY };
+      if (now > rateData.resetTime) rateData = { count: 0, resetTime: now + HOUR };
+      if (now > dailyData.resetTime) dailyData = { count: 0, resetTime: now + DAY };
+      return { ...rateData, dailyCount: dailyData.count, dailyResetTime: dailyData.resetTime };
+    } catch { return { count: 0, resetTime: null }; }
+  });
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -280,7 +293,7 @@ export default function AIChatPanel() {
     if (!messageText.trim() || loading) return;
     
     // Check credits first (admin bypasses)
-    const isAdmin = user?.email === 'charltonuw@gmail.com';
+    const isAdmin = isAppAdmin;
     const credits = userProfile?.credits ?? 0;
     if (!isAdmin && credits < CREDIT_COSTS['ask-assistant']) {
       setMessages((prev) => [

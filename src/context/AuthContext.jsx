@@ -169,6 +169,10 @@ export function AuthProvider({ children }) {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
+  
+  // Impersonation state (admin only)
+  const [impersonating, setImpersonating] = useState(null); // { uid, email, displayName, ... }
+  const [impersonatingProfile, setImpersonatingProfile] = useState(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -258,6 +262,32 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Admin impersonation — always check REAL user
+  const isAppAdmin = user?.email === 'charltonuw@gmail.com' && !isGuest;
+  
+  const startImpersonating = async (targetUid) => {
+    if (!isAppAdmin) return;
+    try {
+      const userRef = doc(db, 'users', targetUid);
+      const userSnap = await getDoc(userRef);
+      if (!userSnap.exists()) return;
+      const profile = { ...userSnap.data(), uid: targetUid };
+      setImpersonating({ uid: targetUid, email: profile.email, displayName: profile.displayName, photoURL: profile.photoURL });
+      setImpersonatingProfile(profile);
+    } catch (e) {
+      console.error('Impersonation error:', e);
+    }
+  };
+  
+  const stopImpersonating = () => {
+    setImpersonating(null);
+    setImpersonatingProfile(null);
+  };
+  
+  // Effective user — impersonated user overrides real user
+  const effectiveUser = impersonating ? { ...user, uid: impersonating.uid, email: impersonating.email, displayName: impersonating.displayName, photoURL: impersonating.photoURL } : user;
+  const effectiveProfile = impersonating ? impersonatingProfile : userProfile;
+
   const updateProfile = async (updates) => {
     if (!user) return { success: false, error: 'Not authenticated' };
     
@@ -268,13 +298,18 @@ export function AuthProvider({ children }) {
     }
     
     try {
-      const userRef = doc(db, 'users', user.uid);
+      const targetUid = impersonating ? impersonating.uid : user.uid;
+      const userRef = doc(db, 'users', targetUid);
       await setDoc(userRef, {
         ...updates,
         lastActive: serverTimestamp(),
       }, { merge: true });
       
-      setUserProfile((prev) => ({ ...prev, ...updates }));
+      if (impersonating) {
+        setImpersonatingProfile((prev) => ({ ...prev, ...updates }));
+      } else {
+        setUserProfile((prev) => ({ ...prev, ...updates }));
+      }
       return { success: true };
     } catch (error) {
       console.error('Update profile error:', error);
@@ -283,10 +318,16 @@ export function AuthProvider({ children }) {
   };
 
   const value = {
-    user,
-    userProfile,
+    user: effectiveUser,
+    userProfile: effectiveProfile,
+    realUser: user,
+    realUserProfile: userProfile,
     loading,
     isGuest,
+    isAppAdmin,
+    impersonating,
+    startImpersonating,
+    stopImpersonating,
     signInWithGoogle,
     signInAsGuest,
     signOut,

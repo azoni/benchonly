@@ -38,7 +38,7 @@ const DAY_INDEX = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4,
 export default function ProgramDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { user, userProfile, updateProfile } = useAuth()
+  const { user, userProfile, updateProfile, isAppAdmin } = useAuth()
   const [program, setProgram] = useState(null)
   const [loading, setLoading] = useState(true)
   const [completedWorkoutDates, setCompletedWorkoutDates] = useState(new Set())
@@ -59,9 +59,12 @@ export default function ProgramDetailPage() {
       setProgram(prog)
 
       // Load workouts to check which program days are completed
-      const startDate = prog.startDate?.toDate ? prog.startDate.toDate() : new Date(prog.startDate)
-      const endDate = prog.endDate?.toDate ? prog.endDate.toDate() : new Date(prog.endDate)
-      const workouts = await workoutService.getByDateRange(user.uid, startDate, endDate)
+      const startDate = prog.startDate?.toDate ? prog.startDate.toDate() : prog.startDate ? new Date(prog.startDate) : new Date()
+      const endDate = prog.endDate?.toDate ? prog.endDate.toDate() : prog.endDate ? new Date(prog.endDate) : new Date()
+      let workouts = []
+      try {
+        workouts = await workoutService.getByDateRange(user.uid, startDate, endDate)
+      } catch (e) { console.error('Error loading program workouts:', e) }
 
       const completedDates = new Set()
       workouts.forEach(w => {
@@ -85,10 +88,12 @@ export default function ProgramDetailPage() {
   }
 
   const getDayDate = (weekNumber, dayOfWeek) => {
-    if (!program?.startDate) return null
+    if (!program?.startDate || !dayOfWeek) return null
     const start = program.startDate?.toDate ? program.startDate.toDate() : new Date(program.startDate)
+    if (isNaN(start.getTime())) return null
+    const dayIdx = DAY_INDEX[dayOfWeek.toLowerCase()]
+    if (dayIdx === undefined) return null
     const weekStart = addWeeks(startOfWeek(start, { weekStartsOn: 1 }), weekNumber - 1)
-    const dayIdx = DAY_INDEX[dayOfWeek]
     const mondayIdx = 1
     const offset = dayIdx >= mondayIdx ? dayIdx - mondayIdx : dayIdx + 7 - mondayIdx
     return addDays(weekStart, offset)
@@ -113,7 +118,7 @@ export default function ProgramDetailPage() {
   }
 
   const handleGenerateWorkout = async (weekNumber, day) => {
-    const isAdmin = user?.email === 'charltonuw@gmail.com'
+    const isAdmin = isAppAdmin
     const credits = userProfile?.credits ?? 0
     const cost = CREDIT_COSTS['generate-workout']
     if (!isAdmin && credits < cost) {
@@ -232,8 +237,10 @@ Use actual working weights based on the athlete's data. Calculate from their e1R
   if (!program) return null
 
   const goal = program.goal || {}
-  const startDate = program.startDate?.toDate ? program.startDate.toDate() : new Date(program.startDate)
-  const endDate = program.endDate?.toDate ? program.endDate.toDate() : new Date(program.endDate)
+  const startDate = program.startDate?.toDate ? program.startDate.toDate() : program.startDate ? new Date(program.startDate) : null
+  const endDate = program.endDate?.toDate ? program.endDate.toDate() : program.endDate ? new Date(program.endDate) : null
+  const startStr = startDate && !isNaN(startDate.getTime()) ? format(startDate, 'MMM d') : '—'
+  const endStr = endDate && !isNaN(endDate.getTime()) ? format(endDate, 'MMM d') : '—'
   const now = new Date()
   const diffDays = differenceInDays(now, startDate)
   const currentWeekNum = Math.floor(diffDays / 7) + 1
@@ -266,7 +273,7 @@ Use actual working weights based on the athlete's data. Calculate from their e1R
               )}
             </div>
             <p className="text-sm text-iron-500">
-              {goal.lift}: {goal.current} → {goal.target}lb · {format(startDate, 'MMM d')} – {format(endDate, 'MMM d')}
+              {goal.lift}: {goal.current} → {goal.target}lb · {startStr} – {endStr}
             </p>
           </div>
         </div>

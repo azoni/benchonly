@@ -18,6 +18,7 @@ import {
   Plus,
   Calculator,
   MessageCircle,
+  ArrowRight,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -30,7 +31,7 @@ import {
 } from '../services/firestore'
 import { feedService } from '../services/feedService'
 import { notificationService } from '../services/feedService'
-import { format, startOfWeek, endOfWeek, subDays, isToday, startOfDay } from 'date-fns'
+import { format, startOfWeek, endOfWeek, subDays, addDays, isToday, startOfDay } from 'date-fns'
 import { toDateString } from '../utils/dateUtils'
 
 export default function TodayPage() {
@@ -49,6 +50,7 @@ export default function TodayPage() {
   const [feedUsers, setFeedUsers] = useState({})
   const [goals, setGoals] = useState([])
   const [todayProgramDay, setTodayProgramDay] = useState(null)
+  const [nextProgramDay, setNextProgramDay] = useState(null)
   const [loading, setLoading] = useState(true)
 
   // 1RM Calculator state
@@ -221,14 +223,30 @@ export default function TodayPage() {
         total: Math.max(scheduledThisWeek, completedDates.size),
       })
 
-      // Load today's program day
+      // Load today's program day + next upcoming program day
       try {
         const activeProgs = await programService.getActive(user.uid)
+        let foundToday = false
         for (const prog of activeProgs) {
           const pd = programService.getProgramDay(prog, now)
-          if (pd) {
+          if (pd) { 
             setTodayProgramDay(pd)
-            break
+            foundToday = true
+            break 
+          }
+        }
+        // Find next program day (search up to 14 days ahead)
+        if (!foundToday) {
+          for (let i = 1; i <= 14; i++) {
+            const futureDate = addDays(now, i)
+            for (const prog of activeProgs) {
+              const pd = programService.getProgramDay(prog, futureDate)
+              if (pd) {
+                setNextProgramDay({ ...pd, date: futureDate })
+                i = 15 // break outer
+                break
+              }
+            }
           }
         }
       } catch (e) {
@@ -498,6 +516,33 @@ export default function TodayPage() {
               <div className="flex items-center gap-1 text-flame-400 flex-shrink-0">
                 <Sparkles className="w-4 h-4" />
               </div>
+            </div>
+          </Link>
+        )}
+
+        {/* Program Day — Up Next (rest day) */}
+        {!todayProgramDay && nextProgramDay && (
+          <Link
+            to={`/programs/${nextProgramDay.programId}`}
+            className="card-steel p-4 border-iron-700/50 hover:border-iron-600 transition-colors block"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                <Calendar className="w-5 h-5 text-amber-400/70" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-iron-500 mb-0.5">Up Next — {format(nextProgramDay.date, 'EEEE')}</p>
+                <p className="text-sm font-medium text-iron-200 truncate">
+                  {nextProgramDay.label}
+                  <span className="ml-1.5 text-xs text-iron-500 font-normal">
+                    {nextProgramDay.primaryLift}: {nextProgramDay.primaryScheme} @ {nextProgramDay.intensity}
+                  </span>
+                </p>
+                <p className="text-xs text-iron-600 mt-0.5">
+                  {nextProgramDay.programName} · Wk {nextProgramDay.weekNumber} · {nextProgramDay.phase}
+                </p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
             </div>
           </Link>
         )}

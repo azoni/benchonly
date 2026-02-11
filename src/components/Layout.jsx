@@ -44,7 +44,7 @@ const baseNavItems = [
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, userProfile, signOut, isGuest } = useAuth();
+  const { user, userProfile, signOut, isGuest, isAppAdmin, impersonating, stopImpersonating } = useAuth();
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
@@ -75,7 +75,7 @@ export default function Layout() {
     }
   }, [location.pathname, user, isGuest])
 
-  const isAdmin = user && ADMIN_EMAILS.includes(user.email);
+  const isAdmin = isAppAdmin;
   
   // Add admin nav item if user is admin
   const navItems = isAdmin 
@@ -371,6 +371,21 @@ export default function Layout() {
         ${isGuest ? 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem+2.5rem)] lg:pt-16' : 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem)] lg:pt-0'}`}
       >
         <div className="min-h-screen p-4 lg:p-6 overflow-x-hidden">
+          {/* Impersonation Banner */}
+          {impersonating && (
+            <div className="mb-4 -mt-1 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3 flex-wrap">
+              <Eye className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              <span className="text-sm text-amber-300 font-medium">
+                Viewing as {impersonating.displayName || impersonating.email}
+              </span>
+              <button
+                onClick={() => { stopImpersonating(); navigate('/admin'); }}
+                className="ml-auto px-3 py-1 text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors"
+              >
+                Exit
+              </button>
+            </div>
+          )}
           <Outlet />
         </div>
       </main>

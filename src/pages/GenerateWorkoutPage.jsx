@@ -49,7 +49,7 @@ const THINKING_MESSAGES = [
 export default function GenerateWorkoutPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, userProfile, updateProfile } = useAuth();
+  const { user, userProfile, updateProfile, isAppAdmin } = useAuth();
   
   // Parse program context from URL if coming from a program
   const [programContext] = useState(() => {
@@ -102,7 +102,7 @@ export default function GenerateWorkoutPage() {
   );
   const [model, setModel] = useState('standard');
   
-  const isAdmin = user?.email === 'charltonuw@gmail.com';
+  const isAdmin = isAppAdmin;
   
   useEffect(() => {
     if (user) loadUserContext();

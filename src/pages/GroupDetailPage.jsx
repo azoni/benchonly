@@ -81,7 +81,7 @@ export default function GroupDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, userProfile } = useAuth()
+  const { user, userProfile, isAppAdmin } = useAuth()
   const [group, setGroup] = useState(null)
   const [members, setMembers] = useState([])
   const [memberGoals, setMemberGoals] = useState({})
@@ -125,7 +125,7 @@ export default function GroupDetailPage() {
   const [showAIGenerateModal, setShowAIGenerateModal] = useState(false)
 
   const isAdmin = group?.admins?.includes(user?.uid)
-  const isAppAdmin = user?.email === 'charltonuw@gmail.com'
+  // isAppAdmin comes from useAuth context
 
   useEffect(() => {
     async function fetchData() {

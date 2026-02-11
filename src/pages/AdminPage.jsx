@@ -31,7 +31,7 @@ const ADMIN_EMAILS = ['charltonuw@gmail.com']
 
 export default function AdminPage() {
   const navigate = useNavigate()
-  const { user, userProfile } = useAuth()
+  const { user, userProfile, isAppAdmin, startImpersonating: startContextImpersonation, impersonating: contextImpersonating } = useAuth()
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
   const [impersonating, setImpersonating] = useState(null)
@@ -82,7 +82,7 @@ export default function AdminPage() {
   }
 
   // Check if current user is admin
-  const isAdmin = user && ADMIN_EMAILS.includes(user.email)
+  const isAdmin = isAppAdmin
 
   useEffect(() => {
     if (!isAdmin) {
@@ -497,6 +497,16 @@ export default function AdminPage() {
                       UID: {selectedUser.uid}
                     </p>
                   </div>
+                  <button
+                    onClick={async () => {
+                      await startContextImpersonation(selectedUser.uid)
+                      navigate('/today')
+                    }}
+                    className="ml-auto px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 self-start flex-shrink-0"
+                  >
+                    <Eye className="w-4 h-4" />
+                    View as User
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

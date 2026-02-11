@@ -60,8 +60,8 @@ const DAY_TYPE_COLORS = {
 
 export default function ProgramsPage() {
   const navigate = useNavigate()
-  const { user, userProfile, updateProfile } = useAuth()
-  const isAdmin = user?.email === 'charltonuw@gmail.com'
+  const { user, userProfile, updateProfile, isAppAdmin } = useAuth()
+  const isAdmin = isAppAdmin
   const [programs, setPrograms] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)

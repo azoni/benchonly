@@ -20,10 +20,14 @@ export const analyticsService = {
     if (!userId) return
     
     try {
+      // Strip undefined values — Firestore rejects them
+      const cleanMeta = Object.fromEntries(
+        Object.entries(metadata).filter(([_, v]) => v !== undefined)
+      )
       await addDoc(collection(db, 'analytics'), {
         userId,
         action,
-        metadata,
+        metadata: cleanMeta,
         timestamp: serverTimestamp(),
         userAgent: navigator.userAgent,
         screenSize: `${window.innerWidth}x${window.innerHeight}`,
