@@ -604,17 +604,21 @@ export default function TodayPage() {
               const hadWorkout = weekCompletedDates.has(dayStr)
               const hasScheduled = weekScheduledDates.has(dayStr)
               const dayWorkout = weekDayWorkouts[dayStr]
+              const isEmpty = !hadWorkout && !hasScheduled
 
               const handleDayClick = () => {
                 if (dayWorkout) {
+                  // Has an actual workout — go to it
                   if (dayWorkout.type === 'group') {
                     navigate(`/workouts/group/${dayWorkout.id}`)
                   } else {
                     navigate(`/workouts/${dayWorkout.id}`)
                   }
-                } else {
+                } else if (isEmpty) {
+                  // Truly empty day — offer to generate
                   navigate(`/workouts/generate?date=${dayStr}`)
                 }
+                // If it's a recurring-schedule-only dot (green but no workout ID), do nothing
               }
 
               return (
@@ -636,7 +640,7 @@ export default function TodayPage() {
                             : isPastDay
                               ? 'bg-iron-800/50 text-iron-600'
                               : 'bg-iron-800/30 text-iron-600'
-                    } cursor-pointer hover:ring-2 hover:ring-flame-500/30`}
+                    } ${(dayWorkout || isEmpty) ? 'cursor-pointer hover:ring-2 hover:ring-flame-500/30' : 'cursor-default'}`}
                   >
                     {format(dayDate, 'd')}
                   </button>

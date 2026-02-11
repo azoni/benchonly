@@ -152,11 +152,11 @@ export default function App() {
         <Route path="today" element={<TodayPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="workouts" element={<WorkoutsPage />} />
-        <Route path="workouts/new" element={<NewWorkoutPage />} />
-        <Route path="workouts/generate" element={<GenerateWorkoutPage />} /> 
-        <Route path="workouts/:id" element={<WorkoutDetailPage />} />
-        <Route path="workouts/:id/edit" element={<NewWorkoutPage />} />
         <Route path="workouts/group/:id" element={<GroupWorkoutPage />} />
+        <Route path="workouts/generate" element={<GenerateWorkoutPage />} /> 
+        <Route path="workouts/new" element={<NewWorkoutPage />} />
+        <Route path="workouts/:id/edit" element={<NewWorkoutPage />} />
+        <Route path="workouts/:id" element={<WorkoutDetailPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="programs" element={<ProgramsPage />} />
         <Route path="programs/:id" element={<ProgramDetailPage />} />
