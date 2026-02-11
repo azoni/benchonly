@@ -364,7 +364,7 @@ export default function WorkoutsPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.03 }}
-                className={`card-steel rounded-xl overflow-hidden group relative ${
+                className={`card-steel rounded-xl group relative ${
                   overdue ? 'border-red-500/50' : ''
                 }`}
               >
