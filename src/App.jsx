@@ -23,6 +23,7 @@ import ProfilePage from './pages/ProfilePage'
 import GenerateWorkoutPage from './pages/GenerateWorkoutPage'
 import ProgramsPage from './pages/ProgramsPage'
 import ProgramDetailPage from './pages/ProgramDetailPage'
+import DocsPage from './pages/DocsPage'
 import OnboardingPage from './pages/OnboardingPage'
 
 function ProtectedRoute({ children }) {
@@ -168,6 +169,7 @@ export default function App() {
         <Route path="usage" element={<UsagePage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="admin" element={<AdminPage />} />
+        <Route path="docs" element={<DocsPage />} />
       </Route>
       
       <Route path="*" element={<Navigate to="/" replace />} />

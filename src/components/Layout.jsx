@@ -19,6 +19,7 @@ import {
   Bell,
   Zap,
   Layers,
+  BookOpen,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
@@ -39,6 +40,7 @@ const baseNavItems = [
   { path: '/feed', icon: Activity, label: 'Feed' },
   { path: '/goals', icon: Target, label: 'Goals' },
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { path: '/docs', icon: BookOpen, label: 'Docs' },
   { path: '/profile', icon: User, label: 'Profile' },
 ];
 
