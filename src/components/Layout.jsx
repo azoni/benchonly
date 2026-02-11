@@ -14,6 +14,7 @@ import {
   Eye,
   Home,
   User,
+  LayoutDashboard,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
@@ -28,6 +29,7 @@ const baseNavItems = [
   { path: '/workouts', icon: Dumbbell, label: 'Workouts' },
   { path: '/groups', icon: Users, label: 'Groups' },
   { path: '/goals', icon: Target, label: 'Goals' },
+  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/profile', icon: User, label: 'Profile' },
 ];
 

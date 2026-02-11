@@ -93,14 +93,12 @@ export default function TodayPage() {
         schedulesData,
         reviews,
         goalsData,
-        feedData,
       ] = await Promise.all([
         workoutService.getByUser(user.uid, 50).catch(() => []),
         groupWorkoutService.getByUser(user.uid).catch(() => []),
         scheduleService.getByUser(user.uid).catch(() => []),
         groupWorkoutService.getPendingReviews(user.uid).catch(() => []),
         goalService.getByUser(user.uid).catch(() => []),
-        feedService.getFeed(user.uid, 5).catch(() => []),
       ])
 
       // Today's personal workouts
@@ -131,7 +129,9 @@ export default function TodayPage() {
 
       setPendingReviews(reviews)
       setGoals(goalsData.filter(g => g.status === 'active'))
-      setFeedItems(feedData)
+
+      // Load feed in background (doesn't block page render)
+      feedService.getFeed(5).then(res => setFeedItems(res?.items || [])).catch(() => {})
 
       // This week's stats
       const completedDates = new Set()
@@ -384,7 +384,7 @@ export default function TodayPage() {
                 className="btn-secondary flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
-                Log Workout
+                Create Workout
               </Link>
             </div>
           </div>

@@ -14,8 +14,6 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   Heart,
-  LayoutDashboard,
-  MessageCircle,
   Settings,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -439,7 +437,6 @@ export default function ProfilePage() {
             {[
               { to: '/calendar', icon: CalendarIcon, label: 'Calendar', desc: 'Monthly view & scheduling' },
               { to: '/health', icon: Heart, label: 'Health', desc: 'Weight, sleep & body metrics' },
-              { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', desc: 'Customizable widget view' },
               { to: '/settings', icon: Settings, label: 'Settings', desc: 'Preferences & account' },
             ].map(item => (
               <Link
