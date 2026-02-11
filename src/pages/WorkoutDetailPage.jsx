@@ -61,6 +61,8 @@ export default function WorkoutDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, isGuest } = useAuth()
+
+  console.log('[DEBUG] WorkoutDetailPage mounted, id:', id, 'URL:', window.location.pathname);
   const [workout, setWorkout] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
@@ -332,7 +334,7 @@ export default function WorkoutDetailPage() {
                 {showMenu && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-                    <div className="absolute right-0 top-full mt-1 w-44 bg-iron-800 border border-iron-700 rounded-xl shadow-xl z-20 overflow-hidden">
+                    <div className="absolute right-0 bottom-full mb-1 w-44 bg-iron-800 border border-iron-700 rounded-xl shadow-xl z-20 overflow-hidden">
                       <Link
                         to={`/workouts/${id}/edit`}
                         className="flex items-center gap-3 px-4 py-3 text-iron-300 hover:bg-iron-700 transition-colors"

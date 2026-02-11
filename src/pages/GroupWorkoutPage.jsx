@@ -1,1013 +1,904 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { format } from 'date-fns'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Sparkles,
   ArrowLeft,
-  Loader2,
-  Dumbbell,
-  Target,
-  TrendingUp,
-  AlertTriangle,
-  ChevronDown,
-  ChevronUp,
-  Check,
-  RefreshCw,
-  Activity,
-  Calendar,
-  Brain,
-  Lock,
-  Zap,
   Users,
+  Check,
+  Loader2,
+  Info,
+  X,
+  Play,
+  Calendar,
   MessageSquare,
-  Timer,
-  Plus,
   Pencil,
   Trash2,
-  Save,
-  X,
-} from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { workoutService, creditService, CREDIT_COSTS, programService } from '../services/firestore';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
-import { db } from '../services/firebase';
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  Brain,
+  Sparkles,
+  AlertCircle,
+  ThumbsUp,
+  Eye,
+} from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { groupWorkoutService, groupService } from '../services/firestore'
+import { getDisplayDate } from '../utils/dateUtils'
 
-// Thinking messages that rotate during AI generation
-const THINKING_MESSAGES = [
-  { text: 'Reviewing your recent training sessions...', icon: 'brain' },
-  { text: 'Analyzing strength progression trends...', icon: 'calc' },
-  { text: 'Checking for pain history and injury risks...', icon: 'alert' },
-  { text: 'Calculating working weights from your e1RM data...', icon: 'calc' },
-  { text: 'Evaluating RPE patterns and recovery state...', icon: 'brain' },
-  { text: 'Selecting exercises based on your focus area...', icon: 'dumbbell' },
-  { text: 'Applying progressive overload to target weights...', icon: 'calc' },
-  { text: 'Balancing volume with recovery capacity...', icon: 'brain' },
-  { text: 'Building optimal set and rep schemes...', icon: 'dumbbell' },
-  { text: 'Writing personalized coaching notes...', icon: 'msg' },
-];
+// Calculate estimated 1RM using Epley formula
+const calculateE1RM = (weight, reps) => {
+  if (!weight || !reps || reps < 1) return null
+  if (reps === 1) return weight
+  if (reps > 30) return null
+  return Math.round(weight * (1 + reps / 30))
+}
 
-export default function GenerateWorkoutPage() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { user, userProfile, updateProfile, isAppAdmin } = useAuth();
-  
-  // Parse program context from URL if coming from a program
-  const [programContext] = useState(() => {
+// Determine exercise type from data
+const getExerciseType = (exercise) => {
+  if (exercise.type) return exercise.type
+  const sets = exercise.sets || []
+  if (sets.some(s => s.prescribedTime || s.actualTime)) return 'time'
+  const hasWeight = sets.some(s => s.prescribedWeight || s.actualWeight)
+  if (!hasWeight && sets.some(s => s.prescribedReps || s.actualReps)) return 'bodyweight'
+  return 'weight'
+}
+
+// Get type label and color
+const getTypeTag = (type) => {
+  switch (type) {
+    case 'time': return { label: 'Time', color: 'bg-blue-500/20 text-blue-400' }
+    case 'bodyweight': return { label: 'BW', color: 'bg-emerald-500/20 text-emerald-400' }
+    default: return null
+  }
+}
+
+export default function GroupWorkoutPage() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { user } = useAuth()
+  const [workout, setWorkout] = useState(null)
+  const [group, setGroup] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [isLogging, setIsLogging] = useState(false)
+  const [exercises, setExercises] = useState([])
+  const [workoutNotes, setWorkoutNotes] = useState('')
+  const [personalNotes, setPersonalNotes] = useState('')
+  const [rpeModalOpen, setRpeModalOpen] = useState(false)
+  const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
+
+  console.log('[DEBUG] GroupWorkoutPage mounted, id:', id, 'URL:', window.location.pathname);
+
+  useEffect(() => {
+    loadWorkout()
+  }, [id])
+
+  const loadWorkout = async () => {
     try {
-      const ctx = searchParams.get('programContext')
-      return ctx ? JSON.parse(ctx) : null
-    } catch { return null }
-  });
-  
-  const [loading, setLoading] = useState(false);
-  const [loadingContext, setLoadingContext] = useState(true);
-  const [generatedWorkout, setGeneratedWorkout] = useState(null);
-  const [usageInfo, setUsageInfo] = useState(null);
-  const [error, setError] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [analysisOpen, setAnalysisOpen] = useState(false);
-  
-  const [analysisSteps, setAnalysisSteps] = useState([]);
-  const [currentStep, setCurrentStep] = useState(null);
-  
-  // AI thinking state
-  const [thinkingMessages, setThinkingMessages] = useState([]);
-  const thinkingRef = useRef(null);
-  const thinkingIntervalRef = useRef(null);
-  
-  const [userContext, setUserContext] = useState({
-    recentWorkouts: [], goals: [], maxLifts: {}, painHistory: {}, rpeAverages: {}, cardioHistory: [],
-  });
-  
-  const [prompt, setPrompt] = useState(() => {
-    if (!programContext) return ''
-    const parts = [`Program: ${programContext.programName} — Week ${programContext.weekNumber} (${programContext.phase})`]
-    parts.push(`Day: ${programContext.dayLabel} (${programContext.dayType})`)
-    parts.push(`Primary: ${programContext.primaryLift} ${programContext.primaryScheme} @ ${programContext.intensity}`)
-    if (programContext.accessories?.length > 0) {
-      parts.push(`Accessories: ${programContext.accessories.join(', ')}`)
-    }
-    if (programContext.notes) {
-      parts.push(`Notes: ${programContext.notes}`)
-    }
-    parts.push('\nGenerate this workout following the program prescription above. Use my actual performance data to calculate working weights.')
-    return parts.join('\n')
-  });
-  const [workoutFocus, setWorkoutFocus] = useState(programContext ? 'bench' : 'auto');
-  const [intensity, setIntensity] = useState(
-    programContext?.dayType === 'deload' ? 'recovery' :
-    programContext?.dayType === 'test' ? 'max' :
-    programContext?.dayType === 'speed' ? 'light' : 'moderate'
-  );
-  const [model, setModel] = useState('standard');
-  
-  const isAdmin = isAppAdmin;
-  
-  useEffect(() => {
-    if (user) loadUserContext();
-  }, [user]);
-
-  // Auto-scroll thinking messages
-  useEffect(() => {
-    if (thinkingRef.current) {
-      thinkingRef.current.scrollTop = thinkingRef.current.scrollHeight;
-    }
-  }, [thinkingMessages]);
-
-  useEffect(() => {
-    return () => {
-      if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
-    };
-  }, []);
-  
-  const addAnalysisStep = (label, status, detail = null) => {
-    setAnalysisSteps(prev => {
-      const existing = prev.findIndex(s => s.label === label);
-      if (existing >= 0) {
-        const updated = [...prev];
-        updated[existing] = { label, status, detail };
-        return updated;
+      const data = await groupWorkoutService.get(id)
+      if (data) {
+        setWorkout(data)
+        setWorkoutNotes(data.notes || '')
+        setPersonalNotes(data.personalNotes || '')
+        if (data.exercises) {
+          setExercises(data.exercises.map(ex => ({
+            ...ex,
+            type: getExerciseType(ex),
+            notes: ex.notes || '',
+            sets: ex.sets?.map(set => ({ ...set })) || []
+          })))
+        }
+        const groupData = await groupService.get(data.groupId)
+        setGroup(groupData)
       }
-      return [...prev, { label, status, detail }];
-    });
-    setCurrentStep(label);
-  };
+    } catch (error) {
+      console.error('Error loading workout:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const startThinkingAnimation = () => {
-    setThinkingMessages([]);
-    let index = 0;
-    setThinkingMessages([{ ...THINKING_MESSAGES[0], id: 0 }]);
-    index = 1;
-    
-    thinkingIntervalRef.current = setInterval(() => {
-      if (index < THINKING_MESSAGES.length) {
-        setThinkingMessages(prev => [...prev, { ...THINKING_MESSAGES[index], id: index }]);
-        index++;
+  const handleBack = () => {
+    if (location.state?.from) {
+      navigate(location.state.from, { state: location.state?.backState })
+    } else if (workout?.groupId) {
+      navigate(`/groups/${workout.groupId}`, { state: { activeTab: 'workouts' } })
+    } else {
+      navigate(-1)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Delete this workout? This cannot be undone.')) return
+    try {
+      await groupWorkoutService.delete(id)
+      if (workout?.groupId) {
+        navigate(`/groups/${workout.groupId}`, { state: { activeTab: 'workouts' } })
       } else {
-        setThinkingMessages(prev => [...prev, { 
-          text: 'Finalizing your workout...', icon: 'brain', id: prev.length 
-        }]);
+        navigate(-1)
       }
-    }, 2000);
-  };
-
-  const stopThinkingAnimation = () => {
-    if (thinkingIntervalRef.current) {
-      clearInterval(thinkingIntervalRef.current);
-      thinkingIntervalRef.current = null;
+    } catch (error) {
+      console.error('Error deleting workout:', error)
+      alert('Failed to delete workout')
     }
-  };
+  }
 
-  const getThinkingIcon = (icon) => {
-    switch (icon) {
-      case 'brain': return <Brain className="w-3 h-3 text-flame-400" />;
-      case 'alert': return <AlertTriangle className="w-3 h-3 text-amber-400" />;
-      case 'calc': return <Sparkles className="w-3 h-3 text-purple-400" />;
-      case 'dumbbell': return <Dumbbell className="w-3 h-3 text-cyan-400" />;
-      case 'msg': return <MessageSquare className="w-3 h-3 text-blue-400" />;
-      case 'check': return <Check className="w-3 h-3 text-green-400" />;
-      case 'error': return <AlertTriangle className="w-3 h-3 text-red-400" />;
-      default: return <Loader2 className="w-3 h-3 text-flame-400 animate-spin" />;
-    }
-  };
-  
-  const loadUserContext = async () => {
-    try {
-      setLoadingContext(true);
-      setAnalysisSteps([]);
-      
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      let allWorkouts = [];
-      
-      addAnalysisStep('Loading workout history', 'loading');
-      try {
-        const snap = await getDocs(query(
-          collection(db, 'workouts'), where('userId', '==', user.uid), limit(50)
-        ));
-        snap.docs.forEach(doc => {
-          const d = doc.data();
-          if (d.status === 'completed') {
-            const workoutDate = d.date?.toDate?.() || new Date(d.date);
-            allWorkouts.push({
-              ...d, date: workoutDate.toISOString().split('T')[0],
-              dayOfWeek: dayNames[workoutDate.getDay()],
-            });
-          }
-        });
-      } catch (e) { console.error(e); }
-      
-      try {
-        const snap = await getDocs(query(
-          collection(db, 'groupWorkouts'), where('assignedTo', '==', user.uid), limit(50)
-        ));
-        snap.docs.forEach(doc => {
-          const d = doc.data();
-          if (d.status === 'completed') {
-            const workoutDate = d.date?.toDate?.() || new Date(d.date);
-            allWorkouts.push({
-              ...d, date: workoutDate.toISOString().split('T')[0],
-              dayOfWeek: dayNames[workoutDate.getDay()],
-            });
-          }
-        });
-      } catch (e) { console.error(e); }
-      
-      allWorkouts.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-      allWorkouts = allWorkouts.slice(0, 20);
-      
-      addAnalysisStep('Loading workout history', 'complete', `${allWorkouts.length} workouts found`);
-      
-      addAnalysisStep('Analyzing max lifts', 'loading');
-      const maxLifts = {};
-      const painHistory = {};
-      const rpeData = {};
-      const now = new Date();
-      
-      allWorkouts.forEach(w => {
-        const workoutDate = w.date?.toDate ? w.date.toDate() : w.date ? new Date(w.date) : null;
-        const daysSince = workoutDate && !isNaN(workoutDate.getTime()) ? Math.floor((now - workoutDate) / (1000 * 60 * 60 * 24)) : null;
-        (w.exercises || []).forEach(ex => {
-          if (!ex.name) return;
-          (ex.sets || []).forEach(s => {
-            const weight = parseFloat(s.actualWeight) || parseFloat(s.prescribedWeight) || 0;
-            const reps = parseInt(s.actualReps) || parseInt(s.prescribedReps) || 0;
-            const rpe = parseInt(s.rpe) || 0;
-            const pain = parseInt(s.painLevel) || 0;
+  const updateSet = (exerciseIndex, setIndex, field, value) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      newExercises[exerciseIndex] = {
+        ...newExercises[exerciseIndex],
+        sets: newExercises[exerciseIndex].sets.map((set, i) =>
+          i === setIndex ? { ...set, [field]: value } : set
+        )
+      }
+      return newExercises
+    })
+  }
 
-            // Skip sets with only prescribed data (not actually performed)
-            if (!s.actualWeight && !s.actualReps && s.prescribedWeight) return;
+  const updateExerciseNotes = (exerciseIndex, notes) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      newExercises[exerciseIndex] = { ...newExercises[exerciseIndex], notes }
+      return newExercises
+    })
+  }
 
-            if (weight > 0 && reps > 0 && reps <= 12) {
-              const e1rm = Math.round(weight * (1 + reps / 30));
-              if (!maxLifts[ex.name] || e1rm > maxLifts[ex.name].e1rm) {
-                maxLifts[ex.name] = { weight, reps, e1rm };
-              }
-            }
-            if (pain > 0) {
-              if (!painHistory[ex.name]) painHistory[ex.name] = { count: 0, maxPain: 0, lastDaysAgo: null, recentCount: 0 };
-              painHistory[ex.name].count++;
-              painHistory[ex.name].maxPain = Math.max(painHistory[ex.name].maxPain, pain);
-              if (daysSince !== null) {
-                if (painHistory[ex.name].lastDaysAgo === null || daysSince < painHistory[ex.name].lastDaysAgo) {
-                  painHistory[ex.name].lastDaysAgo = daysSince;
-                }
-                if (daysSince <= 30) painHistory[ex.name].recentCount++;
-              }
-            }
-            if (rpe > 0) {
-              if (!rpeData[ex.name]) rpeData[ex.name] = { total: 0, count: 0 };
-              rpeData[ex.name].total += rpe;
-              rpeData[ex.name].count++;
-            }
-          });
-        });
-      });
-      
-      const liftCount = Object.keys(maxLifts).length;
-      const topLifts = Object.entries(maxLifts)
-        .sort((a, b) => b[1].e1rm - a[1].e1rm)
-        .slice(0, 3)
-        .map(([n, d]) => `${n}: ${d.e1rm}lb`);
-      addAnalysisStep('Analyzing max lifts', 'complete', 
-        liftCount > 0 ? `${liftCount} lifts tracked. Top: ${topLifts.join(', ')}` : 'No lift data found'
-      );
-      
-      addAnalysisStep('Checking pain history', 'loading');
-      const painCount = Object.keys(painHistory).length;
-      const painExercises = Object.keys(painHistory).slice(0, 3).join(', ');
-      addAnalysisStep('Checking pain history', painCount > 0 ? 'warning' : 'complete',
-        painCount > 0 ? `Pain flagged on: ${painExercises}` : 'No pain history'
-      );
-      
-      addAnalysisStep('Analyzing RPE patterns', 'loading');
-      const rpeAverages = {};
-      Object.entries(rpeData).forEach(([n, d]) => {
-        rpeAverages[n] = Math.round(d.total / d.count * 10) / 10;
-      });
-      const avgRpe = Object.values(rpeAverages).length > 0 
-        ? (Object.values(rpeAverages).reduce((a, b) => a + b, 0) / Object.values(rpeAverages).length).toFixed(1)
-        : null;
-      addAnalysisStep('Analyzing RPE patterns', 'complete',
-        avgRpe ? `Average RPE: ${avgRpe}` : 'No RPE data'
-      );
-      
-      addAnalysisStep('Loading goals', 'loading');
-      let goals = [];
-      try {
-        const snap = await getDocs(query(
-          collection(db, 'goals'), where('userId', '==', user.uid), limit(10)
-        ));
-        goals = snap.docs.map(d => d.data()).filter(g => g.status === 'active');
-      } catch (e) { console.error(e); }
-      addAnalysisStep('Loading goals', 'complete',
-        goals.length > 0 ? `${goals.length} active goals` : 'No active goals'
-      );
-      
-      addAnalysisStep('Loading cardio history', 'loading');
-      let cardioHistory = [];
-      try {
-        const cardioSnap = await getDocs(query(
-          collection(db, 'workouts'), where('userId', '==', user.uid),
-          where('workoutType', '==', 'cardio'), limit(20)
-        ));
-        cardioHistory = cardioSnap.docs.map(d => {
-          const data = d.data();
-          return { ...data, date: data.date?.toDate?.()?.toISOString?.().split('T')[0] || data.date };
-        });
-        cardioHistory.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-        cardioHistory = cardioHistory.slice(0, 10);
-      } catch (e) { console.error(e); }
-      addAnalysisStep('Loading cardio history', 'complete',
-        cardioHistory.length > 0 ? `${cardioHistory.length} recent cardio sessions` : 'No cardio data'
-      );
-      
-      setUserContext({ recentWorkouts: allWorkouts, goals, maxLifts, painHistory, rpeAverages, cardioHistory });
-      setCurrentStep(null);
-      
-    } catch (err) {
-      console.error('Error loading context:', err);
-    } finally {
-      setLoadingContext(false);
-    }
-  };
-  
-  const handleGenerate = async () => {
-    // Check credits (admin bypasses)
-    const credits = userProfile?.credits ?? 0;
-    const cost = CREDIT_COSTS['generate-workout'];
-    if (!isAdmin && credits < cost) {
-      setError(`Not enough credits. You need ${cost} credits but have ${credits}. Check Settings for your usage.`);
-      return;
-    }
+  const addSet = (exerciseIndex) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      const exercise = newExercises[exerciseIndex]
+      const lastSet = exercise.sets[exercise.sets.length - 1]
+      const type = exercise.type || 'weight'
 
-    setLoading(true);
-    setError(null);
-    addAnalysisStep('Generating workout', 'loading');
-    startThinkingAnimation();
-    
-    try {
-      // Deduct credits upfront (admin bypasses)
-      if (!isAdmin) {
-        await creditService.deduct(user.uid, 'generate-workout');
-        updateProfile({ credits: credits - cost });
+      let newSet = {
+        id: Date.now() + Math.random(),
+        rpe: '',
+        painLevel: 0,
+        completed: false,
       }
 
-      const response = await fetch('/.netlify/functions/generate-workout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.uid, prompt, workoutFocus, intensity,
-          model: isAdmin ? model : 'standard',
-          draftMode: true,
-          context: {
-            recentWorkouts: userContext.recentWorkouts.slice(0, 10),
-            goals: userContext.goals, maxLifts: userContext.maxLifts,
-            painHistory: userContext.painHistory, rpeAverages: userContext.rpeAverages,
-            cardioHistory: userContext.cardioHistory,
-          },
-        }),
-      });
-      
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to generate workout');
-      }
-      
-      const data = await response.json();
-      setGeneratedWorkout(data.workout);
-      setUsageInfo(data.usage);
-      stopThinkingAnimation();
-      setThinkingMessages(prev => [...prev, { 
-        text: 'Workout ready!', icon: 'check', id: prev.length 
-      }]);
-      addAnalysisStep('Generating workout', 'complete', `Created in ${data.usage?.responseMs}ms`);
-      
-    } catch (err) {
-      console.error('Generation error:', err);
-      setError(err.message);
-      // Refund credits on failure
-      if (!isAdmin) {
-        await creditService.add(user.uid, cost).catch(() => {});
-        updateProfile({ credits });
-      }
-      stopThinkingAnimation();
-      setThinkingMessages(prev => [...prev, { 
-        text: `Error: ${err.message}`, icon: 'error', id: prev.length 
-      }]);
-      addAnalysisStep('Generating workout', 'error', err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleAddWorkout = async () => {
-    if (!generatedWorkout) return;
-    setSaving(true);
-    try {
-      const workoutData = {
-        ...generatedWorkout,
-        date: new Date(),
-        status: 'scheduled',
-      }
-      
-      // Tag workout with program info if from a program
-      if (programContext) {
-        workoutData.programId = programContext.programId
-        workoutData.programWeek = programContext.weekNumber
-        workoutData.programDayLabel = programContext.dayLabel
-      }
-      
-      const result = await workoutService.create(user.uid, workoutData);
-      
-      // Mark program day as completed
-      if (programContext?.programId && programContext?.dayKey) {
-        try {
-          const prog = await programService.get(programContext.programId)
-          if (prog) {
-            const completedDays = [...(prog.completedDays || []), programContext.dayKey]
-            await programService.update(programContext.programId, { completedDays })
-          }
-        } catch (err) {
-          console.error('Failed to mark program day complete:', err)
+      if (type === 'time') {
+        newSet = { ...newSet, prescribedTime: lastSet?.prescribedTime || '', actualTime: '' }
+      } else if (type === 'bodyweight') {
+        newSet = { ...newSet, prescribedReps: lastSet?.prescribedReps || '', actualReps: '' }
+      } else {
+        newSet = {
+          ...newSet,
+          prescribedWeight: lastSet?.prescribedWeight || '',
+          prescribedReps: lastSet?.prescribedReps || '',
+          actualWeight: '',
+          actualReps: '',
         }
       }
-      
-      navigate(`/workouts/${result.id}`);
-    } catch (err) {
-      console.error('Save error:', err);
-      setError('Failed to save workout');
+
+      newExercises[exerciseIndex] = { ...exercise, sets: [...exercise.sets, newSet] }
+      return newExercises
+    })
+  }
+
+  const removeSet = (exerciseIndex, setIndex) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      const exercise = newExercises[exerciseIndex]
+      if (exercise.sets.length <= 1) return prev
+      newExercises[exerciseIndex] = {
+        ...exercise,
+        sets: exercise.sets.filter((_, i) => i !== setIndex),
+      }
+      return newExercises
+    })
+  }
+
+  // Build save payload preserving ALL notes fields
+  const buildSavePayload = (exerciseData) => {
+    const payload = {
+      exercises: exerciseData,
+      notes: workoutNotes,
+      personalNotes,
+    }
+    if (workout.coachingNotes) payload.coachingNotes = workout.coachingNotes
+    if (workout.description) payload.description = workout.description
+    return payload
+  }
+
+  const handleSaveProgress = async () => {
+    setSaving(true)
+    try {
+      const payload = buildSavePayload(exercises)
+      await groupWorkoutService.update(id, payload)
+      setWorkout(prev => ({ ...prev, ...payload }))
+      setIsLogging(false)
+    } catch (error) {
+      console.error('Error saving workout:', error)
+      alert('Failed to save workout')
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
-  // Editing helpers
-  const updateExerciseName = (exIdx, name) => {
-    setGeneratedWorkout(prev => ({
-      ...prev,
-      exercises: prev.exercises.map((ex, i) => i === exIdx ? { ...ex, name } : ex)
-    }));
-  };
-  
-  const updateSet = (exIdx, setIdx, field, value) => {
-    setGeneratedWorkout(prev => ({
-      ...prev,
-      exercises: prev.exercises.map((ex, i) => i === exIdx ? {
-        ...ex,
-        sets: ex.sets.map((s, j) => j === setIdx ? { ...s, [field]: value } : s)
-      } : ex)
-    }));
-  };
-  
-  const removeExercise = (exIdx) => {
-    setGeneratedWorkout(prev => ({
-      ...prev,
-      exercises: prev.exercises.filter((_, i) => i !== exIdx)
-    }));
-  };
-  
-  const addSet = (exIdx) => {
-    setGeneratedWorkout(prev => ({
-      ...prev,
-      exercises: prev.exercises.map((ex, i) => {
-        if (i !== exIdx) return ex;
-        const lastSet = ex.sets[ex.sets.length - 1] || {};
-        return { ...ex, sets: [...ex.sets, { ...lastSet, id: Date.now(), completed: false }] };
+  const handleComplete = async () => {
+    setSaving(true)
+    try {
+      const filledExercises = exercises.map(ex => {
+        const type = ex.type || getExerciseType(ex)
+        return {
+          ...ex,
+          sets: ex.sets.map(set => {
+            if (type === 'time') {
+              return { ...set, actualTime: set.actualTime || set.prescribedTime || '' }
+            }
+            if (type === 'bodyweight') {
+              return { ...set, actualReps: set.actualReps || set.prescribedReps || '' }
+            }
+            return {
+              ...set,
+              actualWeight: set.actualWeight || set.prescribedWeight || '',
+              actualReps: set.actualReps || set.prescribedReps || '',
+            }
+          })
+        }
       })
-    }));
-  };
-  
-  const removeSet = (exIdx, setIdx) => {
-    setGeneratedWorkout(prev => ({
-      ...prev,
-      exercises: prev.exercises.map((ex, i) => i === exIdx ? {
-        ...ex,
-        sets: ex.sets.filter((_, j) => j !== setIdx)
-      } : ex)
-    }));
-  };
-
-  const handleReset = () => {
-    setGeneratedWorkout(null);
-    setEditing(false);
-    setThinkingMessages([]);
-    setAnalysisSteps(prev => prev.filter(s => s.label !== 'Generating workout'));
-  };
-
-  // Helper to get exercise type display
-  const getExerciseTypeTag = (ex) => {
-    const type = ex.type || 'weight';
-    if (type === 'time') return { label: 'Time', color: 'bg-blue-500/20 text-blue-400' };
-    if (type === 'bodyweight') return { label: 'BW', color: 'bg-emerald-500/20 text-emerald-400' };
-    return null;
-  };
-
-  // Format set display based on exercise type
-  const formatSetDisplay = (set, exerciseType) => {
-    if (exerciseType === 'time') {
-      return `${set.prescribedTime || '?'}s`;
+      const payload = buildSavePayload(filledExercises)
+      
+      // If athlete is re-completing a coach-logged workout, mark as 'edited'
+      const wasCoachCompleted = workout.completedBy && workout.completedBy !== workout.assignedTo
+      if (wasCoachCompleted && user.uid === workout.assignedTo) {
+        payload.reviewStatus = 'edited'
+        payload.reviewedAt = new Date()
+      }
+      
+      await groupWorkoutService.complete(id, payload, user.uid, workout.assignedTo)
+      setWorkout(prev => ({ 
+        ...prev, 
+        ...payload, 
+        status: 'completed',
+        completedBy: user.uid !== workout.assignedTo ? user.uid : undefined,
+        reviewStatus: user.uid !== workout.assignedTo ? 'pending' : 'self',
+      }))
+      setExercises(filledExercises)
+      setIsLogging(false)
+    } catch (error) {
+      console.error('Error completing workout:', error)
+      alert('Failed to complete workout')
+    } finally {
+      setSaving(false)
     }
-    if (exerciseType === 'bodyweight') {
-      return `${set.prescribedReps || '?'} reps`;
+  }
+
+  const handleApproveReview = async () => {
+    setSaving(true)
+    try {
+      await groupWorkoutService.approveReview(id)
+      setWorkout(prev => ({ ...prev, reviewStatus: 'approved' }))
+    } catch (error) {
+      console.error('Error approving review:', error)
+      alert('Failed to approve')
+    } finally {
+      setSaving(false)
     }
-    return `${set.prescribedWeight ? `${set.prescribedWeight} lbs × ` : ''}${set.prescribedReps || '?'} reps`;
-  };
-  
-  const focusOptions = [
-    { value: 'auto', label: 'Auto' },
-    { value: 'push', label: 'Push' },
-    { value: 'pull', label: 'Pull' },
-    { value: 'legs', label: 'Legs' },
-    { value: 'upper', label: 'Upper' },
-    { value: 'lower', label: 'Lower' },
-    { value: 'full', label: 'Full Body' },
-    { value: 'bench', label: 'Bench Focus' },
-    { value: 'no-equipment', label: 'No Equipment' },
-    { value: 'vacation', label: 'Hotel / Travel' },
-  ];
-  
-  const intensityOptions = [
-    { value: 'light', label: 'Light', desc: 'RPE 5-6' },
-    { value: 'moderate', label: 'Moderate', desc: 'RPE 7-8' },
-    { value: 'heavy', label: 'Heavy', desc: 'RPE 8-9' },
-    { value: 'max', label: 'Max', desc: 'RPE 9-10' },
-  ];
-  
-  return (
-    <div className="max-w-4xl mx-auto">
-      {/* Program context banner */}
-      {programContext && (
-        <div className="mb-4 p-3 bg-flame-500/10 border border-flame-500/20 rounded-xl flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-flame-500/20 flex items-center justify-center flex-shrink-0">
-            <Target className="w-4 h-4 text-flame-400" />
+  }
+
+  const handleEditReview = () => {
+    // Enter logging mode so athlete can make changes, then re-complete
+    setIsLogging(true)
+  }
+
+  const safeFormatDate = (date) => {
+    if (!date) return ''
+    try {
+      const dateObj = getDisplayDate(date)
+      if (isNaN(dateObj.getTime())) return ''
+      return format(dateObj, 'EEEE, MMM d')
+    } catch {
+      return ''
+    }
+  }
+
+  const getRPEColor = (rpe) => {
+    if (rpe >= 9) return 'text-red-400'
+    if (rpe >= 7) return 'text-yellow-400'
+    return 'text-green-400'
+  }
+
+  const getPainColor = (pain) => {
+    if (pain >= 7) return 'bg-red-500/20 text-red-400'
+    if (pain >= 4) return 'bg-yellow-500/20 text-yellow-400'
+    return 'bg-green-500/20 text-green-400'
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="w-8 h-8 text-flame-500 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!workout) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-12 text-center">
+        <div className="w-16 h-16 bg-iron-800 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Users className="w-8 h-8 text-iron-600" />
+        </div>
+        <h2 className="text-xl font-display text-iron-200 mb-2">Workout Not Found</h2>
+        <p className="text-iron-500 mb-6">This workout may have been deleted or you don't have access.</p>
+        <button onClick={handleBack} className="btn-primary">Go Back</button>
+      </div>
+    )
+  }
+
+  const isCompleted = workout.status === 'completed'
+  const isOwner = workout.assignedTo === user?.uid
+  const isAdmin = group?.admins?.includes(user?.uid)
+  const canLog = isOwner || isAdmin
+  const hasAiNotes = workout.coachingNotes || workout.personalNotes || workout.description
+  const needsReview = isOwner && workout.reviewStatus === 'pending' && workout.completedBy
+  const wasApproved = workout.reviewStatus === 'approved'
+  const wasEditedByAthlete = workout.reviewStatus === 'edited'
+
+  // ============ VIEW MODE ============
+  if (!isLogging) {
+    return (
+      <div className="max-w-2xl mx-auto pb-24">
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-6">
+          <div className="flex items-center justify-between">
+            <button onClick={handleBack} className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <button 
+                  onClick={handleDelete}
+                  className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                  title="Delete workout"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+              <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-sm font-medium">Group</span>
+              {isCompleted ? (
+                <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">Completed</span>
+              ) : (
+                <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm font-medium">Assigned</span>
+              )}
+              {needsReview && (
+                <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-sm font-medium animate-pulse">Review</span>
+              )}
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-flame-300">{programContext.programName}</p>
-            <p className="text-xs text-iron-400">
-              Week {programContext.weekNumber} · {programContext.phase} · {programContext.dayLabel}
+        </div>
+
+        {/* Workout Title */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-display text-iron-50 mb-2">{workout.name}</h1>
+          {workout.description && (
+            <p className="text-iron-400 mb-2">{workout.description}</p>
+          )}
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div className="flex items-center gap-2 text-iron-400">
+              <Calendar className="w-4 h-4 text-flame-400" />
+              <span>{safeFormatDate(workout.date)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-iron-400">
+              <Users className="w-4 h-4 text-cyan-400" />
+              <span>{group?.name || 'Group Workout'}</span>
+            </div>
+            {workout.generatedByAI && (
+              <div className="flex items-center gap-1.5 text-iron-500">
+                <Sparkles className="w-3.5 h-3.5 text-flame-400" />
+                <span>AI Generated</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Info Messages */}
+        {!isOwner && !isAdmin && (
+          <div className="card-steel p-4 mb-6 border-iron-700">
+            <p className="text-sm text-iron-400">This workout was assigned to another member. You can view but not edit.</p>
+          </div>
+        )}
+        {!isOwner && isAdmin && (
+          <div className="card-steel p-4 mb-6 border-cyan-500/30 bg-cyan-500/5">
+            <p className="text-sm text-cyan-400">You're viewing as admin. You can log this workout on behalf of the member.</p>
+          </div>
+        )}
+
+        {/* Review Banner - shown to athlete when coach completed for them */}
+        {needsReview && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 overflow-hidden"
+          >
+            <div className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                  <Eye className="w-5 h-5 text-amber-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-amber-300">Review Required</h3>
+                  <p className="text-sm text-iron-400 mt-1">
+                    Your coach logged this workout for you. Review the results and either approve or make changes.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={handleApproveReview}
+                  disabled={saving}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <ThumbsUp className="w-4 h-4" />
+                  Approve
+                </button>
+                <button
+                  onClick={handleEditReview}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-iron-800 hover:bg-iron-700 text-iron-300 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Pencil className="w-4 h-4" />
+                  Edit & Fix
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Approved/Edited Badge */}
+        {isOwner && (wasApproved || wasEditedByAthlete) && (
+          <div className={`card-steel p-3 mb-6 flex items-center gap-2 ${
+            wasApproved ? 'border-green-500/20 bg-green-500/5' : 'border-blue-500/20 bg-blue-500/5'
+          }`}>
+            <Check className={`w-4 h-4 ${wasApproved ? 'text-green-400' : 'text-blue-400'}`} />
+            <p className={`text-sm ${wasApproved ? 'text-green-400' : 'text-blue-400'}`}>
+              {wasApproved ? 'You approved this workout logged by your coach.' : 'You edited and updated this workout.'}
             </p>
           </div>
-          <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
-            ({
-              primary: 'bg-flame-500/20 text-flame-400 border-flame-500/30',
-              volume: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-              speed: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-              deload: 'bg-green-500/20 text-green-400 border-green-500/30',
-              test: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-            })[programContext.dayType] || 'bg-iron-800 text-iron-400 border-iron-700'
-          }`}>
-            {programContext.dayType}
-          </span>
-        </div>
-      )}
+        )}
 
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <button
-          onClick={() => programContext ? navigate(`/programs/${programContext.programId}`) : navigate('/workouts')}
-          className="p-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-xl transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h1 className="font-display text-2xl text-iron-50">
-            {programContext ? 'Generate Program Workout' : 'AI Generate Workout'}
-          </h1>
-          <p className="text-iron-400 mt-1">
-            {programContext 
-              ? `${programContext.primaryLift} ${programContext.primaryScheme} @ ${programContext.intensity}`
-              : 'Personalized based on your training history'
-            }
-          </p>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column - Analysis (shows second on mobile, first on desktop) */}
-        <div className="lg:col-span-1 order-2 lg:order-1">
-          <div className="card-steel rounded-xl p-4">
-            <button 
-              onClick={() => setAnalysisOpen(!analysisOpen)}
-              className="flex items-center gap-2 w-full lg:cursor-default"
+        {/* AI Coaching Notes — collapsible */}
+        {hasAiNotes && (
+          <div className="card-steel mb-6 overflow-hidden">
+            <button
+              onClick={() => setAiNotesExpanded(!aiNotesExpanded)}
+              className="w-full flex items-center justify-between p-4 hover:bg-iron-800/30 transition-colors"
             >
-              <Brain className="w-5 h-5 text-flame-400" />
-              <h3 className="font-medium text-iron-200 flex-1 text-left">Analysis</h3>
-              {!loadingContext && analysisSteps.length > 0 && (
-                <span className="text-xs text-iron-500 lg:hidden">
-                  {analysisSteps.filter(s => s.status === 'complete').length}/{analysisSteps.length}
-                </span>
-              )}
-              <ChevronDown className={`w-4 h-4 text-iron-500 lg:hidden transition-transform ${analysisOpen ? 'rotate-180' : ''}`} />
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4 text-flame-400" />
+                <span className="text-sm font-medium text-iron-200">AI Coaching Notes</span>
+              </div>
+              {aiNotesExpanded ? <ChevronUp className="w-4 h-4 text-iron-500" /> : <ChevronDown className="w-4 h-4 text-iron-500" />}
             </button>
-            
-            <div className={`${analysisOpen ? '' : 'hidden'} lg:block mt-4`}>
-            <div className="space-y-3">
-              {analysisSteps.map((step, i) => (
+            <AnimatePresence>
+              {aiNotesExpanded && (
                 <motion.div
-                  key={step.label}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="flex items-start gap-3"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
                 >
-                  <div className="mt-0.5">
-                    {step.status === 'loading' ? (
-                      <Loader2 className="w-4 h-4 text-flame-400 animate-spin" />
-                    ) : step.status === 'complete' ? (
-                      <Check className="w-4 h-4 text-green-400" />
-                    ) : step.status === 'warning' ? (
-                      <AlertTriangle className="w-4 h-4 text-amber-400" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 text-red-400" />
+                  <div className="px-4 pb-4 max-h-64 overflow-y-auto space-y-3">
+                    {workout.coachingNotes && (
+                      <div>
+                        <p className="text-xs text-iron-500 uppercase tracking-wider mb-1">Coaching Notes</p>
+                        <p className="text-sm text-iron-300 leading-relaxed">{workout.coachingNotes}</p>
+                      </div>
                     )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-iron-200">{step.label}</p>
-                    {step.detail && (
-                      <p className="text-xs text-iron-500 mt-0.5 truncate">{step.detail}</p>
+                    {workout.personalNotes && (
+                      <div>
+                        <p className="text-xs text-iron-500 uppercase tracking-wider mb-1">Your Notes</p>
+                        <p className="text-sm text-iron-300 leading-relaxed">{workout.personalNotes}</p>
+                      </div>
                     )}
                   </div>
                 </motion.div>
-              ))}
-              
-              {analysisSteps.length === 0 && (
-                <div className="flex items-center gap-2 text-iron-500">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="text-sm">Starting analysis...</span>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {/* User workout notes */}
+        {workout.notes && (
+          <div className="card-steel p-4 mb-6">
+            <p className="text-iron-300 text-sm">{workout.notes}</p>
+          </div>
+        )}
+
+        {/* Exercises */}
+        <div className="space-y-4">
+          {workout.exercises?.map((exercise, exerciseIndex) => {
+            const type = getExerciseType(exercise)
+            const typeTag = getTypeTag(type)
+            
+            return (
+            <div key={exerciseIndex} className="card-steel overflow-hidden">
+              <div className="p-4 border-b border-iron-800">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-semibold text-iron-50">{exercise.name}</h3>
+                  {typeTag && (
+                    <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
+                  )}
+                </div>
+                <p className="text-sm text-iron-500 mt-1">{exercise.sets?.length || 0} sets</p>
+              </div>
+              <div className="divide-y divide-iron-800/50">
+                {exercise.sets?.map((set, setIndex) => {
+                  const hasActual = type === 'time' 
+                    ? set.actualTime 
+                    : type === 'bodyweight'
+                      ? set.actualReps
+                      : (set.actualWeight || set.actualReps)
+                  const e1rm = type === 'weight' && hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
+                    ? calculateE1RM(parseFloat(set.actualWeight), parseInt(set.actualReps))
+                    : null
+                  return (
+                    <div key={setIndex} className="p-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-iron-800 flex items-center justify-center flex-shrink-0">
+                          <span className="text-lg font-bold text-iron-400">{setIndex + 1}</span>
+                        </div>
+                        <div className="flex-1">
+                          {type === 'time' ? (
+                            !isCompleted ? (
+                              <div className="text-2xl font-bold text-iron-100">{set.prescribedTime || '—'} seconds</div>
+                            ) : (
+                              <>
+                                <div className="text-sm text-iron-500 mb-1">Target: {set.prescribedTime || '—'}s</div>
+                                {hasActual ? (
+                                  <span className="text-2xl font-bold text-flame-400">{set.actualTime || '—'} seconds</span>
+                                ) : (
+                                  <span className="text-lg text-iron-600">Not logged</span>
+                                )}
+                              </>
+                            )
+                          ) : type === 'bodyweight' ? (
+                            !isCompleted ? (
+                              <div className="text-2xl font-bold text-iron-100">{set.prescribedReps || '—'} reps</div>
+                            ) : (
+                              <>
+                                <div className="text-sm text-iron-500 mb-1">Target: {set.prescribedReps || '—'} reps</div>
+                                {hasActual ? (
+                                  <span className="text-2xl font-bold text-flame-400">{set.actualReps || '—'} reps</span>
+                                ) : (
+                                  <span className="text-lg text-iron-600">Not logged</span>
+                                )}
+                              </>
+                            )
+                          ) : !isCompleted ? (
+                            <span className="text-2xl font-bold text-iron-100">
+                              {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'}
+                            </span>
+                          ) : (
+                            <>
+                              <div className="text-sm text-iron-500 mb-1">
+                                Target: {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'} reps
+                              </div>
+                              {hasActual ? (
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <span className="text-2xl font-bold text-flame-400">
+                                    {set.actualWeight || '—'} lbs × {set.actualReps || '—'}
+                                  </span>
+                                  {e1rm && (
+                                    <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded-lg">e1RM: {e1rm} lbs</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-lg text-iron-600">Not logged</span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {set.targetRpe && !set.rpe && (
+                            <span className="text-xs text-iron-500">Target RPE {set.targetRpe}</span>
+                          )}
+                          {set.rpe && <span className={`text-sm font-semibold ${getRPEColor(set.rpe)}`}>RPE {set.rpe}</span>}
+                          {set.painLevel > 0 && (
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(set.painLevel)}`}>Pain {set.painLevel}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {exercise.notes && (
+                <div className="px-4 pb-4">
+                  <div className="flex items-start gap-2 bg-iron-800/30 rounded-lg p-3">
+                    <MessageSquare className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-iron-400">{exercise.notes}</p>
+                  </div>
                 </div>
               )}
             </div>
+          )})}
+        </div>
 
-            {/* AI Thinking Stream */}
-            {(loading || thinkingMessages.length > 0) && (
-              <div className="mt-4 pt-4 border-t border-iron-800">
-                <div className="flex items-center gap-2 mb-2">
-                  {loading && <Loader2 className="w-3 h-3 text-flame-400 animate-spin" />}
-                  <p className="text-xs text-iron-500 uppercase tracking-wider">
-                    {loading ? 'AI Thinking...' : 'AI Process'}
-                  </p>
-                </div>
-                <div 
-                  ref={thinkingRef}
-                  className="max-h-44 overflow-y-auto space-y-1.5"
-                >
-                  {thinkingMessages.map((msg) => (
-                    <motion.div
-                      key={msg.id}
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="flex items-start gap-2"
-                    >
-                      <div className="mt-0.5 flex-shrink-0">
-                        {getThinkingIcon(msg.icon)}
-                      </div>
-                      <p className="text-xs text-iron-400 leading-relaxed">{msg.text}</p>
-                    </motion.div>
-                  ))}
-                  {loading && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="w-1 h-1 bg-flame-400 rounded-full animate-pulse" />
-                      <span className="w-1 h-1 bg-flame-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
-                      <span className="w-1 h-1 bg-flame-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+        {(!workout.exercises || workout.exercises.length === 0) && (
+          <div className="card-steel p-8 text-center">
+            <Users className="w-12 h-12 text-iron-700 mx-auto mb-3" />
+            <p className="text-iron-500">No exercises in this workout</p>
+          </div>
+        )}
+
+        {/* Action Button */}
+        {canLog && (
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
+            <button
+              onClick={() => setIsLogging(true)}
+              className={`w-full py-4 text-lg flex items-center justify-center gap-2 ${isCompleted ? 'btn-secondary' : 'btn-primary'}`}
+            >
+              {isCompleted ? <Pencil className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+              {isCompleted ? 'Edit Logged Data' : 'Log This Workout'}
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ============ LOG MODE ============
+  return (
+    <div className="max-w-2xl mx-auto pb-36">
+      <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-4">
+        <div className="flex items-center justify-between">
+          <button onClick={() => setIsLogging(false)} className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+          <h1 className="font-display text-lg text-iron-100">{isCompleted ? 'Edit Log' : 'Log Workout'}</h1>
+          <button onClick={() => setRpeModalOpen(true)} className="p-2 text-iron-400 hover:text-iron-200 transition-colors">
+            <Info className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* AI Notes — collapsed by default in log mode, scrollable */}
+      {hasAiNotes && (
+        <div className="card-steel mb-4 overflow-hidden">
+          <button
+            onClick={() => setAiNotesExpanded(!aiNotesExpanded)}
+            className="w-full flex items-center justify-between p-3 hover:bg-iron-800/30 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-flame-400" />
+              <span className="text-sm font-medium text-iron-300">AI Coaching Notes</span>
+            </div>
+            {aiNotesExpanded ? <ChevronUp className="w-4 h-4 text-iron-500" /> : <ChevronDown className="w-4 h-4 text-iron-500" />}
+          </button>
+          <AnimatePresence>
+            {aiNotesExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="px-3 pb-3 max-h-48 overflow-y-auto space-y-2">
+                  {workout.coachingNotes && (
+                    <div>
+                      <p className="text-xs text-iron-500 uppercase tracking-wider mb-1">Coaching</p>
+                      <p className="text-xs text-iron-400 leading-relaxed">{workout.coachingNotes}</p>
+                    </div>
+                  )}
+                  {workout.personalNotes && (
+                    <div>
+                      <p className="text-xs text-iron-500 uppercase tracking-wider mb-1">For You</p>
+                      <p className="text-xs text-iron-400 leading-relaxed">{workout.personalNotes}</p>
                     </div>
                   )}
                 </div>
-              </div>
+              </motion.div>
             )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Workout Notes */}
+      <div className="card-steel p-4 mb-4">
+        <label className="block text-sm text-iron-400 mb-2">Workout Notes</label>
+        <textarea
+          value={workoutNotes}
+          onChange={(e) => setWorkoutNotes(e.target.value)}
+          placeholder="How did the workout go?"
+          rows={2}
+          className="w-full input-field text-sm resize-none"
+        />
+      </div>
+
+      {/* Exercises */}
+      <div className="space-y-4">
+        {exercises.map((exercise, exerciseIndex) => {
+          const type = exercise.type || getExerciseType(exercise)
+          const typeTag = getTypeTag(type)
+          
+          return (
+          <div key={exerciseIndex} className="card-steel p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="font-semibold text-iron-100 text-xl flex-1">{exercise.name}</h3>
+              {typeTag && (
+                <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
+              )}
+            </div>
             
-            {/* Context Summary */}
-            {!loadingContext && !loading && thinkingMessages.length === 0 && (
-              <div className="mt-6 pt-4 border-t border-iron-800">
-                <p className="text-xs text-iron-500 uppercase tracking-wide mb-3">Summary</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-iron-800/50 rounded-lg p-2">
-                    <p className="text-lg font-semibold text-iron-100">{userContext.recentWorkouts.length}</p>
-                    <p className="text-xs text-iron-500">Workouts</p>
+            <div className="space-y-4">
+              {exercise.sets?.map((set, setIndex) => (
+                <div key={setIndex} className="bg-iron-800/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-lg font-medium text-iron-200">Set {setIndex + 1}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded">
+                        Target: {type === 'time' 
+                          ? `${set.prescribedTime || '—'}s`
+                          : type === 'bodyweight'
+                            ? `${set.prescribedReps || '—'} reps`
+                            : `${set.prescribedWeight || '—'} × ${set.prescribedReps || '—'}`
+                        }
+                        {set.targetRpe ? ` @ RPE ${set.targetRpe}` : ''}
+                      </span>
+                      {exercise.sets.length > 1 && (
+                        <button
+                          onClick={() => removeSet(exerciseIndex, setIndex)}
+                          className="p-1 text-iron-600 hover:text-red-400 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="bg-iron-800/50 rounded-lg p-2">
-                    <p className="text-lg font-semibold text-iron-100">{Object.keys(userContext.maxLifts).length}</p>
-                    <p className="text-xs text-iron-500">Lifts Tracked</p>
-                  </div>
-                  <div className="bg-iron-800/50 rounded-lg p-2">
-                    <p className="text-lg font-semibold text-iron-100">{userContext.goals.length}</p>
-                    <p className="text-xs text-iron-500">Goals</p>
-                  </div>
-                  <div className={`bg-iron-800/50 rounded-lg p-2 ${Object.keys(userContext.painHistory).length > 0 ? 'border border-amber-500/30' : ''}`}>
-                    <p className="text-lg font-semibold text-iron-100">{Object.keys(userContext.painHistory).length}</p>
-                    <p className="text-xs text-iron-500">Pain Flags</p>
+
+                  {/* Input fields based on exercise type */}
+                  {type === 'time' ? (
+                    <div className="mb-3">
+                      <label className="block text-xs text-flame-400 mb-1 font-medium">Time (seconds)</label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={set.actualTime || ''}
+                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualTime', e.target.value)}
+                        placeholder={set.prescribedTime || '—'}
+                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                      />
+                    </div>
+                  ) : type === 'bodyweight' ? (
+                    <div className="mb-3">
+                      <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={set.actualReps || ''}
+                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
+                        placeholder={set.prescribedReps || '—'}
+                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                      />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="block text-xs text-flame-400 mb-1 font-medium">Weight</label>
+                        <input
+                          type="text"
+                          value={set.actualWeight || ''}
+                          onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
+                          placeholder={set.prescribedWeight || 'lbs'}
+                          className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={set.actualReps || ''}
+                          onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
+                          placeholder={set.prescribedReps || '—'}
+                          className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* RPE & Pain */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-iron-500 mb-1">RPE</label>
+                      <select
+                        value={set.rpe || ''}
+                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'rpe', e.target.value)}
+                        className="w-full input-field py-2 px-3"
+                      >
+                        <option value="">—</option>
+                        {[6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-iron-500 mb-1">Pain Level</label>
+                      <select
+                        value={set.painLevel || 0}
+                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'painLevel', parseInt(e.target.value) || 0)}
+                        className="w-full input-field py-2 px-3"
+                      >
+                        <option value="0">None</option>
+                        {[1,2,3,4,5,6,7,8,9,10].map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              ))}
+            </div>
+
+            {/* Add Set Button */}
+            <button
+              onClick={() => addSet(exerciseIndex)}
+              className="mt-3 w-full py-2.5 border border-dashed border-iron-700 rounded-lg
+                text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600
+                flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Set
+            </button>
+
+            {/* Exercise Notes */}
+            <div className="mt-4">
+              <label className="block text-xs text-iron-500 mb-1">Notes for {exercise.name}</label>
+              <textarea
+                value={exercise.notes || ''}
+                onChange={(e) => updateExerciseNotes(exerciseIndex, e.target.value)}
+                placeholder="How did this exercise feel?"
+                rows={2}
+                className="w-full input-field text-sm resize-none"
+              />
+            </div>
+          </div>
+        )})}
+      </div>
+
+      {/* Bottom Actions */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
+        <div className="flex gap-3 mb-3">
+          <button onClick={() => setIsLogging(false)} className="btn-secondary flex-1 py-3">Cancel</button>
+          <button onClick={handleSaveProgress} disabled={saving} className="btn-secondary flex-1 py-3">Save Progress</button>
+        </div>
+        <button onClick={handleComplete} disabled={saving} className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2">
+          {saving ? 'Saving...' : <><Check className="w-5 h-5" />{
+            needsReview ? 'Save Changes' : isCompleted ? 'Update' : 'Complete'
+          }</>}
+        </button>
+        <p className="text-xs text-iron-500 text-center mt-2">
+          {needsReview ? 'Your changes will replace coach data' : 'Empty fields filled with targets'}
+        </p>
+      </div>
+
+      {/* RPE Info Modal */}
+      {rpeModalOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-iron-900 rounded-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-xl text-iron-100">RPE Scale</h3>
+              <button onClick={() => setRpeModalOpen(false)} className="p-2 text-iron-400 hover:text-iron-200"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-iron-400 text-sm mb-4">Rate of Perceived Exertion</p>
+            <div className="space-y-2">
+              {[
+                { value: 10, label: 'Max effort - could not do more' },
+                { value: 9, label: 'Very hard - 1 rep left' },
+                { value: 8, label: 'Hard - 2 reps left' },
+                { value: 7, label: 'Challenging - 3 reps left' },
+                { value: 6, label: 'Moderate - 4+ reps left' },
+              ].map(({ value, label }) => (
+                <div key={value} className="flex items-center gap-3 text-sm">
+                  <span className="w-8 h-8 rounded-lg bg-flame-500/20 text-flame-400 flex items-center justify-center font-medium">{value}</span>
+                  <span className="text-iron-300">{label}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-        
-        {/* Right column - Options & Results (shows first on mobile) */}
-        <div className="lg:col-span-2 order-1 lg:order-2">
-          {loading ? (
-            /* Full-panel AI Thinking Display */
-            <div className="space-y-4">
-              <div className="bg-iron-800/30 rounded-xl border border-flame-500/20 overflow-hidden">
-                <div className="flex items-center gap-2 p-4 border-b border-iron-700/50 bg-flame-500/5">
-                  <div className="w-8 h-8 rounded-lg bg-flame-500/20 flex items-center justify-center">
-                    <Brain className="w-4 h-4 text-flame-400 animate-pulse" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-iron-200">AI is generating your workout...</h3>
-                    <p className="text-xs text-iron-500">{workoutFocus !== 'auto' ? workoutFocus : 'Auto'} · {intensity} intensity{prompt ? ` · "${prompt.slice(0, 40)}${prompt.length > 40 ? '...' : ''}"` : ''}</p>
-                  </div>
-                  <Loader2 className="w-5 h-5 text-flame-400 animate-spin ml-auto" />
-                </div>
-                <div 
-                  ref={thinkingRef}
-                  className="p-4 max-h-[400px] overflow-y-auto space-y-2.5 scrollbar-thin"
-                >
-                  {thinkingMessages.map((msg) => (
-                    <motion.div
-                      key={msg.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="flex items-start gap-3 py-1"
-                    >
-                      <div className="mt-0.5 flex-shrink-0 w-5 h-5 rounded bg-iron-800 flex items-center justify-center">
-                        {getThinkingIcon(msg.icon)}
-                      </div>
-                      <p className="text-sm text-iron-300 leading-relaxed">{msg.text}</p>
-                    </motion.div>
-                  ))}
-                  <div className="flex items-center gap-1.5 pt-2">
-                    <span className="w-1.5 h-1.5 bg-flame-400 rounded-full animate-pulse" />
-                    <span className="w-1.5 h-1.5 bg-flame-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
-                    <span className="w-1.5 h-1.5 bg-flame-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : !generatedWorkout ? (
-            <div className="card-steel rounded-xl p-6">
-              <h3 className="font-medium text-iron-200 mb-4">Workout Options</h3>
-              
-              <div className="mb-4">
-                <label className="block text-sm text-iron-400 mb-2">Describe your workout (optional)</label>
-                <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="e.g., 'Heavy bench day with tricep accessories' or 'Similar to last week but more volume'"
-                  className="input-field w-full min-h-[80px] resize-none"
-                />
-              </div>
-              
-              <div className="mb-4">
-                <label className="block text-sm text-iron-400 mb-2">Style</label>
-                <div className="flex flex-wrap gap-2">
-                  {focusOptions.map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setWorkoutFocus(opt.value)}
-                      className={`px-3 py-1.5 text-sm rounded-lg border transition-colors
-                        ${workoutFocus === opt.value
-                          ? 'border-flame-500 bg-flame-500/10 text-flame-400'
-                          : 'border-iron-700 text-iron-400 hover:border-iron-600'
-                        }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="mb-6">
-                <label className="block text-sm text-iron-400 mb-2">Intensity</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {intensityOptions.map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setIntensity(opt.value)}
-                      className={`px-3 py-2 text-sm rounded-lg border transition-colors text-center
-                        ${intensity === opt.value
-                          ? 'border-flame-500 bg-flame-500/10 text-flame-400'
-                          : 'border-iron-700 text-iron-400 hover:border-iron-600'
-                        }`}
-                    >
-                      <div className="font-medium">{opt.label}</div>
-                      <div className="text-xs text-iron-500">{opt.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="mb-6">
-                <label className="block text-sm text-iron-400 mb-2">AI Model</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setModel('standard')}
-                    className={`px-4 py-3 text-sm rounded-lg border transition-colors text-left
-                      ${model === 'standard'
-                        ? 'border-flame-500 bg-flame-500/10 text-flame-400'
-                        : 'border-iron-700 text-iron-400 hover:border-iron-600'
-                      }`}
-                  >
-                    <div className="font-medium flex items-center gap-2"><Zap className="w-4 h-4" />Standard</div>
-                    <div className="text-xs text-iron-500 mt-1">GPT-4o-mini · Fast</div>
-                  </button>
-                  <button
-                    onClick={() => isAdmin && setModel('premium')}
-                    disabled={!isAdmin}
-                    className={`px-4 py-3 text-sm rounded-lg border transition-colors text-left relative
-                      ${model === 'premium'
-                        ? 'border-purple-500 bg-purple-500/10 text-purple-400'
-                        : !isAdmin 
-                          ? 'border-iron-800 text-iron-600 cursor-not-allowed opacity-60'
-                          : 'border-iron-700 text-iron-400 hover:border-iron-600'
-                      }`}
-                  >
-                    <div className="font-medium flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" />Premium
-                      {!isAdmin && <Lock className="w-3 h-3" />}
-                    </div>
-                    <div className="text-xs text-iron-500 mt-1">GPT-4o · Higher quality</div>
-                  </button>
-                </div>
-              </div>
-              
-              <button
-                onClick={handleGenerate}
-                disabled={loading || loadingContext || (!isAdmin && (userProfile?.credits ?? 0) < CREDIT_COSTS['generate-workout'])}
-                className="btn-primary w-full flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" />Generating...</>
-                ) : (
-                  <><Sparkles className="w-5 h-5" />Generate Workout<span className="text-xs opacity-70 ml-1">({CREDIT_COSTS['generate-workout']} credits)</span></>
-                )}
-              </button>
-              
-              {error && (
-                <p className="text-red-400 text-sm mt-3 text-center">{error}</p>
-              )}
-            </div>
-          ) : (
-            /* Generated Workout Preview (Draft) */
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="card-steel rounded-xl overflow-hidden"
-            >
-              <div className="p-6 border-b border-iron-800">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-medium">Draft</span>
-                    </div>
-                    {editing ? (
-                      <input
-                        type="text"
-                        value={generatedWorkout.name}
-                        onChange={(e) => setGeneratedWorkout(prev => ({ ...prev, name: e.target.value }))}
-                        className="input-field w-full text-xl font-semibold"
-                      />
-                    ) : (
-                      <h2 className="text-xl font-semibold text-iron-100">{generatedWorkout.name}</h2>
-                    )}
-                    {generatedWorkout.description && !editing && (
-                      <p className="text-iron-400 mt-1">{generatedWorkout.description}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => setEditing(!editing)} 
-                      className={`p-2 rounded-xl transition-colors ${editing ? 'text-flame-400 bg-flame-500/10' : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'}`}
-                      title={editing ? 'Done editing' : 'Edit workout'}
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button onClick={handleReset} className="p-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-xl" title="Start over">
-                      <RefreshCw className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-                
-                {usageInfo && (
-                  <p className="text-xs text-iron-600 mt-2">
-                    {usageInfo.tokens} tokens · {usageInfo.responseMs}ms · {usageInfo.cost}
-                  </p>
-                )}
-              </div>
-              
-              {/* Coaching notes */}
-              {generatedWorkout.notes && !editing && (
-                <div className="border-b border-iron-800">
-                  <div className="flex items-center gap-2 px-6 pt-3">
-                    <Brain className="w-4 h-4 text-flame-400" />
-                    <span className="text-xs text-iron-500 uppercase tracking-wider">Coaching Notes</span>
-                  </div>
-                  <div className="px-6 py-3 max-h-32 overflow-y-auto">
-                    <p className="text-sm text-iron-400 leading-relaxed">{generatedWorkout.notes}</p>
-                  </div>
-                </div>
-              )}
-              
-              {/* Exercises */}
-              <div className="divide-y divide-iron-800">
-                {generatedWorkout.exercises?.map((ex, i) => {
-                  const typeTag = getExerciseTypeTag(ex);
-                  const type = ex.type || 'weight';
-                  return (
-                    <div key={i} className="p-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-8 h-8 rounded-lg bg-iron-800 flex items-center justify-center text-iron-400 text-sm font-medium">
-                          {i + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          {editing ? (
-                            <input
-                              type="text"
-                              value={ex.name}
-                              onChange={(e) => updateExerciseName(i, e.target.value)}
-                              className="input-field w-full text-sm font-medium"
-                            />
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-medium text-iron-100">{ex.name}</h4>
-                              {typeTag && (
-                                <span className={`text-xs px-1.5 py-0.5 rounded ${typeTag.color}`}>{typeTag.label}</span>
-                              )}
-                            </div>
-                          )}
-                          {ex.notes && !editing && <p className="text-xs text-iron-500 mt-0.5">{ex.notes}</p>}
-                        </div>
-                        {editing && (
-                          <button onClick={() => removeExercise(i)} className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                      
-                      <div className="ml-11 space-y-1">
-                        {ex.sets?.map((set, j) => (
-                          <div key={j} className="flex items-center gap-3 text-sm">
-                            <span className="text-iron-500 w-12">Set {j + 1}</span>
-                            {editing ? (
-                              <div className="flex items-center gap-2 flex-1">
-                                {type === 'time' ? (
-                                  <input type="text" value={set.prescribedTime || ''} onChange={(e) => updateSet(i, j, 'prescribedTime', e.target.value)} className="input-field w-20 text-sm py-1" placeholder="sec" />
-                                ) : type === 'bodyweight' ? (
-                                  <input type="text" value={set.prescribedReps || ''} onChange={(e) => updateSet(i, j, 'prescribedReps', e.target.value)} className="input-field w-20 text-sm py-1" placeholder="reps" />
-                                ) : (
-                                  <>
-                                    <input type="text" value={set.prescribedWeight || ''} onChange={(e) => updateSet(i, j, 'prescribedWeight', e.target.value)} className="input-field w-20 text-sm py-1" placeholder="lbs" />
-                                    <span className="text-iron-500">×</span>
-                                    <input type="text" value={set.prescribedReps || ''} onChange={(e) => updateSet(i, j, 'prescribedReps', e.target.value)} className="input-field w-20 text-sm py-1" placeholder="reps" />
-                                  </>
-                                )}
-                                <button onClick={() => removeSet(i, j)} className="p-1 text-iron-600 hover:text-red-400">
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </div>
-                            ) : (
-                              <>
-                                <span className="text-iron-300">{formatSetDisplay(set, type)}</span>
-                                {set.targetRpe && (
-                                  <span className="text-iron-500">@ RPE {set.targetRpe}</span>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        ))}
-                        {editing && (
-                          <button onClick={() => addSet(i)} className="text-xs text-flame-400 hover:text-flame-300 mt-1 flex items-center gap-1">
-                            <Plus className="w-3 h-3" /> Add set
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              
-              {/* Actions */}
-              <div className="p-4 border-t border-iron-800 flex gap-3">
-                <button onClick={handleReset} className="btn-secondary flex-1">Regenerate</button>
-                <button 
-                  onClick={handleAddWorkout} 
-                  disabled={saving}
-                  className="btn-primary flex-1 flex items-center justify-center gap-2"
-                >
-                  {saving ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" />Saving...</>
-                  ) : (
-                    <><Plus className="w-5 h-5" />Add to Workouts</>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
-  );
+  )
 }

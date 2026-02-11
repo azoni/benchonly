@@ -50,6 +50,8 @@ export default function GenerateWorkoutPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, userProfile, updateProfile, isAppAdmin } = useAuth();
+
+  console.log('[DEBUG] GenerateWorkoutPage mounted, URL:', window.location.pathname, window.location.search);
   
   // Parse program context from URL if coming from a program
   const [programContext] = useState(() => {
