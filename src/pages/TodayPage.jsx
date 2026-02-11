@@ -604,14 +604,16 @@ export default function TodayPage() {
               const hadWorkout = weekCompletedDates.has(dayStr)
               const hasScheduled = weekScheduledDates.has(dayStr)
               const dayWorkout = weekDayWorkouts[dayStr]
-              const isClickable = !!dayWorkout
 
               const handleDayClick = () => {
-                if (!dayWorkout) return
-                if (dayWorkout.type === 'group') {
-                  navigate(`/workouts/group/${dayWorkout.id}`)
+                if (dayWorkout) {
+                  if (dayWorkout.type === 'group') {
+                    navigate(`/workouts/group/${dayWorkout.id}`)
+                  } else {
+                    navigate(`/workouts/${dayWorkout.id}`)
+                  }
                 } else {
-                  navigate(`/workouts/${dayWorkout.id}`)
+                  navigate(`/workouts/generate?date=${dayStr}`)
                 }
               }
 
@@ -622,7 +624,6 @@ export default function TodayPage() {
                   </span>
                   <button
                     onClick={handleDayClick}
-                    disabled={!isClickable}
                     className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium transition-colors ${
                       isCurrentDay
                         ? hadWorkout
@@ -635,7 +636,7 @@ export default function TodayPage() {
                             : isPastDay
                               ? 'bg-iron-800/50 text-iron-600'
                               : 'bg-iron-800/30 text-iron-600'
-                    } ${isClickable ? 'cursor-pointer hover:ring-2 hover:ring-flame-500/30' : 'cursor-default'}`}
+                    } cursor-pointer hover:ring-2 hover:ring-flame-500/30`}
                   >
                     {format(dayDate, 'd')}
                   </button>

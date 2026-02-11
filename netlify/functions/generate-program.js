@@ -107,6 +107,14 @@ PAIN GUIDELINES:
 
     // Build goal description
     let goalDescription
+    const liftScheduleHint = lifts.length > 1
+      ? `\nIMPORTANT: You have ${lifts.length} focus lifts. Rotate them as primary lifts across training days each week. ${
+          daysPerWeek >= lifts.length 
+            ? `Each lift should appear as the primary lift at least once per week.`
+            : `Alternate which lift is primary each week since there are fewer days than lifts.`
+        }`
+      : ''
+
     if (type === 'bodyweight') {
       goalDescription = lifts.length > 0
         ? `Focus exercises: ${lifts.join(', ')}`
@@ -117,8 +125,8 @@ PAIN GUIDELINES:
       goalDescription = lifts.length > 0
         ? `Focus on: ${lifts.join(', ')} (mix of barbell and bodyweight)`
         : 'Mixed strength and bodyweight training'
-      if (currentLevel) goalDescription += `\nCurrent max: ${currentLevel}lb`
-      if (targetLevel) goalDescription += `\nTarget: ${targetLevel}lb`
+      if (currentLevel) goalDescription += `\nCurrent max (barbell lifts): ${currentLevel}lb`
+      if (targetLevel) goalDescription += `\nTarget (barbell lifts): ${targetLevel}lb`
     } else {
       goalDescription = lifts.length > 0
         ? `Primary lifts: ${lifts.join(', ')}`
@@ -126,23 +134,40 @@ PAIN GUIDELINES:
       if (currentLevel) goalDescription += `\nCurrent max: ${currentLevel}lb`
       if (targetLevel) goalDescription += `\nTarget: ${targetLevel}lb`
     }
+    goalDescription += liftScheduleHint
 
-    // Build example day
-    let exampleDay
-    if (type === 'bodyweight') {
-      exampleDay = `{
-          "dayOfWeek": "monday",
+    // Build example days showing rotation
+    let exampleDays
+    if (lifts.length > 1 && daysPerWeek > 1) {
+      const examples = lifts.slice(0, Math.min(daysPerWeek, 3)).map((lift, i) => {
+        const dayOfWeek = trainingDays[i] || trainingDays[0]
+        const isBodyweight = ['Pull-ups', 'Push-ups', 'Dips', 'Plank', 'Handstand Hold', 'Muscle-ups', 'L-sit', 'Pistol Squats'].includes(lift)
+        return `{
+          "dayOfWeek": "${dayOfWeek}",
+          "label": "${isBodyweight ? lift + ' Focus' : 'Heavy ' + lift}",
+          "type": "primary",
+          "intensity": "${isBodyweight ? 'hard' : '75%'}",
+          "primaryLift": "${lift}",
+          "primaryScheme": "${isBodyweight ? '5x5' : '4x6'}",
+          "accessories": ["${isBodyweight ? 'Accessory 3x10' : 'Close variation 3x8'}", "Supporting movement 3x10"],
+          "notes": "Focus on ${lift}. Accessories should support this lift."
+        }`
+      })
+      exampleDays = examples.join(',\n        ')
+    } else if (type === 'bodyweight') {
+      exampleDays = `{
+          "dayOfWeek": "${trainingDays[0]}",
           "label": "Upper Body Pull",
           "type": "primary",
           "intensity": "moderate",
-          "primaryLift": "Pull-ups",
+          "primaryLift": "${primaryLift}",
           "primaryScheme": "5x5",
           "accessories": ["Inverted Rows 3x10", "Dead Hangs 3x30s", "Band Pull-Aparts 3x15"],
           "notes": "Focus on full ROM. Scale with bands if needed."
         }`
     } else {
-      exampleDay = `{
-          "dayOfWeek": "monday",
+      exampleDays = `{
+          "dayOfWeek": "${trainingDays[0]}",
           "label": "Heavy ${primaryLift}",
           "type": "primary",
           "intensity": "75%",
@@ -179,14 +204,17 @@ Design a periodized program. Respond ONLY with valid JSON matching this exact st
       "weekNumber": 1,
       "phase": "Phase Name",
       "days": [
-        ${exampleDay}
+        ${exampleDays}
       ]
     }
   ]
 }
 
-RULES:
+CRITICAL RULES:
 - Each week MUST have exactly ${daysPerWeek} days matching ${JSON.stringify(trainingDays)}
+${lifts.length > 1 ? `- LIFT ROTATION: The athlete selected ${lifts.length} focus lifts (${lifts.join(', ')}). Each training day should have a DIFFERENT primaryLift. Rotate through all of them across the week. Every focus lift must appear as primaryLift regularly.` : ''}
+- WEEKLY VARIATION: Each week MUST be different from the previous week. Change at least one of: intensity, rep scheme, volume, or accessories. DO NOT copy-paste weeks.
+- PROGRESSIVE OVERLOAD: Intensity and/or volume must increase week to week within each phase.
 - Include proper periodization: accumulation → intensification → peak/test
 - Include at least one deload week (reduce volume 40-50%)
 ${type === 'strength' && currentLevel ? `- Intensity percentages are based on the athlete's CURRENT max of ${currentLevel}lb` : ''}
@@ -194,25 +222,28 @@ ${type === 'bodyweight' ? `- For bodyweight exercises, "intensity" should be des
 - "primaryScheme" should use reps for strength moves (e.g. "5x5") and time for holds (e.g. "5x30s", "3x45s")
 - Suggest progressions: add reps, add sets, slow tempo, add weight vest, harder variations` : ''}
 ${type === 'mixed' ? '- Balance barbell/dumbbell work with bodyweight movements across the week\n- Use percentage-based intensity for weighted exercises, descriptive for bodyweight' : ''}
-- The "primaryScheme" is the main compound set/rep scheme (e.g. "5x5", "4x3", "3x1"${type !== 'strength' ? ', "5x30s"' : ''})
-- "accessories" are 2-4 short strings listing supplemental exercises with set/rep
+- "accessories" should DIRECTLY support the primaryLift. E.g. bench day accessories: close-grip bench, tricep work, dumbbell press — NOT squats or deadlifts.
+- Accessories should also vary week to week — don't use the exact same list every week.
 - CRITICAL: Every session must fit within ${duration} minutes. Scale volume accordingly.
 - Follow the PAIN GUIDELINES above if pain history is provided — use the ACTIVE/FADING/RECOVERING categories to decide whether to avoid, modify, or cautiously include exercises
-- Be specific with progression — each week should build on the last
 - The final week should include a test/assessment day
 - Day "type" must be one of: "primary", "volume", "speed", "accessories", "deload", "test"
 - RESPOND WITH ONLY THE JSON, NO MARKDOWN FENCES, NO EXPLANATION`
 
     const startTime = Date.now()
 
+    // Scale max_tokens to program size
+    const estimatedTokensPerWeek = daysPerWeek * 200
+    const neededTokens = Math.min(Math.max(numWeeks * estimatedTokensPerWeek + 500, 4000), 12000)
+
     const completion = await openai.chat.completions.create({
       model: selectedModel,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Create the ${numWeeks}-week ${type} program now.` }
+        { role: 'user', content: `Create the ${numWeeks}-week ${type} program now. Remember: each week must be DIFFERENT with progressive overload.${lifts.length > 1 ? ` Rotate through ${lifts.join(', ')} as primary lifts.` : ''}` }
       ],
       temperature: 0.7,
-      max_tokens: 4000,
+      max_tokens: neededTokens,
     })
 
     const responseTime = Date.now() - startTime

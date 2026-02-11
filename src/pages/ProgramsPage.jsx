@@ -749,7 +749,9 @@ export default function ProgramsPage() {
                 <div>
                   <h2 className="text-lg font-display text-iron-100">{generatedProgram.name}</h2>
                   <p className="text-sm text-iron-500">
-                    {goalLifts.length > 0 ? goalLifts.join(', ') : programType}: {currentMax || '—'} → {targetMax || '—'}lb · {numWeeks} weeks · {trainingDays.length}x/week
+                    {goalLifts.length > 0 ? goalLifts.join(', ') : programType}
+                    {currentMax && targetMax ? `: ${currentMax} → ${targetMax}${programType === 'bodyweight' ? '' : 'lb'}` : currentMax ? ` (current: ${currentMax}${programType === 'bodyweight' ? '' : 'lb'})` : ''}
+                    {' · '}{numWeeks} weeks · {trainingDays.length}x/week
                   </p>
                 </div>
               </div>
@@ -964,7 +966,7 @@ function ProgramCard({ program, onStatusChange, onDelete }) {
             </div>
             <p className="text-sm text-iron-500 mt-0.5">
               {goal.lifts?.length > 0 ? goal.lifts.join(', ') : goal.lift || goal.type || 'Program'}
-              {goal.current ? `: ${goal.current} → ${goal.target}lb` : ''}
+              {goal.current && goal.target ? `: ${goal.current} → ${goal.target}${goal.type === 'bodyweight' ? '' : 'lb'}` : goal.current ? ` (${goal.current}${goal.type === 'bodyweight' ? '' : 'lb'})` : ''}
               {' · '}{startStr} – {endStr}
             </p>
             

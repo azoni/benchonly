@@ -207,17 +207,37 @@ export default function ProgramDetailPage() {
       })
 
       const primaryLift = day.primaryLift || program.goal?.lifts?.[0] || program.goal?.lift || 'Bench Press'
-      const currentE1rm = maxLifts[primaryLift]?.e1rm || program.goal?.current || 0
-      const prompt = `Generate a workout based on this program day:
-Program: ${program.name}
-Week ${weekNumber} — ${day.phase || ''} Phase
-Day Type: ${day.type}
-Label: ${day.label}
-Primary Lift: ${primaryLift} — ${day.primaryScheme} @ ${day.intensity} of current max (${currentE1rm}lb e1RM)
-Accessories: ${(day.accessories || []).join(', ')}
-Coach Notes: ${day.notes || 'none'}
+      const currentE1rm = maxLifts[primaryLift]?.e1rm || (program.goal?.current ? parseFloat(program.goal.current) : 0)
+      
+      // Build a richer prompt with full program context
+      const allProgramLifts = program.goal?.lifts || (program.goal?.lift ? [program.goal.lift] : [])
+      const weekDays = program.weeks?.find(w => w.weekNumber === weekNumber)?.days || []
+      const weekContext = weekDays.map(d => `${d.dayOfWeek}: ${d.label} (${d.primaryLift} ${d.primaryScheme})`).join(', ')
 
-Use actual working weights based on the athlete's data. Calculate from their e1RM.`
+      const prompt = `Generate a workout based on this program day:
+
+PROGRAM: ${program.name}
+PROGRAM TYPE: ${program.programType || 'strength'}
+WEEK ${weekNumber} of ${program.numWeeks || '?'} — ${day.phase || ''} Phase
+ALL PROGRAM LIFTS: ${allProgramLifts.join(', ') || primaryLift}
+THIS WEEK'S SCHEDULE: ${weekContext}
+
+TODAY'S PRESCRIPTION:
+- Day Type: ${day.type}
+- Label: ${day.label}
+- Primary Lift: ${primaryLift}
+- Scheme: ${day.primaryScheme} @ ${day.intensity}${currentE1rm ? ` (athlete's ${primaryLift} e1RM: ${currentE1rm}lb)` : ''}
+- Prescribed Accessories: ${(day.accessories || []).join(', ')}
+- Coach Notes: ${day.notes || 'none'}
+${program.workoutDuration ? `- Target Duration: ~${program.workoutDuration} minutes` : ''}
+
+INSTRUCTIONS:
+- The PRIMARY exercise MUST be ${primaryLift}. This is the main lift for today.
+- Calculate actual working weights from the athlete's e1RM data.
+- Accessories should directly support ${primaryLift} — same muscle groups and movement patterns.
+- Follow the prescribed scheme (${day.primaryScheme}) and intensity (${day.intensity}).
+${day.type === 'deload' ? '- This is a DELOAD day. Reduce volume 40-50%, keep weights light.' : ''}
+${day.type === 'test' ? '- This is a TEST day. Work up to a heavy single or rep max.' : ''}`
 
       const response = await fetch('/.netlify/functions/generate-workout', {
         method: 'POST',
@@ -225,7 +245,7 @@ Use actual working weights based on the athlete's data. Calculate from their e1R
         body: JSON.stringify({
           userId: user.uid,
           prompt,
-          workoutFocus: day.type === 'test' ? 'Testing' : day.type === 'deload' ? 'Recovery' : 'Strength',
+          workoutFocus: day.type === 'test' ? 'Testing' : day.type === 'deload' ? 'Recovery' : `${primaryLift} focused`,
           intensity: day.type === 'deload' ? 'recovery' : day.type === 'volume' ? 'moderate' : 'heavy',
           context: { maxLifts, painHistory, recentWorkouts: workoutsSnap.docs.slice(0, 5).map(d => d.data()) },
           model: isAdmin ? 'premium' : 'standard',
@@ -317,7 +337,7 @@ Use actual working weights based on the athlete's data. Calculate from their e1R
             </div>
             <p className="text-sm text-iron-500">
               {goal.lifts?.length > 0 ? goal.lifts.join(', ') : goal.lift || goal.type || 'Program'}
-              {goal.current ? `: ${goal.current} → ${goal.target}lb` : ''}
+              {goal.current && goal.target ? `: ${goal.current} → ${goal.target}${goal.type === 'bodyweight' ? '' : 'lb'}` : goal.current ? ` (${goal.current}${goal.type === 'bodyweight' ? '' : 'lb'})` : ''}
               {' · '}{startStr} – {endStr}
             </p>
           </div>

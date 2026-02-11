@@ -101,6 +101,11 @@ export default function GenerateWorkoutPage() {
     programContext?.dayType === 'speed' ? 'light' : 'moderate'
   );
   const [model, setModel] = useState('standard');
+  const [workoutDate, setWorkoutDate] = useState(() => {
+    const dateParam = searchParams.get('date')
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return dateParam
+    return new Date().toISOString().split('T')[0]
+  });
   
   const isAdmin = isAppAdmin;
   
@@ -222,8 +227,11 @@ export default function GenerateWorkoutPage() {
       const maxLifts = {};
       const painHistory = {};
       const rpeData = {};
+      const now = new Date();
       
       allWorkouts.forEach(w => {
+        const workoutDate = w.date?.toDate ? w.date.toDate() : w.date ? new Date(w.date) : null;
+        const daysSince = workoutDate && !isNaN(workoutDate.getTime()) ? Math.floor((now - workoutDate) / (1000 * 60 * 60 * 24)) : null;
         (w.exercises || []).forEach(ex => {
           if (!ex.name) return;
           (ex.sets || []).forEach(s => {
@@ -242,9 +250,15 @@ export default function GenerateWorkoutPage() {
               }
             }
             if (pain > 0) {
-              if (!painHistory[ex.name]) painHistory[ex.name] = { count: 0, maxPain: 0 };
+              if (!painHistory[ex.name]) painHistory[ex.name] = { count: 0, maxPain: 0, lastDaysAgo: null, recentCount: 0 };
               painHistory[ex.name].count++;
               painHistory[ex.name].maxPain = Math.max(painHistory[ex.name].maxPain, pain);
+              if (daysSince !== null) {
+                if (painHistory[ex.name].lastDaysAgo === null || daysSince < painHistory[ex.name].lastDaysAgo) {
+                  painHistory[ex.name].lastDaysAgo = daysSince;
+                }
+                if (daysSince <= 30) painHistory[ex.name].recentCount++;
+              }
             }
             if (rpe > 0) {
               if (!rpeData[ex.name]) rpeData[ex.name] = { total: 0, count: 0 };
@@ -398,7 +412,7 @@ export default function GenerateWorkoutPage() {
     try {
       const workoutData = {
         ...generatedWorkout,
-        date: new Date(),
+        date: new Date(workoutDate + 'T12:00:00'),
         status: 'scheduled',
       }
       
@@ -791,6 +805,16 @@ export default function GenerateWorkoutPage() {
                 </div>
               </div>
               
+              <div className="mb-6">
+                <label className="block text-sm text-iron-400 mb-2">Workout Date</label>
+                <input
+                  type="date"
+                  value={workoutDate}
+                  onChange={(e) => setWorkoutDate(e.target.value)}
+                  className="input-field w-full sm:w-auto"
+                />
+              </div>
+
               <div className="mb-6">
                 <label className="block text-sm text-iron-400 mb-2">AI Model</label>
                 <div className="grid grid-cols-2 gap-2">
