@@ -15,6 +15,7 @@ import {
   arrayUnion,
   arrayRemove,
   writeBatch,
+  increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { analyticsService, ACTIONS } from './analyticsService';
@@ -926,6 +927,158 @@ export const tokenUsageService = {
 
     return { records: groupedRecords, summary, users };
   }
+};
+
+// ============ PROGRAMS ============
+export const programService = {
+  async create(userId, programData) {
+    const docRef = await addDoc(collection(db, 'programs'), {
+      ...programData,
+      userId,
+      status: 'active',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return { id: docRef.id, ...programData };
+  },
+
+  async get(programId) {
+    const docSnap = await getDoc(doc(db, 'programs', programId));
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() };
+    }
+    return null;
+  },
+
+  async getByUser(userId) {
+    const q = query(
+      collection(db, 'programs'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  async getActive(userId) {
+    const q = query(
+      collection(db, 'programs'),
+      where('userId', '==', userId),
+      where('status', '==', 'active')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  async update(programId, updates) {
+    const docRef = doc(db, 'programs', programId);
+    await updateDoc(docRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+    return { id: programId, ...updates };
+  },
+
+  async delete(programId) {
+    await deleteDoc(doc(db, 'programs', programId));
+    return programId;
+  },
+
+  // Get the program day for a specific date
+  getProgramDay(program, date) {
+    if (!program?.weeks || !program?.startDate || !program?.trainingDays) return null;
+    
+    const start = program.startDate?.toDate ? program.startDate.toDate() : new Date(program.startDate);
+    const target = new Date(date);
+    const diffDays = Math.floor((target - start) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return null;
+    
+    const weekIndex = Math.floor(diffDays / 7);
+    if (weekIndex >= program.weeks.length) return null;
+    
+    const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][target.getDay()];
+    if (!program.trainingDays.includes(dayOfWeek)) return null;
+    
+    const week = program.weeks[weekIndex];
+    const day = week?.days?.find(d => d.dayOfWeek === dayOfWeek);
+    if (!day) return null;
+    
+    return {
+      ...day,
+      weekNumber: week.weekNumber,
+      phase: week.phase,
+      programId: program.id,
+      programName: program.name,
+    };
+  },
+
+  // Get all program days for a date range (for calendar rendering)
+  getProgramDaysInRange(program, startDate, endDate) {
+    if (!program?.weeks || !program?.startDate || !program?.trainingDays) return [];
+    
+    const days = [];
+    const current = new Date(startDate);
+    const end = new Date(endDate);
+    
+    while (current <= end) {
+      const day = this.getProgramDay(program, current);
+      if (day) {
+        days.push({
+          ...day,
+          date: new Date(current),
+          dateStr: current.toISOString().split('T')[0],
+        });
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return days;
+  },
+};
+
+// ============ CREDITS ============
+export const CREDIT_COSTS = {
+  'ask-assistant': 1,
+  'generate-workout': 5,
+  'generate-group-workout': 5, // per athlete
+  'generate-program': 10,
+};
+
+export const creditService = {
+  async getBalance(userId) {
+    const userRef = doc(db, 'users', userId);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) return 0;
+    return snap.data().credits ?? 0;
+  },
+
+  async deduct(userId, feature, count = 1) {
+    const cost = (CREDIT_COSTS[feature] || 1) * count;
+    const balance = await this.getBalance(userId);
+    if (balance < cost) {
+      return { success: false, balance, cost, error: 'insufficient_credits' };
+    }
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { credits: increment(-cost) });
+    return { success: true, balance: balance - cost, cost };
+  },
+
+  async add(userId, amount) {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { credits: increment(amount) });
+    return { success: true };
+  },
+
+  // Initialize credits for existing users who don't have any
+  async ensureCredits(userId) {
+    const userRef = doc(db, 'users', userId);
+    const snap = await getDoc(userRef);
+    if (snap.exists() && snap.data().credits === undefined) {
+      await updateDoc(userRef, { credits: 50 });
+      return 50;
+    }
+    return snap.exists() ? (snap.data().credits ?? 0) : 0;
+  },
 };
 
 // ============ HEALTH TRACKING ============

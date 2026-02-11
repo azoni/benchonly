@@ -17,12 +17,13 @@ import {
   Activity,
   TrendingUp,
   Settings,
-  Save
+  Save,
+  Zap
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { collection, getDocs, query, orderBy, limit, doc, setDoc, getDoc } from 'firebase/firestore'
 import { db } from '../services/firebase'
-import { workoutService, goalService } from '../services/firestore'
+import { workoutService, goalService, creditService } from '../services/firestore'
 import { analyticsService } from '../services/analyticsService'
 import { format, formatDistanceToNow } from 'date-fns'
 
@@ -52,6 +53,8 @@ export default function AdminPage() {
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const [creditAmount, setCreditAmount] = useState('')
+  const [creditLoading, setCreditLoading] = useState(false)
   const [activityLoading, setActivityLoading] = useState(false)
   const [usageData, setUsageData] = useState([])
   const [usageLoading, setUsageLoading] = useState(false)
@@ -105,6 +108,7 @@ export default function AdminPage() {
   const selectUser = async (selectedUserData) => {
     setSelectedUser(selectedUserData)
     setImpersonating(selectedUserData)
+    setCreditAmount('')
     
     // Load user's workouts and goals
     try {
@@ -116,6 +120,29 @@ export default function AdminPage() {
       setUserGoals(goals)
     } catch (error) {
       console.error('Error loading user data:', error)
+    }
+  }
+
+  const handleAddCredits = async () => {
+    if (!selectedUser || !creditAmount) return
+    const amount = parseInt(creditAmount)
+    if (isNaN(amount) || amount === 0) return
+    
+    setCreditLoading(true)
+    try {
+      await creditService.add(selectedUser.uid, amount)
+      // Update local state
+      const newCredits = (selectedUser.credits ?? 0) + amount
+      setSelectedUser(prev => ({ ...prev, credits: newCredits }))
+      setUsers(prev => prev.map(u => 
+        u.uid === selectedUser.uid ? { ...u, credits: newCredits } : u
+      ))
+      setCreditAmount('')
+    } catch (error) {
+      console.error('Error adding credits:', error)
+      alert('Failed to add credits')
+    } finally {
+      setCreditLoading(false)
     }
   }
 
@@ -429,7 +456,14 @@ export default function AdminPage() {
                       <p className="font-medium text-iron-100 truncate">
                         {u.displayName || 'No Name'}
                       </p>
-                      <p className="text-sm text-iron-500 truncate">{u.email}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-iron-500 truncate">{u.email}</p>
+                        {u.credits !== undefined && (
+                          <span className="flex items-center gap-0.5 text-xs text-flame-400 flex-shrink-0">
+                            <Zap className="w-3 h-3" />{u.credits}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -465,7 +499,7 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="text-center p-3 bg-iron-800/50 rounded-lg">
                     <Dumbbell className="w-5 h-5 text-flame-400 mx-auto mb-1" />
                     <p className="text-lg font-display text-iron-100">{userWorkouts.length}</p>
@@ -483,6 +517,51 @@ export default function AdminPage() {
                     </p>
                     <p className="text-xs text-iron-500">Scheduled</p>
                   </div>
+                  <div className="text-center p-3 bg-iron-800/50 rounded-lg">
+                    <Zap className="w-5 h-5 text-flame-400 mx-auto mb-1" />
+                    <p className="text-lg font-display text-iron-100">{selectedUser.credits ?? 0}</p>
+                    <p className="text-xs text-iron-500">Credits</p>
+                  </div>
+                </div>
+
+                {/* Credit Management */}
+                <div className="mt-4 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-flame-400 flex-shrink-0" />
+                  <span className="text-sm text-iron-400 flex-shrink-0">Add credits:</span>
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    {[10, 25, 50, 100].map(amt => (
+                      <button
+                        key={amt}
+                        onClick={() => setCreditAmount(String(amt))}
+                        className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                          creditAmount === String(amt)
+                            ? 'bg-flame-500 text-white'
+                            : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                        }`}
+                      >
+                        +{amt}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    value={creditAmount}
+                    onChange={(e) => setCreditAmount(e.target.value)}
+                    placeholder="Custom"
+                    className="input-field w-20 text-sm py-1"
+                  />
+                  <button
+                    onClick={handleAddCredits}
+                    disabled={creditLoading || !creditAmount}
+                    className="btn-primary text-sm py-1 px-3 flex items-center gap-1 disabled:opacity-40"
+                  >
+                    {creditLoading ? (
+                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Plus className="w-3 h-3" />
+                    )}
+                    Add
+                  </button>
                 </div>
               </div>
 

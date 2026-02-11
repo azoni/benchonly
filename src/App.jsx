@@ -21,9 +21,12 @@ import AdminPage from './pages/AdminPage'
 import FeedPage from './pages/FeedPage'
 import ProfilePage from './pages/ProfilePage'
 import GenerateWorkoutPage from './pages/GenerateWorkoutPage'
+import ProgramsPage from './pages/ProgramsPage'
+import ProgramDetailPage from './pages/ProgramDetailPage'
+import OnboardingPage from './pages/OnboardingPage'
 
 function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, userProfile, loading, isGuest } = useAuth()
   
   if (loading) {
     return (
@@ -38,6 +41,32 @@ function ProtectedRoute({ children }) {
   
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  // Redirect new users to onboarding (skip for guests)
+  if (!isGuest && userProfile && userProfile.onboardingComplete === false) {
+    return <Navigate to="/onboarding" replace />
+  }
+  
+  return children
+}
+
+function OnboardingRoute({ children }) {
+  const { user, userProfile, loading, isGuest } = useAuth()
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-iron-950 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-flame-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+  
+  if (!user) return <Navigate to="/login" replace />
+  
+  // Already onboarded? Go to today
+  if (isGuest || userProfile?.onboardingComplete !== false) {
+    return <Navigate to="/today" replace />
   }
   
   return children
@@ -99,6 +128,15 @@ export default function App() {
       
       <Route path="/guest" element={<GuestRoute />} />
       
+      <Route 
+        path="/onboarding" 
+        element={
+          <OnboardingRoute>
+            <OnboardingPage />
+          </OnboardingRoute>
+        } 
+      />
+      
       <Route
         path="/"
         element={
@@ -117,6 +155,8 @@ export default function App() {
         <Route path="workouts/:id/edit" element={<NewWorkoutPage />} />
         <Route path="workouts/group/:id" element={<GroupWorkoutPage />} />
         <Route path="calendar" element={<CalendarPage />} />
+        <Route path="programs" element={<ProgramsPage />} />
+        <Route path="programs/:id" element={<ProgramDetailPage />} />
         <Route path="groups" element={<GroupsPage />} />
         <Route path="groups/:id" element={<GroupDetailPage />} />
         <Route path="goals" element={<GoalsPage />} />

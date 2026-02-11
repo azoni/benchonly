@@ -25,6 +25,8 @@ import {
   Plus,
   X,
   Timer,
+  Zap,
+  Download,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
@@ -33,7 +35,7 @@ import { ACTIVITY_LEVELS } from '../services/calorieService'
 import { userService, tokenUsageService } from '../services/firestore'
 
 export default function SettingsPage() {
-  const { user, userProfile, updateProfile } = useAuth()
+  const { user, userProfile, updateProfile, isGuest } = useAuth()
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [photoURL, setPhotoURL] = useState(userProfile?.photoURL || user?.photoURL)
@@ -765,6 +767,36 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* AI Credits */}
+      {!isGuest && (
+        <div className="card-steel p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-flame-500/20 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-flame-400" />
+              </div>
+              <div>
+                <p className="font-medium text-iron-200">AI Credits</p>
+                <p className="text-xs text-iron-500">Used for AI chat & workout generation</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-display text-iron-100">{userProfile?.credits ?? 0}</p>
+              <p className="text-xs text-iron-500">remaining</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-iron-500 bg-iron-800/30 rounded-lg px-3 py-2">
+            <span>Chat = 1 cr</span>
+            <span className="text-iron-700">·</span>
+            <span>Workout = 5 cr</span>
+            <span className="text-iron-700">·</span>
+            <span>Group = 5 cr/athlete</span>
+            <span className="text-iron-700">·</span>
+            <span>Program = 10 cr</span>
+          </div>
+        </div>
+      )}
+
       {/* Preferences */}
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-iron-400 px-1">Preferences</h3>
@@ -958,6 +990,27 @@ export default function SettingsPage() {
 
       </div>
 
+      {/* Install App */}
+      {!window.matchMedia('(display-mode: standalone)').matches && (
+        <div className="space-y-3 mt-8">
+          <h3 className="text-sm font-medium text-iron-400 px-1">Install</h3>
+          <div className="card-steel p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-flame-500/20 flex items-center justify-center">
+              <Download className="w-5 h-5 text-flame-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-iron-200">Add to Home Screen</p>
+              <p className="text-sm text-iron-500">
+                {/iPad|iPhone|iPod/.test(navigator.userAgent)
+                  ? 'Tap the Share button → "Add to Home Screen"'
+                  : 'Install as an app for the best experience'
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Account */}
       <div className="space-y-3 mt-8">
         <h3 className="text-sm font-medium text-iron-400 px-1">Account</h3>
@@ -1006,7 +1059,7 @@ export default function SettingsPage() {
 
       {/* Version */}
       <div className="mt-12 text-center text-sm text-iron-600">
-        <p>Bench Only v1.2.0</p>
+        <p>Bench Only v1.3.0</p>
         <p className="mt-1">Made with 💪 for serious lifters</p>
       </div>
     </div>

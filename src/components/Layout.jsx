@@ -17,10 +17,13 @@ import {
   LayoutDashboard,
   Activity,
   Bell,
+  Zap,
+  Layers,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
 import AIChatPanel from './AIChatPanel';
+import InstallPrompt from './InstallPrompt';
 import { analyticsService } from '../services/analyticsService';
 import { groupWorkoutService } from '../services/firestore';
 import { notificationService } from '../services/feedService';
@@ -30,6 +33,7 @@ const ADMIN_EMAILS = ['charltonuw@gmail.com'];
 const baseNavItems = [
   { path: '/today', icon: Home, label: 'Today', badgeKey: 'workouts' },
   { path: '/workouts', icon: Dumbbell, label: 'Workouts' },
+  { path: '/programs', icon: Layers, label: 'Programs' },
   { path: '/groups', icon: Users, label: 'Groups' },
   { path: '/feed', icon: Activity, label: 'Feed' },
   { path: '/goals', icon: Target, label: 'Goals' },
@@ -167,6 +171,15 @@ export default function Layout() {
 
         {/* User Section */}
         <div className="p-4 border-t border-iron-800">
+          {!isGuest && sidebarOpen && userProfile?.credits !== undefined && (
+            <Link
+              to="/settings"
+              className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-iron-800/50 hover:bg-iron-800 transition-colors"
+            >
+              <Zap className="w-4 h-4 text-flame-400" />
+              <span className="text-sm text-iron-300"><span className="font-medium text-iron-200">{userProfile.credits}</span> credits</span>
+            </Link>
+          )}
           <div className={`flex items-center gap-3 ${sidebarOpen ? '' : 'justify-center'}`}>
             <img
               src={user?.photoURL || '/default-avatar.png'}
@@ -221,6 +234,15 @@ export default function Layout() {
           </Link>
           
           <div className="flex items-center gap-1">
+            {!isGuest && userProfile?.credits !== undefined && (
+              <Link
+                to="/settings"
+                className="flex items-center gap-1 px-2 py-1 rounded-full bg-iron-800/80 mr-1"
+              >
+                <Zap className="w-3 h-3 text-flame-400" />
+                <span className="text-xs font-medium text-iron-300">{userProfile.credits}</span>
+              </Link>
+            )}
             {unreadNotifCount > 0 && (
               <Link
                 to="/feed"
@@ -366,6 +388,7 @@ export default function Layout() {
       </button>
 
       {/* AI Chat Panel */}
+      <InstallPrompt />
       <AIChatPanel />
     </div>
   );

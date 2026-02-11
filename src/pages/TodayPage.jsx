@@ -26,6 +26,7 @@ import {
   scheduleService,
   goalService,
   userService,
+  programService,
 } from '../services/firestore'
 import { feedService } from '../services/feedService'
 import { notificationService } from '../services/feedService'
@@ -47,6 +48,7 @@ export default function TodayPage() {
   const [feedItems, setFeedItems] = useState([])
   const [feedUsers, setFeedUsers] = useState({})
   const [goals, setGoals] = useState([])
+  const [todayProgramDay, setTodayProgramDay] = useState(null)
   const [loading, setLoading] = useState(true)
 
   // 1RM Calculator state
@@ -138,6 +140,14 @@ export default function TodayPage() {
       setPendingReviews(reviews)
       setGoals(goalsData.filter(g => g.status === 'active'))
 
+      // Load active programs and check for today's program day
+      programService.getActive(user.uid).then(progs => {
+        for (const prog of progs) {
+          const pd = programService.getProgramDay(prog, now)
+          if (pd) { setTodayProgramDay(pd); break }
+        }
+      }).catch(() => {})
+
       // Load feed + users + notifications in background (doesn't block page render)
       Promise.all([
         feedService.getFeed(5),
@@ -210,6 +220,20 @@ export default function TodayPage() {
         completed: completedDates.size,
         total: Math.max(scheduledThisWeek, completedDates.size),
       })
+
+      // Load today's program day
+      try {
+        const activeProgs = await programService.getActive(user.uid)
+        for (const prog of activeProgs) {
+          const pd = programService.getProgramDay(prog, now)
+          if (pd) {
+            setTodayProgramDay(pd)
+            break
+          }
+        }
+      } catch (e) {
+        console.error('Error loading program day:', e)
+      }
     } catch (error) {
       console.error('Error loading today data:', error)
     } finally {
@@ -226,7 +250,7 @@ export default function TodayPage() {
     }
   }
 
-  const hasTodayWorkout = todayWorkouts.length > 0 || todayGroupWorkouts.length > 0 || todaySchedules.length > 0
+  const hasTodayWorkout = todayWorkouts.length > 0 || todayGroupWorkouts.length > 0 || todaySchedules.length > 0 || todayProgramDay
   const allCompleted = todayWorkouts.length > 0 && todayWorkouts.every(w => w.status === 'completed' || w.status !== 'scheduled')
 
   if (loading) {
@@ -445,6 +469,37 @@ export default function TodayPage() {
               </div>
             ))}
           </div>
+        )}
+
+        {/* Program Day */}
+        {todayProgramDay && !todayWorkouts.some(w => w.programId === todayProgramDay.programId) && (
+          <Link
+            to={`/programs/${todayProgramDay.programId}`}
+            className="card-steel p-5 border-amber-500/20 hover:border-amber-500/40 transition-colors block"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                <Target className="w-7 h-7 text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-lg text-iron-100 truncate">{todayProgramDay.label}</h3>
+                  <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-500/20 text-amber-400 flex-shrink-0">
+                    {todayProgramDay.type}
+                  </span>
+                </div>
+                <p className="text-sm text-iron-500 mt-0.5">
+                  {todayProgramDay.programName} · Wk {todayProgramDay.weekNumber} · {todayProgramDay.phase}
+                </p>
+                <p className="text-xs text-amber-400 mt-1">
+                  {todayProgramDay.primaryLift}: {todayProgramDay.primaryScheme} @ {todayProgramDay.intensity}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 text-flame-400 flex-shrink-0">
+                <Sparkles className="w-4 h-4" />
+              </div>
+            </div>
+          </Link>
         )}
 
         {/* Empty state — nothing today */}

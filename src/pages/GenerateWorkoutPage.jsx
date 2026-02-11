@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles,
@@ -28,7 +28,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { workoutService } from '../services/firestore';
+import { workoutService, creditService, CREDIT_COSTS, programService } from '../services/firestore';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
@@ -48,7 +48,16 @@ const THINKING_MESSAGES = [
 
 export default function GenerateWorkoutPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { user, userProfile, updateProfile } = useAuth();
+  
+  // Parse program context from URL if coming from a program
+  const [programContext] = useState(() => {
+    try {
+      const ctx = searchParams.get('programContext')
+      return ctx ? JSON.parse(ctx) : null
+    } catch { return null }
+  });
   
   const [loading, setLoading] = useState(false);
   const [loadingContext, setLoadingContext] = useState(true);
@@ -71,9 +80,26 @@ export default function GenerateWorkoutPage() {
     recentWorkouts: [], goals: [], maxLifts: {}, painHistory: {}, rpeAverages: {}, cardioHistory: [],
   });
   
-  const [prompt, setPrompt] = useState('');
-  const [workoutFocus, setWorkoutFocus] = useState('auto');
-  const [intensity, setIntensity] = useState('moderate');
+  const [prompt, setPrompt] = useState(() => {
+    if (!programContext) return ''
+    const parts = [`Program: ${programContext.programName} — Week ${programContext.weekNumber} (${programContext.phase})`]
+    parts.push(`Day: ${programContext.dayLabel} (${programContext.dayType})`)
+    parts.push(`Primary: ${programContext.primaryLift} ${programContext.primaryScheme} @ ${programContext.intensity}`)
+    if (programContext.accessories?.length > 0) {
+      parts.push(`Accessories: ${programContext.accessories.join(', ')}`)
+    }
+    if (programContext.notes) {
+      parts.push(`Notes: ${programContext.notes}`)
+    }
+    parts.push('\nGenerate this workout following the program prescription above. Use my actual performance data to calculate working weights.')
+    return parts.join('\n')
+  });
+  const [workoutFocus, setWorkoutFocus] = useState(programContext ? 'bench' : 'auto');
+  const [intensity, setIntensity] = useState(
+    programContext?.dayType === 'deload' ? 'recovery' :
+    programContext?.dayType === 'test' ? 'max' :
+    programContext?.dayType === 'speed' ? 'light' : 'moderate'
+  );
   const [model, setModel] = useState('standard');
   
   const isAdmin = user?.email === 'charltonuw@gmail.com';
@@ -295,12 +321,24 @@ export default function GenerateWorkoutPage() {
   };
   
   const handleGenerate = async () => {
+    // Check credits
+    const credits = userProfile?.credits ?? 0;
+    const cost = CREDIT_COSTS['generate-workout'];
+    if (credits < cost) {
+      setError(`Not enough credits. You need ${cost} credits but have ${credits}. Check Settings for your usage.`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     addAnalysisStep('Generating workout', 'loading');
     startThinkingAnimation();
     
     try {
+      // Deduct credits upfront
+      await creditService.deduct(user.uid, 'generate-workout');
+      updateProfile({ credits: credits - cost });
+
       const response = await fetch('/.netlify/functions/generate-workout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -334,6 +372,9 @@ export default function GenerateWorkoutPage() {
     } catch (err) {
       console.error('Generation error:', err);
       setError(err.message);
+      // Refund credits on failure
+      await creditService.add(user.uid, cost).catch(() => {});
+      updateProfile({ credits });
       stopThinkingAnimation();
       setThinkingMessages(prev => [...prev, { 
         text: `Error: ${err.message}`, icon: 'error', id: prev.length 
@@ -348,11 +389,34 @@ export default function GenerateWorkoutPage() {
     if (!generatedWorkout) return;
     setSaving(true);
     try {
-      const result = await workoutService.create(user.uid, {
+      const workoutData = {
         ...generatedWorkout,
         date: new Date(),
         status: 'scheduled',
-      });
+      }
+      
+      // Tag workout with program info if from a program
+      if (programContext) {
+        workoutData.programId = programContext.programId
+        workoutData.programWeek = programContext.weekNumber
+        workoutData.programDayLabel = programContext.dayLabel
+      }
+      
+      const result = await workoutService.create(user.uid, workoutData);
+      
+      // Mark program day as completed
+      if (programContext?.programId && programContext?.dayKey) {
+        try {
+          const prog = await programService.get(programContext.programId)
+          if (prog) {
+            const completedDays = [...(prog.completedDays || []), programContext.dayKey]
+            await programService.update(programContext.programId, { completedDays })
+          }
+        } catch (err) {
+          console.error('Failed to mark program day complete:', err)
+        }
+      }
+      
       navigate(`/workouts/${result.id}`);
     } catch (err) {
       console.error('Save error:', err);
@@ -456,17 +520,50 @@ export default function GenerateWorkoutPage() {
   
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Program context banner */}
+      {programContext && (
+        <div className="mb-4 p-3 bg-flame-500/10 border border-flame-500/20 rounded-xl flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-flame-500/20 flex items-center justify-center flex-shrink-0">
+            <Target className="w-4 h-4 text-flame-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-flame-300">{programContext.programName}</p>
+            <p className="text-xs text-iron-400">
+              Week {programContext.weekNumber} · {programContext.phase} · {programContext.dayLabel}
+            </p>
+          </div>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+            ({
+              primary: 'bg-flame-500/20 text-flame-400 border-flame-500/30',
+              volume: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+              speed: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+              deload: 'bg-green-500/20 text-green-400 border-green-500/30',
+              test: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+            })[programContext.dayType] || 'bg-iron-800 text-iron-400 border-iron-700'
+          }`}>
+            {programContext.dayType}
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <button
-          onClick={() => navigate('/workouts')}
+          onClick={() => programContext ? navigate(`/programs/${programContext.programId}`) : navigate('/workouts')}
           className="p-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-xl transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="font-display text-2xl text-iron-50">AI Generate Workout</h1>
-          <p className="text-iron-400 mt-1">Personalized based on your training history</p>
+          <h1 className="font-display text-2xl text-iron-50">
+            {programContext ? 'Generate Program Workout' : 'AI Generate Workout'}
+          </h1>
+          <p className="text-iron-400 mt-1">
+            {programContext 
+              ? `${programContext.primaryLift} ${programContext.primaryScheme} @ ${programContext.intensity}`
+              : 'Personalized based on your training history'
+            }
+          </p>
         </div>
       </div>
       
@@ -723,13 +820,13 @@ export default function GenerateWorkoutPage() {
               
               <button
                 onClick={handleGenerate}
-                disabled={loading || loadingContext}
+                disabled={loading || loadingContext || (userProfile?.credits ?? 0) < CREDIT_COSTS['generate-workout']}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <><Loader2 className="w-5 h-5 animate-spin" />Generating...</>
                 ) : (
-                  <><Sparkles className="w-5 h-5" />Generate Workout</>
+                  <><Sparkles className="w-5 h-5" />Generate Workout<span className="text-xs opacity-70 ml-1">({CREDIT_COSTS['generate-workout']} credits)</span></>
                 )}
               </button>
               

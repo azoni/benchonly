@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft,
@@ -15,9 +16,10 @@ import {
   Award,
   SkipForward,
   Undo2,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { workoutService, scheduleService, attendanceService, goalService, groupWorkoutService } from '../services/firestore';
+import { workoutService, scheduleService, attendanceService, goalService, groupWorkoutService, programService } from '../services/firestore';
 import {
   format,
   startOfMonth,
@@ -37,6 +39,7 @@ import { toDateString, getDisplayDate } from '../utils/dateUtils';
 
 export default function CalendarPage() {
   const { user, isGuest } = useAuth();
+  const navigate = useNavigate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [workouts, setWorkouts] = useState([]);
@@ -44,6 +47,7 @@ export default function CalendarPage() {
   const [schedules, setSchedules] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [goals, setGoals] = useState([]);
+  const [activePrograms, setActivePrograms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState('workout'); // 'workout' | 'vacation' | 'schedule'
@@ -70,12 +74,13 @@ export default function CalendarPage() {
         return;
       }
 
-      const [workoutsData, groupWorkoutsData, schedulesData, attendanceData, goalsData] = await Promise.all([
+      const [workoutsData, groupWorkoutsData, schedulesData, attendanceData, goalsData, programsData] = await Promise.all([
         workoutService.getByDateRange(user.uid, start, end),
         groupWorkoutService.getByUser(user.uid),
         scheduleService.getByUser(user.uid),
         attendanceService.getByUser(user.uid, start, end),
         goalService.getByUser(user.uid),
+        programService.getActive(user.uid).catch(() => []),
       ]);
 
       setWorkouts(workoutsData);
@@ -83,6 +88,7 @@ export default function CalendarPage() {
       setSchedules(schedulesData);
       setAttendance(attendanceData);
       setGoals(goalsData.filter(g => g.status === 'active'));
+      setActivePrograms(programsData);
     } catch (error) {
       console.error('Error loading calendar data:', error);
     } finally {
@@ -162,7 +168,15 @@ export default function CalendarPage() {
     // Check for completed goal on this date
     const hasCompletedGoal = !!getCompletedGoal(date);
 
-    return { hasWorkout, hasGroupWorkout, isVacation, isMissed, isScheduled, hasCompletedGoal, hasAutoCompleted };
+    // Check for program day
+    let programDay = null;
+    for (const prog of activePrograms) {
+      const pd = programService.getProgramDay(prog, date);
+      if (pd) { programDay = pd; break; }
+    }
+    const hasProgramDay = !!programDay;
+
+    return { hasWorkout, hasGroupWorkout, isVacation, isMissed, isScheduled, hasCompletedGoal, hasAutoCompleted, hasProgramDay, programDay };
   };
 
   const getSelectedDateWorkouts = () => {
@@ -196,6 +210,14 @@ export default function CalendarPage() {
       ...s,
       isSkipped: isScheduleSkipped(s, dateStr),
     }));
+  };
+
+  const getSelectedDateProgramDay = () => {
+    for (const prog of activePrograms) {
+      const pd = programService.getProgramDay(prog, selectedDate);
+      if (pd) return pd;
+    }
+    return null;
   };
 
   const handleSkipSchedule = async (scheduleId, dateStr) => {
@@ -258,6 +280,15 @@ export default function CalendarPage() {
   const selectedWorkouts = getSelectedDateWorkouts();
   const selectedGroupWorkouts = getSelectedDateGroupWorkouts();
   const selectedSchedule = getSelectedDateSchedule();
+  
+  // Get program day for selected date
+  const selectedProgramDay = (() => {
+    for (const prog of activePrograms) {
+      const pd = programService.getProgramDay(prog, selectedDate);
+      if (pd) return pd;
+    }
+    return null;
+  })();
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -343,6 +374,9 @@ export default function CalendarPage() {
                         {status.isScheduled && !status.hasWorkout && !status.hasAutoCompleted && (
                           <div className="w-1.5 h-1.5 rounded-full bg-flame-500/50" />
                         )}
+                        {status.hasProgramDay && !status.hasWorkout && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500" title={status.programDay?.label} />
+                        )}
                         {status.isVacation && (
                           <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                         )}
@@ -381,6 +415,10 @@ export default function CalendarPage() {
                 Scheduled
               </div>
               <div className="flex items-center gap-2 text-xs text-iron-400">
+                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                Program
+              </div>
+              <div className="flex items-center gap-2 text-xs text-iron-400">
                 <div className="w-2 h-2 rounded-full bg-blue-500" />
                 Vacation
               </div>
@@ -395,6 +433,10 @@ export default function CalendarPage() {
               <div className="flex items-center gap-2 text-xs text-iron-400">
                 <div className="w-2 h-2 rounded-full bg-yellow-500" />
                 Goal Achieved
+              </div>
+              <div className="flex items-center gap-2 text-xs text-iron-400">
+                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                Program
               </div>
             </div>
           </div>
@@ -423,6 +465,40 @@ export default function CalendarPage() {
           </div>
 
           <div className="p-4 space-y-4">
+            {/* Program Day */}
+            {selectedProgramDay && (
+              <div>
+                <h4 className="text-xs text-iron-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5" />
+                  Program
+                </h4>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-plate">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-plate bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                      <Dumbbell className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-iron-100">{selectedProgramDay.label}</p>
+                      <p className="text-xs text-iron-500">
+                        {selectedProgramDay.programName} · Wk {selectedProgramDay.weekNumber} · {selectedProgramDay.phase}
+                      </p>
+                      <p className="text-xs text-amber-400 mt-0.5">
+                        {selectedProgramDay.primaryLift}: {selectedProgramDay.primaryScheme} @ {selectedProgramDay.intensity}
+                      </p>
+                    </div>
+                  </div>
+                  {!selectedWorkouts.some(w => w.programId === selectedProgramDay.programId) && (
+                    <Link
+                      to={`/programs/${selectedProgramDay.programId}`}
+                      className="mt-2 flex items-center justify-center gap-1.5 py-1.5 bg-amber-500/20 text-amber-300 text-xs font-medium rounded-lg hover:bg-amber-500/30 transition-colors"
+                    >
+                      <Sparkles className="w-3 h-3" /> Generate This Workout
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Scheduled Workouts */}
             {selectedSchedule.length > 0 && (
               <div>
