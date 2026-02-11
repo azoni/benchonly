@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { format } from 'date-fns'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   ArrowLeft, 
   Edit2, 
@@ -17,7 +18,12 @@ import {
   MessageSquare,
   Pencil,
   Dumbbell,
-  Target
+  Target,
+  Plus,
+  Brain,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
 } from 'lucide-react'
 import { workoutService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
@@ -32,6 +38,24 @@ const calculateE1RM = (weight, reps) => {
   return Math.round(weight * (1 + reps / 30))
 }
 
+// Determine exercise type from data
+const getExerciseType = (exercise) => {
+  if (exercise.type) return exercise.type
+  const sets = exercise.sets || []
+  if (sets.some(s => s.prescribedTime || s.actualTime)) return 'time'
+  const hasWeight = sets.some(s => s.prescribedWeight || s.actualWeight)
+  if (!hasWeight && sets.some(s => s.prescribedReps || s.actualReps)) return 'bodyweight'
+  return 'weight'
+}
+
+const getTypeTag = (type) => {
+  switch (type) {
+    case 'time': return { label: 'Time', color: 'bg-blue-500/20 text-blue-400' }
+    case 'bodyweight': return { label: 'BW', color: 'bg-emerald-500/20 text-emerald-400' }
+    default: return null
+  }
+}
+
 export default function WorkoutDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -41,11 +65,13 @@ export default function WorkoutDetailPage() {
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [isLogging, setIsLogging] = useState(false)
   const [exercises, setExercises] = useState([])
   const [saving, setSaving] = useState(false)
   const [workoutNotes, setWorkoutNotes] = useState('')
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
+  const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
 
   useEffect(() => {
     async function fetchWorkout() {
@@ -85,7 +111,10 @@ export default function WorkoutDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this workout?')) return
+    if (!confirmDelete) {
+      setConfirmDelete(true)
+      return
+    }
     setDeleting(true)
     try {
       if (isGuest) {
@@ -97,6 +126,7 @@ export default function WorkoutDetailPage() {
     } catch (error) {
       console.error('Error deleting workout:', error)
       setDeleting(false)
+      setConfirmDelete(false)
     }
   }
 
@@ -121,13 +151,63 @@ export default function WorkoutDetailPage() {
     })
   }
 
+  const addSet = (exerciseIndex) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      const exercise = newExercises[exerciseIndex]
+      const lastSet = exercise.sets[exercise.sets.length - 1]
+      const type = getExerciseType(exercise)
+
+      let newSet = { rpe: '', painLevel: 0, completed: false }
+
+      if (type === 'time') {
+        newSet = { ...newSet, prescribedTime: lastSet?.prescribedTime || '', actualTime: '' }
+      } else if (type === 'bodyweight') {
+        newSet = { ...newSet, prescribedReps: lastSet?.prescribedReps || '', actualReps: '' }
+      } else {
+        newSet = {
+          ...newSet,
+          prescribedWeight: lastSet?.prescribedWeight || '',
+          prescribedReps: lastSet?.prescribedReps || '',
+          actualWeight: '', actualReps: '',
+        }
+      }
+
+      newExercises[exerciseIndex] = { ...exercise, sets: [...exercise.sets, newSet] }
+      return newExercises
+    })
+  }
+
+  const removeSet = (exerciseIndex, setIndex) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      const exercise = newExercises[exerciseIndex]
+      if (exercise.sets.length <= 1) return prev
+      newExercises[exerciseIndex] = {
+        ...exercise,
+        sets: exercise.sets.filter((_, i) => i !== setIndex),
+      }
+      return newExercises
+    })
+  }
+
+  // Build save payload preserving AI-generated fields
+  const buildSavePayload = (exerciseData) => {
+    const payload = { exercises: exerciseData, notes: workoutNotes }
+    if (workout?.coachingNotes) payload.coachingNotes = workout.coachingNotes
+    if (workout?.personalNotes) payload.personalNotes = workout.personalNotes
+    if (workout?.description) payload.description = workout.description
+    return payload
+  }
+
   const handleSaveProgress = async () => {
     setSaving(true)
     try {
+      const payload = buildSavePayload(exercises)
       if (!isGuest) {
-        await workoutService.update(id, { exercises, notes: workoutNotes })
+        await workoutService.update(id, payload)
       }
-      setWorkout(prev => ({ ...prev, exercises, notes: workoutNotes }))
+      setWorkout(prev => ({ ...prev, ...payload }))
       setIsLogging(false)
     } catch (error) {
       console.error('Error saving:', error)
@@ -141,28 +221,35 @@ export default function WorkoutDetailPage() {
     setSaving(true)
     try {
       // Auto-fill blank fields with prescribed values
-      const filledExercises = exercises.map(ex => ({
-        ...ex,
-        sets: ex.sets.map(set => {
-          const isTimeExercise = ex.type === 'time' || set.prescribedTime || set.actualTime
-          if (isTimeExercise) {
+      const filledExercises = exercises.map(ex => {
+        const type = getExerciseType(ex)
+        return {
+          ...ex,
+          sets: ex.sets.map(set => {
+            if (type === 'time') {
+              return { ...set, actualTime: set.actualTime || set.prescribedTime || '' }
+            }
+            if (type === 'bodyweight') {
+              return { ...set, actualReps: set.actualReps || set.prescribedReps || '' }
+            }
             return {
               ...set,
-              actualTime: set.actualTime || set.prescribedTime || ''
+              actualWeight: set.actualWeight || set.prescribedWeight || '',
+              actualReps: set.actualReps || set.prescribedReps || ''
             }
-          }
-          return {
-            ...set,
-            actualWeight: set.actualWeight || set.prescribedWeight || '',
-            actualReps: set.actualReps || set.prescribedReps || ''
-          }
-        })
-      }))
+          })
+        }
+      })
       
       if (!isGuest) {
-        await workoutService.complete(id, { exercises: filledExercises, notes: workoutNotes })
+        const payload = buildSavePayload(filledExercises)
+        await workoutService.complete(id, payload)
       }
-      setWorkout(prev => ({ ...prev, exercises: filledExercises, notes: workoutNotes, status: 'completed' }))
+      setWorkout(prev => ({ ...prev, exercises: filledExercises, notes: workoutNotes, status: 'completed',
+        ...(workout?.coachingNotes && { coachingNotes: workout.coachingNotes }),
+        ...(workout?.personalNotes && { personalNotes: workout.personalNotes }),
+        ...(workout?.description && { description: workout.description }),
+      }))
       setExercises(filledExercises)
       setIsLogging(false)
     } catch (error) {
@@ -256,11 +343,23 @@ export default function WorkoutDetailPage() {
                       <button
                         onClick={handleDelete}
                         disabled={deleting}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                        className={`w-full flex items-center gap-3 px-4 py-3 transition-colors disabled:opacity-50 ${
+                          confirmDelete 
+                            ? 'text-white bg-red-500 hover:bg-red-600' 
+                            : 'text-red-400 hover:bg-red-500/10'
+                        }`}
                       >
                         <Trash2 className="w-4 h-4" />
-                        {deleting ? 'Deleting...' : 'Delete'}
+                        {deleting ? 'Deleting...' : confirmDelete ? 'Tap to confirm' : 'Delete'}
                       </button>
+                      {confirmDelete && (
+                        <button
+                          onClick={() => setConfirmDelete(false)}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-iron-400 hover:bg-iron-700 transition-colors text-sm"
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </div>
                   </>
                 )}
@@ -288,6 +387,47 @@ export default function WorkoutDetailPage() {
             )}
           </div>
         </div>
+
+        {/* AI Coaching Notes */}
+        {(workout.coachingNotes || workout.personalNotes) && (
+          <div className="card-steel mb-6 overflow-hidden">
+            <button
+              onClick={() => setAiNotesExpanded(!aiNotesExpanded)}
+              className="w-full flex items-center justify-between p-4 hover:bg-iron-800/30 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4 text-flame-400" />
+                <span className="text-sm font-medium text-iron-200">AI Coaching Notes</span>
+              </div>
+              {aiNotesExpanded ? <ChevronUp className="w-4 h-4 text-iron-500" /> : <ChevronDown className="w-4 h-4 text-iron-500" />}
+            </button>
+            <AnimatePresence>
+              {aiNotesExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-4 pb-4 max-h-64 overflow-y-auto space-y-3">
+                    {workout.coachingNotes && (
+                      <div>
+                        <p className="text-xs text-iron-500 uppercase tracking-wider mb-1">Coaching Notes</p>
+                        <p className="text-sm text-iron-300 leading-relaxed">{workout.coachingNotes}</p>
+                      </div>
+                    )}
+                    {workout.personalNotes && (
+                      <div>
+                        <p className="text-xs text-iron-500 uppercase tracking-wider mb-1">Your Notes</p>
+                        <p className="text-sm text-iron-300 leading-relaxed">{workout.personalNotes}</p>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
 
         {/* Workout Notes */}
         {workout.notes && (
@@ -565,28 +705,46 @@ export default function WorkoutDetailPage() {
 
       {/* Exercises */}
       <div className="space-y-4">
-        {exercises.map((exercise, exerciseIndex) => (
+        {exercises.map((exercise, exerciseIndex) => {
+          const type = getExerciseType(exercise)
+          const typeTag = getTypeTag(type)
+          
+          return (
           <div key={exerciseIndex} className="card-steel p-4">
-            <h3 className="font-semibold text-iron-100 text-xl mb-4">{exercise.name}</h3>
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="font-semibold text-iron-100 text-xl flex-1">{exercise.name}</h3>
+              {typeTag && (
+                <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
+              )}
+            </div>
             
             <div className="space-y-4">
-              {exercise.sets?.map((set, setIndex) => {
-                const isTimeExercise = exercise.type === 'time' || set.prescribedTime || set.actualTime
-                
-                return (
+              {exercise.sets?.map((set, setIndex) => (
                 <div key={setIndex} className="bg-iron-800/30 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-lg font-medium text-iron-200">Set {setIndex + 1}</span>
-                    <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded">
-                      Target: {isTimeExercise 
-                        ? `${set.prescribedTime || '—'}s`
-                        : `${set.prescribedWeight || '—'} × ${set.prescribedReps || '—'}`
-                      }
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded">
+                        Target: {type === 'time' 
+                          ? `${set.prescribedTime || '—'}s`
+                          : type === 'bodyweight'
+                            ? `${set.prescribedReps || '—'} reps`
+                            : `${set.prescribedWeight || '—'} × ${set.prescribedReps || '—'}`
+                        }
+                        {set.targetRpe ? ` @ RPE ${set.targetRpe}` : ''}
+                      </span>
+                      {exercise.sets.length > 1 && (
+                        <button
+                          onClick={() => removeSet(exerciseIndex, setIndex)}
+                          className="p-1 text-iron-600 hover:text-red-400 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   
-                  {isTimeExercise ? (
-                    /* Time-based exercise */
+                  {type === 'time' ? (
                     <div className="mb-3">
                       <label className="block text-xs text-flame-400 mb-1 font-medium">Time (seconds)</label>
                       <input
@@ -598,8 +756,19 @@ export default function WorkoutDetailPage() {
                         className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
                       />
                     </div>
+                  ) : type === 'bodyweight' ? (
+                    <div className="mb-3">
+                      <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={set.actualReps || ''}
+                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
+                        placeholder={set.prescribedReps || '—'}
+                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                      />
+                    </div>
                   ) : (
-                    /* Weight/reps exercise */
                     <div className="grid grid-cols-2 gap-3 mb-3">
                       <div>
                         <label className="block text-xs text-flame-400 mb-1 font-medium">Weight</label>
@@ -654,8 +823,19 @@ export default function WorkoutDetailPage() {
                     </div>
                   </div>
                 </div>
-              )})}
+              ))}
             </div>
+
+            {/* Add Set Button */}
+            <button
+              onClick={() => addSet(exerciseIndex)}
+              className="mt-3 w-full py-2.5 border border-dashed border-iron-700 rounded-lg
+                text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600
+                flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Set
+            </button>
             
             {/* Exercise Notes */}
             <div className="mt-4">
@@ -669,7 +849,7 @@ export default function WorkoutDetailPage() {
               />
             </div>
           </div>
-        ))}
+        )})}
       </div>
 
       {/* Action Buttons */}

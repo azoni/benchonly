@@ -31,6 +31,7 @@ export default function WorkoutsPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMenu, setActiveMenu] = useState(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState(null)
   const [activeTab, setActiveTab] = useState('todo') // 'todo' or 'completed'
 
   useEffect(() => {
@@ -110,23 +111,28 @@ export default function WorkoutsPage() {
   }
 
   const handleDelete = async (workout) => {
-    if (window.confirm('Are you sure you want to delete this workout?')) {
-      if (isGuest) {
-        setWorkouts((prev) => prev.filter((w) => w.id !== workout.id))
-        setActiveMenu(null)
-        return
+    if (pendingDeleteId !== workout.id) {
+      setPendingDeleteId(workout.id)
+      return
+    }
+    if (isGuest) {
+      setWorkouts((prev) => prev.filter((w) => w.id !== workout.id))
+      setActiveMenu(null)
+      setPendingDeleteId(null)
+      return
+    }
+    try {
+      if (workout.isGroupWorkout) {
+        await groupWorkoutService.delete(workout.id)
+      } else {
+        await workoutService.delete(workout.id)
       }
-      try {
-        if (workout.isGroupWorkout) {
-          await groupWorkoutService.delete(workout.id)
-        } else {
-          await workoutService.delete(workout.id)
-        }
-        setWorkouts((prev) => prev.filter((w) => w.id !== workout.id))
-        setActiveMenu(null)
-      } catch (error) {
-        console.error('Error deleting workout:', error)
-      }
+      setWorkouts((prev) => prev.filter((w) => w.id !== workout.id))
+      setActiveMenu(null)
+      setPendingDeleteId(null)
+    } catch (error) {
+      console.error('Error deleting workout:', error)
+      setPendingDeleteId(null)
     }
   }
 
@@ -497,12 +503,23 @@ export default function WorkoutsPage() {
                           )}
                           <button
                             onClick={() => handleDelete(workout)}
-                            className="flex items-center gap-2 px-4 py-2 text-sm text-red-400
-                              hover:bg-iron-700 transition-colors w-full"
+                            className={`flex items-center gap-2 px-4 py-2 text-sm w-full transition-colors ${
+                              pendingDeleteId === workout.id
+                                ? 'text-white bg-red-500 hover:bg-red-600'
+                                : 'text-red-400 hover:bg-iron-700'
+                            }`}
                           >
                             <Trash2 className="w-4 h-4" />
-                            Delete
+                            {pendingDeleteId === workout.id ? 'Tap to confirm' : 'Delete'}
                           </button>
+                          {pendingDeleteId === workout.id && (
+                            <button
+                              onClick={() => { setPendingDeleteId(null); setActiveMenu(null) }}
+                              className="flex items-center gap-2 px-4 py-2 text-sm text-iron-400 hover:bg-iron-700 transition-colors w-full"
+                            >
+                              Cancel
+                            </button>
+                          )}
                         </motion.div>
                       )}
                     </AnimatePresence>

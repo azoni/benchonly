@@ -24,6 +24,7 @@ import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
 import AIChatPanel from './AIChatPanel';
 import InstallPrompt from './InstallPrompt';
+import ErrorBoundary from './ErrorBoundary';
 import { analyticsService } from '../services/analyticsService';
 import { groupWorkoutService } from '../services/firestore';
 import { notificationService } from '../services/feedService';
@@ -386,7 +387,9 @@ export default function Layout() {
               </button>
             </div>
           )}
-          <Outlet />
+          <ErrorBoundary key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </main>
 

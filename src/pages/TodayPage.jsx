@@ -19,6 +19,7 @@ import {
   Calculator,
   MessageCircle,
   ArrowRight,
+  Layers,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -51,6 +52,7 @@ export default function TodayPage() {
   const [goals, setGoals] = useState([])
   const [todayProgramDay, setTodayProgramDay] = useState(null)
   const [nextProgramDay, setNextProgramDay] = useState(null)
+  const [hasActiveProgram, setHasActiveProgram] = useState(true) // default true to avoid flash
   const [loading, setLoading] = useState(true)
 
   // 1RM Calculator state
@@ -142,14 +144,6 @@ export default function TodayPage() {
       setPendingReviews(reviews)
       setGoals(goalsData.filter(g => g.status === 'active'))
 
-      // Load active programs and check for today's program day
-      programService.getActive(user.uid).then(progs => {
-        for (const prog of progs) {
-          const pd = programService.getProgramDay(prog, now)
-          if (pd) { setTodayProgramDay(pd); break }
-        }
-      }).catch(() => {})
-
       // Load feed + users + notifications in background (doesn't block page render)
       Promise.all([
         feedService.getFeed(5),
@@ -226,6 +220,7 @@ export default function TodayPage() {
       // Load today's program day + next upcoming program day
       try {
         const activeProgs = await programService.getActive(user.uid)
+        setHasActiveProgram(activeProgs.length > 0)
         let foundToday = false
         for (const prog of activeProgs) {
           const pd = programService.getProgramDay(prog, now)
@@ -650,6 +645,30 @@ export default function TodayPage() {
           </div>
         </div>
       </motion.div>
+
+      {/* Start a Program prompt */}
+      {!hasActiveProgram && !loading && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+          className="mb-6"
+        >
+          <Link
+            to="/programs"
+            className="card-steel p-4 flex items-center gap-3 hover:border-iron-600 transition-colors block"
+          >
+            <div className="w-10 h-10 rounded-xl bg-flame-500/10 flex items-center justify-center flex-shrink-0">
+              <Layers className="w-5 h-5 text-flame-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-iron-200">Start a Training Program</p>
+              <p className="text-xs text-iron-500">AI builds a periodized plan for your goals</p>
+            </div>
+            <ArrowRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
+          </Link>
+        </motion.div>
+      )}
 
       {/* Active Goals */}
       {goals.length > 0 && (

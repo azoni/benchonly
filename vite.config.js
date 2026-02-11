@@ -9,15 +9,16 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'BenchPressOnly',
-        short_name: 'BPO',
+        name: 'BenchPressOnly — AI Workout Tracker',
+        short_name: 'Bench Only',
         description: 'AI-powered workout tracking for serious lifters',
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
-        start_url: '/',
+        start_url: '/today',
+        categories: ['health', 'fitness', 'sports'],
         icons: [
           {
             src: 'pwa-192x192.png',
@@ -33,12 +34,16 @@ export default defineConfig({
             src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'maskable'
           }
         ]
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        skipWaiting: true,
+        clientsClaim: true,
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/\.netlify/, /^\/api/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -53,6 +58,18 @@ export default defineConfig({
                 statuses: [0, 200]
               }
             }
+          },
+          {
+            urlPattern: /^\/.netlify\/functions\/.*/,
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/,
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: /^https:\/\/identitytoolkit\.googleapis\.com\/.*/,
+            handler: 'NetworkOnly',
           }
         ]
       }

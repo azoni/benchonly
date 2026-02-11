@@ -481,33 +481,33 @@ export default function AdminPage() {
           {selectedUser ? (
             <>
               {/* User Info Card */}
-              <div className="card-steel p-6 rounded-xl">
-                <div className="flex items-center gap-4 mb-4">
+              <div className="card-steel p-4 sm:p-6 rounded-xl overflow-hidden">
+                <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-4">
                   <img
                     src={selectedUser.photoURL || '/default-avatar.png'}
                     alt={selectedUser.displayName}
-                    className="w-16 h-16 rounded-full"
+                    className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex-shrink-0"
                   />
-                  <div>
-                    <h2 className="text-xl font-display text-iron-100">
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-lg sm:text-xl font-display text-iron-100 truncate">
                       {selectedUser.displayName || 'No Name'}
                     </h2>
-                    <p className="text-iron-400">{selectedUser.email}</p>
-                    <p className="text-sm text-iron-500">
+                    <p className="text-iron-400 text-sm truncate">{selectedUser.email}</p>
+                    <p className="text-xs text-iron-500 truncate">
                       UID: {selectedUser.uid}
                     </p>
                   </div>
-                  <button
-                    onClick={async () => {
-                      await startContextImpersonation(selectedUser.uid)
-                      navigate('/today')
-                    }}
-                    className="ml-auto px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 self-start flex-shrink-0"
-                  >
-                    <Eye className="w-4 h-4" />
-                    View as User
-                  </button>
                 </div>
+                <button
+                  onClick={async () => {
+                    await startContextImpersonation(selectedUser.uid)
+                    navigate('/today')
+                  }}
+                  className="w-full sm:w-auto mb-4 px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <Eye className="w-4 h-4" />
+                  View as User
+                </button>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="text-center p-3 bg-iron-800/50 rounded-lg">

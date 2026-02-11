@@ -51,7 +51,7 @@ export default function GenerateGroupWorkoutModal({
   onSuccess 
 }) {
   const [prompt, setPrompt] = useState('');
-  const { user, userProfile, updateProfile } = useAuth();
+  const { user, userProfile, updateProfile, isAppAdmin: contextIsAdmin } = useAuth();
   const [workoutDate, setWorkoutDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedAthletes, setSelectedAthletes] = useState([]);
   const [athleteContexts, setAthleteContexts] = useState({});

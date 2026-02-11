@@ -194,7 +194,7 @@ Use actual working weights based on the athlete's data. Calculate from their e1R
       if (!response.ok) throw new Error('Failed to generate workout')
       const data = await response.json()
 
-      const dayDate = getDayDate(weekNumber, day.dayOfWeek)
+      const dayDate = getDayDate(weekNumber, day.dayOfWeek) || new Date()
       const workoutData = {
         ...data.workout,
         date: dayDate.toISOString(),
