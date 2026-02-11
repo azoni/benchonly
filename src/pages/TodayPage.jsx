@@ -52,6 +52,7 @@ export default function TodayPage() {
   const [goals, setGoals] = useState([])
   const [todayProgramDay, setTodayProgramDay] = useState(null)
   const [nextProgramDay, setNextProgramDay] = useState(null)
+  const [nextWorkout, setNextWorkout] = useState(null) // next upcoming personal or group workout
   const [hasActiveProgram, setHasActiveProgram] = useState(true) // default true to avoid flash
   const [loading, setLoading] = useState(true)
 
@@ -216,6 +217,23 @@ export default function TodayPage() {
         completed: completedDates.size,
         total: Math.max(scheduledThisWeek, completedDates.size),
       })
+
+      // Find next upcoming workout (personal or group, after today)
+      const todayEnd = new Date(now)
+      todayEnd.setHours(23, 59, 59, 999)
+      const upcoming = []
+      personalWorkouts.forEach(w => {
+        if (w.status !== 'scheduled') return
+        const d = w.date?.toDate ? w.date.toDate() : new Date(w.date)
+        if (d > todayEnd) upcoming.push({ ...w, _date: d, _type: 'personal' })
+      })
+      groupWorkouts.forEach(w => {
+        if (w.status === 'completed') return
+        const d = w.date?.toDate ? w.date.toDate() : new Date(w.date)
+        if (d > todayEnd) upcoming.push({ ...w, _date: d, _type: 'group' })
+      })
+      upcoming.sort((a, b) => a._date - b._date)
+      setNextWorkout(upcoming[0] || null)
 
       // Load today's program day + next upcoming program day
       try {
@@ -535,6 +553,35 @@ export default function TodayPage() {
                 </p>
                 <p className="text-xs text-iron-600 mt-0.5">
                   {nextProgramDay.programName} · Wk {nextProgramDay.weekNumber} · {nextProgramDay.phase}
+                </p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
+            </div>
+          </Link>
+        )}
+
+        {/* Up Next — next scheduled workout (when nothing today) */}
+        {!hasTodayWorkout && nextWorkout && (
+          <Link
+            to={nextWorkout._type === 'group' ? `/workouts/group/${nextWorkout.id}` : `/workouts/${nextWorkout.id}`}
+            className="card-steel p-4 mb-3 border-iron-700/50 hover:border-iron-600 transition-colors block"
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                nextWorkout._type === 'group' ? 'bg-cyan-500/10' : 'bg-flame-500/10'
+              }`}>
+                {nextWorkout._type === 'group' ? (
+                  <Users className="w-5 h-5 text-cyan-400" />
+                ) : (
+                  <Dumbbell className="w-5 h-5 text-flame-400" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-iron-500 mb-0.5">Up Next — {format(nextWorkout._date, 'EEEE')}</p>
+                <p className="text-sm font-medium text-iron-200 truncate">{nextWorkout.name || 'Scheduled Workout'}</p>
+                <p className="text-xs text-iron-600 mt-0.5">
+                  {nextWorkout._type === 'group' ? 'Group workout' : `${nextWorkout.exercises?.length || 0} exercises`}
+                  {nextWorkout.workoutType === 'cardio' && nextWorkout.duration ? ` · ${nextWorkout.duration} min` : ''}
                 </p>
               </div>
               <ArrowRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
