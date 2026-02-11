@@ -50,8 +50,6 @@ export default function GenerateWorkoutPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, userProfile, updateProfile, isAppAdmin } = useAuth();
-
-  console.log('[DEBUG] GenerateWorkoutPage mounted, URL:', window.location.pathname, window.location.search);
   
   // Parse program context from URL if coming from a program
   const [programContext] = useState(() => {
@@ -68,6 +66,7 @@ export default function GenerateWorkoutPage() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [swappingIdx, setSwappingIdx] = useState(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   
   const [analysisSteps, setAnalysisSteps] = useState([]);
@@ -493,6 +492,45 @@ export default function GenerateWorkoutPage() {
         sets: ex.sets.filter((_, j) => j !== setIdx)
       } : ex)
     }));
+  };
+
+  const swapExercise = async (exIdx) => {
+    const ex = generatedWorkout.exercises[exIdx];
+    if (!ex) return;
+    setSwappingIdx(exIdx);
+    try {
+      const otherExercises = generatedWorkout.exercises
+        .filter((_, i) => i !== exIdx)
+        .map(e => e.name);
+
+      const response = await fetch('/.netlify/functions/swap-exercise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          exerciseName: ex.name,
+          exerciseType: ex.type || 'weight',
+          sets: ex.sets,
+          workoutContext: { otherExercises },
+        }),
+      });
+
+      if (!response.ok) throw new Error('Swap failed');
+      const data = await response.json();
+
+      if (data.exercise) {
+        setGeneratedWorkout(prev => ({
+          ...prev,
+          exercises: prev.exercises.map((e, i) => i === exIdx ? {
+            ...data.exercise,
+            type: data.exercise.type || e.type || 'weight',
+          } : e)
+        }));
+      }
+    } catch (err) {
+      console.error('Swap error:', err);
+    } finally {
+      setSwappingIdx(null);
+    }
   };
 
   const handleReset = () => {
@@ -957,6 +995,20 @@ export default function GenerateWorkoutPage() {
                           )}
                           {ex.notes && !editing && <p className="text-xs text-iron-500 mt-0.5">{ex.notes}</p>}
                         </div>
+                        {!editing && (
+                          <button
+                            onClick={() => swapExercise(i)}
+                            disabled={swappingIdx !== null}
+                            title="Swap for similar exercise"
+                            className="p-1.5 text-iron-500 hover:text-flame-400 hover:bg-flame-500/10 rounded-lg transition-colors disabled:opacity-30"
+                          >
+                            {swappingIdx === i ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-flame-400" />
+                            ) : (
+                              <RefreshCw className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
                         {editing && (
                           <button onClick={() => removeExercise(i)} className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg">
                             <Trash2 className="w-4 h-4" />

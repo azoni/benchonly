@@ -24,6 +24,8 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react'
 import { workoutService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
@@ -61,8 +63,6 @@ export default function WorkoutDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, isGuest } = useAuth()
-
-  console.log('[DEBUG] WorkoutDetailPage mounted, id:', id, 'URL:', window.location.pathname);
   const [workout, setWorkout] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
@@ -74,6 +74,7 @@ export default function WorkoutDetailPage() {
   const [workoutNotes, setWorkoutNotes] = useState('')
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
   const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
+  const [swappingIdx, setSwappingIdx] = useState(null)
 
   useEffect(() => {
     async function fetchWorkout() {
@@ -129,6 +130,50 @@ export default function WorkoutDetailPage() {
       console.error('Error deleting workout:', error)
       setDeleting(false)
       setConfirmDelete(false)
+    }
+  }
+
+  const swapExercise = async (exIdx) => {
+    const ex = workout.exercises[exIdx]
+    if (!ex || isGuest) return
+    setSwappingIdx(exIdx)
+    try {
+      const otherExercises = workout.exercises
+        .filter((_, i) => i !== exIdx)
+        .map(e => e.name)
+
+      const response = await fetch('/.netlify/functions/swap-exercise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          exerciseName: ex.name,
+          exerciseType: ex.type || 'weight',
+          sets: ex.sets,
+          workoutContext: { otherExercises },
+        }),
+      })
+
+      if (!response.ok) throw new Error('Swap failed')
+      const data = await response.json()
+
+      if (data.exercise) {
+        const newExercises = workout.exercises.map((e, i) => i === exIdx ? {
+          ...data.exercise,
+          type: data.exercise.type || e.type || 'weight',
+        } : e)
+        
+        await workoutService.update(id, { exercises: newExercises })
+        setWorkout(prev => ({ ...prev, exercises: newExercises }))
+        setExercises(newExercises.map(ex => ({
+          ...ex,
+          notes: ex.notes || '',
+          sets: ex.sets?.map(set => ({ ...set })) || []
+        })))
+      }
+    } catch (err) {
+      console.error('Swap error:', err)
+    } finally {
+      setSwappingIdx(null)
     }
   }
 
@@ -527,9 +572,23 @@ export default function WorkoutDetailPage() {
                 {/* Exercise Header */}
                 <div className="p-4 bg-iron-800/30">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-xl font-bold text-iron-50">{exercise.name}</h3>
+                    <h3 className="text-xl font-bold text-iron-50 flex-1">{exercise.name}</h3>
                     {isTimeExercise && (
                       <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded">Time</span>
+                    )}
+                    {isScheduled && !isGuest && (
+                      <button
+                        onClick={() => swapExercise(exerciseIndex)}
+                        disabled={swappingIdx !== null}
+                        title="Swap for similar exercise"
+                        className="p-1.5 text-iron-500 hover:text-flame-400 hover:bg-flame-500/10 rounded-lg transition-colors disabled:opacity-30"
+                      >
+                        {swappingIdx === exerciseIndex ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-flame-400" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4" />
+                        )}
+                      </button>
                     )}
                   </div>
                   <p className="text-sm text-iron-500 mt-1">{exercise.sets?.length || 0} sets</p>
