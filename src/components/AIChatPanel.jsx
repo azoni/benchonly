@@ -28,8 +28,10 @@ export default function AIChatPanel() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  const RATE_LIMIT = 20; // requests per hour
+  const RATE_LIMIT = 8; // requests per hour
   const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour in ms
+  const DAILY_LIMIT = 25;
+  const DAILY_WINDOW = 24 * 60 * 60 * 1000;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -166,28 +168,19 @@ export default function AIChatPanel() {
 
       const builtContext = {
         profile,
-        recentWorkouts: strengthWorkouts.slice(0, 10).map(w => ({
+        // Just names/dates/exercise counts - maxLifts/painHistory/rpeAverages cover the details
+        recentWorkouts: strengthWorkouts.slice(0, 5).map(w => ({
           name: w.name,
           date: w.date,
-          workoutType: w.workoutType || 'strength',
-          exercises: w.exercises?.map(e => ({
-            name: e.name,
-            type: e.type || 'weight',
-            sets: e.sets?.map(s => ({
-              weight: s.actualWeight || s.prescribedWeight,
-              reps: s.actualReps || s.prescribedReps,
-              rpe: s.rpe,
-              painLevel: s.painLevel,
-            }))
-          }))
+          exerciseCount: w.exercises?.length || 0,
+          exercises: w.exercises?.slice(0, 4).map(e => ({ name: e.name, sets: e.sets?.length || 0 })),
         })),
-        cardioWorkouts: cardioWorkouts.map(w => ({
+        cardioWorkouts: cardioWorkouts.slice(0, 5).map(w => ({
           name: w.name,
           date: w.date,
           duration: w.duration,
           cardioType: w.cardioType,
           distance: w.distance,
-          calories: w.calories,
         })),
         goals: goals.filter(g => g.status === 'active').map(g => ({
           lift: g.lift,
@@ -223,45 +216,78 @@ export default function AIChatPanel() {
 
   const checkRateLimit = () => {
     const now = Date.now();
+    
+    // Hourly limit
     const stored = localStorage.getItem('ai_rate_limit');
     let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
-    
-    // Reset if window has passed
     if (now > rateData.resetTime) {
       rateData = { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
     }
     
-    setRateLimitInfo(rateData);
-    return rateData.count < RATE_LIMIT;
+    // Daily limit
+    const dailyStored = localStorage.getItem('ai_daily_limit');
+    let dailyData = dailyStored ? JSON.parse(dailyStored) : { count: 0, resetTime: now + DAILY_WINDOW };
+    if (now > dailyData.resetTime) {
+      dailyData = { count: 0, resetTime: now + DAILY_WINDOW };
+    }
+    
+    setRateLimitInfo({ ...rateData, dailyCount: dailyData.count, dailyResetTime: dailyData.resetTime });
+    
+    if (dailyData.count >= DAILY_LIMIT) return 'daily';
+    if (rateData.count >= RATE_LIMIT) return 'hourly';
+    return null;
   };
 
   const incrementRateLimit = () => {
     const now = Date.now();
+    
+    // Hourly
     const stored = localStorage.getItem('ai_rate_limit');
     let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
-    
     if (now > rateData.resetTime) {
       rateData = { count: 1, resetTime: now + RATE_LIMIT_WINDOW };
     } else {
       rateData.count += 1;
     }
-    
     localStorage.setItem('ai_rate_limit', JSON.stringify(rateData));
-    setRateLimitInfo(rateData);
+    
+    // Daily
+    const dailyStored = localStorage.getItem('ai_daily_limit');
+    let dailyData = dailyStored ? JSON.parse(dailyStored) : { count: 0, resetTime: now + DAILY_WINDOW };
+    if (now > dailyData.resetTime) {
+      dailyData = { count: 1, resetTime: now + DAILY_WINDOW };
+    } else {
+      dailyData.count += 1;
+    }
+    localStorage.setItem('ai_daily_limit', JSON.stringify(dailyData));
+    
+    setRateLimitInfo({ ...rateData, dailyCount: dailyData.count, dailyResetTime: dailyData.resetTime });
+  };
+
+  const getRemainingMessages = () => {
+    const hourlyLeft = RATE_LIMIT - (rateLimitInfo.count || 0);
+    const dailyLeft = DAILY_LIMIT - (rateLimitInfo.dailyCount || 0);
+    return Math.min(hourlyLeft, dailyLeft);
   };
 
   const sendMessage = async (messageText) => {
     if (!messageText.trim() || loading) return;
     
     // Check rate limit
-    if (!checkRateLimit()) {
-      const minutesLeft = Math.ceil((rateLimitInfo.resetTime - Date.now()) / 1000 / 60);
+    const limitHit = checkRateLimit();
+    if (limitHit) {
+      const minutesLeft = limitHit === 'daily' 
+        ? Math.ceil((rateLimitInfo.dailyResetTime - Date.now()) / 1000 / 60)
+        : Math.ceil((rateLimitInfo.resetTime - Date.now()) / 1000 / 60);
+      const hoursLeft = Math.ceil(minutesLeft / 60);
       setMessages((prev) => [
         ...prev,
         { role: 'user', content: messageText },
         {
           role: 'assistant',
-          content: `You've reached the limit of ${RATE_LIMIT} requests per hour. Please try again in ${minutesLeft} minutes.`,
+          content: limitHit === 'daily'
+            ? `You've reached the daily limit of ${DAILY_LIMIT} messages. Resets in ${hoursLeft > 1 ? `${hoursLeft} hours` : `${minutesLeft} minutes`}.`
+            : `You've reached the limit of ${RATE_LIMIT} messages per hour. Try again in ${minutesLeft} minutes.`,
         },
       ]);
       return;
@@ -558,10 +584,15 @@ export default function AIChatPanel() {
             )}
 
             {/* Input */}
-            <form
-              onSubmit={handleSubmit}
-              className="p-4 border-t border-iron-800"
-            >
+            <div className="border-t border-iron-800">
+              <div className="px-4 pt-2 flex justify-between text-[10px] text-iron-600">
+                <span>{getRemainingMessages()} messages left</span>
+                <span>gpt-4o-mini</span>
+              </div>
+              <form
+                onSubmit={handleSubmit}
+                className="px-4 pb-4 pt-1.5"
+              >
               <div className="flex gap-2">
                 <input
                   ref={inputRef}
@@ -589,6 +620,7 @@ export default function AIChatPanel() {
                 </button>
               </div>
             </form>
+            </div>
           </motion.div>
         </>
       )}

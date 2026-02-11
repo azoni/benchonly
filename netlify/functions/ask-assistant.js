@@ -45,8 +45,8 @@ export async function handler(event) {
     if (context?.maxLifts && Object.keys(context.maxLifts).length > 0) {
       const lifts = Object.entries(context.maxLifts)
         .sort((a, b) => b[1].e1rm - a[1].e1rm)
-        .slice(0, 10)
-        .map(([name, d]) => `${name}: ${d.e1rm}lb e1RM (best: ${d.weight}lb x ${d.reps})`)
+        .slice(0, 8)
+        .map(([name, d]) => `${name}: ${d.e1rm}lb e1RM (${d.weight}x${d.reps})`)
       userContext.push(`MAX LIFTS:\n${lifts.join('\n')}`)
     }
     
@@ -66,12 +66,13 @@ export async function handler(event) {
       userContext.push(`RPE AVERAGES:\n${rpes.join('\n')}`)
     }
     
-    // Recent strength workouts (names + dates)
+    // Recent strength workouts
     const strengthWorkouts = context?.recentWorkouts || []
     if (strengthWorkouts.length) {
-      const summary = strengthWorkouts.slice(0, 5).map(w => 
-        `${w.date}: ${w.name} (${w.exercises?.length || 0} exercises)`
-      ).join('\n')
+      const summary = strengthWorkouts.slice(0, 5).map(w => {
+        const exNames = w.exercises?.map(e => e.name).join(', ') || ''
+        return `${w.date}: ${w.name}${exNames ? ` [${exNames}]` : ''}`
+      }).join('\n')
       userContext.push(`RECENT WORKOUTS:\n${summary}`)
     }
     
@@ -128,7 +129,7 @@ export async function handler(event) {
                              /workout|routine|session|exercises|program/i.test(message)
 
     const systemPrompt = isWorkoutRequest 
-      ? `You are a knowledgeable strength training coach. You have full access to the user's training data including their max lifts, pain history, RPE trends, recent workouts, cardio, health metrics, goals, and scheduled activities.
+      ? `You are a knowledgeable strength training coach. You have full access to the user's training data.
 
 Generate a workout and respond with BOTH:
 1. A brief explanation (2-3 sentences) referencing their specific data
@@ -151,15 +152,11 @@ Generate a workout and respond with BOTH:
 }
 \`\`\`
 
-Each exercise MUST have 3-5 set objects. Use their e1RM data to calculate working weights (70-85%). Avoid exercises where they've reported pain. Consider their recent training to avoid overtraining the same muscle groups.
+Each exercise MUST have 3-5 set objects. Use e1RM data for working weights (70-85%). Avoid exercises with pain. Consider recent training to avoid overtraining.
 ${contextString}
 
-${context?.recentWorkouts?.length ? `\nDetailed recent workouts: ${JSON.stringify((context.recentWorkouts || []).slice(0, 3))}` : ''}`
-      : `You are a knowledgeable strength training assistant. You have full access to the user's training data including their max lifts (e1RM), pain history, RPE trends, recent workouts, cardio activity, health metrics, goals, and scheduled activities.
-
-Answer questions using their actual data. Reference specific numbers, exercises, and dates when relevant. Be direct and specific — not generic. 2-4 sentences unless they ask for detail.
-
-If they ask about their lifts, pain, goals, cardio, health, schedule, or progress — answer with their real data. If they ask "what's my bench max?" look at their max lifts data and tell them.
+${context?.recentWorkouts?.length ? `\nRecent workout details: ${JSON.stringify((context.recentWorkouts || []).slice(0, 2).map(w => ({ name: w.name, date: w.date, exercises: w.exercises?.slice(0, 4) })))}` : ''}`
+      : `You are a strength training assistant with access to the user's training data. Answer using their real numbers. Be direct — 2-3 sentences unless asked for detail.
 ${contextString}`
 
     const startTime = Date.now()
@@ -171,7 +168,7 @@ ${contextString}`
         { role: 'user', content: message }
       ],
       temperature: 0.7,
-      max_tokens: isWorkoutRequest ? 1200 : 500
+      max_tokens: isWorkoutRequest ? 1200 : 400
     })
 
     const responseTime = Date.now() - startTime
