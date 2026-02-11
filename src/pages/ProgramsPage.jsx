@@ -101,7 +101,7 @@ export default function ProgramsPage() {
   const [generatedProgram, setGeneratedProgram] = useState(null)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [generatingPrompt, setGeneratingPrompt] = useState(false)
+  const [model, setModel] = useState('standard')
 
   // Thinking animation
   const [thinkingMessages, setThinkingMessages] = useState([])
@@ -180,69 +180,6 @@ export default function ProgramsPage() {
     )
   }
 
-  const generateSmartPrompt = async () => {
-    setGeneratingPrompt(true)
-    try {
-      // Load user context
-      const workoutsSnap = await getDocs(
-        query(collection(db, 'workouts'), where('userId', '==', user.uid), limit(30))
-      )
-      const maxLifts = {}
-      const painHistory = {}
-      workoutsSnap.docs.forEach(d => {
-        const w = d.data()
-        if (w.status !== 'completed') return
-        ;(w.exercises || []).forEach(ex => {
-          ;(ex.sets || []).forEach(s => {
-            if (!s.actualWeight && !s.actualReps && s.prescribedWeight) return
-            const weight = parseFloat(s.actualWeight || s.prescribedWeight || 0)
-            const reps = parseInt(s.actualReps || s.prescribedReps || 0)
-            if (weight > 0 && reps > 0) {
-              const e1rm = Math.round(weight * (1 + reps / 30))
-              if (!maxLifts[ex.name] || e1rm > maxLifts[ex.name].e1rm) {
-                maxLifts[ex.name] = { e1rm, weight, reps }
-              }
-            }
-            if (s.painLevel && parseInt(s.painLevel) > 0) {
-              if (!painHistory[ex.name]) painHistory[ex.name] = { count: 0, maxPain: 0 }
-              painHistory[ex.name].count++
-              painHistory[ex.name].maxPain = Math.max(painHistory[ex.name].maxPain, parseInt(s.painLevel))
-            }
-          })
-        })
-      })
-
-      const parts = []
-      if (goalLifts.length > 0) parts.push(`Focus lifts: ${goalLifts.join(', ')}`)
-      if (currentMax) parts.push(`Current max: ${currentMax}lb`)
-      if (targetMax) parts.push(`Target: ${targetMax}lb`)
-      if (Object.keys(painHistory).length > 0) {
-        const painExercises = Object.entries(painHistory)
-          .filter(([_, d]) => d.maxPain >= 3)
-          .map(([name, d]) => `${name} (pain ${d.maxPain}/10)`)
-        if (painExercises.length > 0) parts.push(`Pain reported on: ${painExercises.join(', ')} — please program around these`)
-      }
-      if (Object.keys(maxLifts).length > 0) {
-        const topLifts = Object.entries(maxLifts)
-          .sort((a, b) => b[1].e1rm - a[1].e1rm)
-          .slice(0, 5)
-          .map(([name, d]) => `${name}: ${d.e1rm}lb e1RM`)
-        parts.push(`Current strength levels: ${topLifts.join(', ')}`)
-      }
-      if (programType === 'bodyweight') {
-        parts.push('Focus on bodyweight/calisthenics progressions')
-      }
-      parts.push(`Workout duration: ~${workoutDuration} minutes`)
-      parts.push(`Training ${trainingDays.length}x/week for ${numWeeks} weeks`)
-      
-      setPrompt(parts.join('\n'))
-    } catch (e) {
-      console.error('Error generating prompt:', e)
-    } finally {
-      setGeneratingPrompt(false)
-    }
-  }
-
   const startThinking = () => {
     setThinkingMessages([])
     let i = 0
@@ -261,10 +198,6 @@ export default function ProgramsPage() {
   const handleGenerate = async () => {
     if (trainingDays.length === 0) {
       setError('Select at least one training day.')
-      return
-    }
-    if (programType === 'strength' && !currentMax) {
-      setError('Enter your current max for strength programs.')
       return
     }
 
@@ -330,7 +263,12 @@ export default function ProgramsPage() {
 
       // Build goal object based on program type
       const goal = programType === 'bodyweight' 
-        ? { lifts: goalLifts, type: 'bodyweight' }
+        ? { 
+            lifts: goalLifts, 
+            type: 'bodyweight',
+            current: currentMax || undefined,  // reps or seconds
+            target: targetMax || undefined,
+          }
         : { 
             lifts: goalLifts,
             current: currentMax ? parseFloat(currentMax) : undefined,
@@ -350,7 +288,7 @@ export default function ProgramsPage() {
           programType,
           prompt: prompt || undefined,
           context: { maxLifts, painHistory, rpeAverages: rpeAvg },
-          model: isAdmin ? 'premium' : 'standard',
+          model: isAdmin ? model : 'standard',
         }),
       })
 
@@ -398,7 +336,7 @@ export default function ProgramsPage() {
       const programData = {
         ...generatedProgram,
         goal: programType === 'bodyweight'
-          ? { lifts: goalLifts, type: 'bodyweight' }
+          ? { lifts: goalLifts, type: 'bodyweight', current: currentMax || null, target: targetMax || null }
           : { lifts: goalLifts, current: currentMax ? parseFloat(currentMax) : null, target: targetMax ? parseFloat(targetMax) : null, type: programType },
         trainingDays,
         workoutDuration,
@@ -561,36 +499,38 @@ export default function ProgramsPage() {
               </div>
             </div>
 
-            {/* Current / Target — optional for bodyweight */}
-            {programType !== 'bodyweight' && (
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm text-iron-400 mb-2">Current Max (lbs)</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={currentMax}
-                    onChange={(e) => setCurrentMax(e.target.value)}
-                    placeholder="295"
-                    className="input-field w-full"
-                  />
-                </div>
-                <div className="flex items-end pb-3">
-                  <ChevronRight className="w-5 h-5 text-iron-600" />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm text-iron-400 mb-2">Target (lbs)</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={targetMax}
-                    onChange={(e) => setTargetMax(e.target.value)}
-                    placeholder="350"
-                    className="input-field w-full"
-                  />
-                </div>
+            {/* Current / Target — adapts to program type */}
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-sm text-iron-400 mb-2">
+                  {programType === 'bodyweight' ? 'Current Level' : 'Current Max (lbs)'}
+                </label>
+                <input
+                  type={programType === 'bodyweight' ? 'text' : 'number'}
+                  inputMode={programType === 'bodyweight' ? 'text' : 'decimal'}
+                  value={currentMax}
+                  onChange={(e) => setCurrentMax(e.target.value)}
+                  placeholder={programType === 'bodyweight' ? 'e.g. 8 pull-ups, 30s plank' : '295'}
+                  className="input-field w-full"
+                />
               </div>
-            )}
+              <div className="flex items-end pb-3">
+                <ChevronRight className="w-5 h-5 text-iron-600" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm text-iron-400 mb-2">
+                  {programType === 'bodyweight' ? 'Target' : 'Target (lbs)'}
+                </label>
+                <input
+                  type={programType === 'bodyweight' ? 'text' : 'number'}
+                  inputMode={programType === 'bodyweight' ? 'text' : 'decimal'}
+                  value={targetMax}
+                  onChange={(e) => setTargetMax(e.target.value)}
+                  placeholder={programType === 'bodyweight' ? 'e.g. 20 pull-ups, 5min plank' : '350'}
+                  className="input-field w-full"
+                />
+              </div>
+            </div>
 
             {/* Workout Duration */}
             <div>
@@ -665,27 +605,44 @@ export default function ProgramsPage() {
 
             {/* Additional instructions */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm text-iron-400">Additional Instructions</label>
-                <button
-                  onClick={generateSmartPrompt}
-                  disabled={generatingPrompt}
-                  className="text-xs text-flame-400 hover:text-flame-300 flex items-center gap-1 disabled:opacity-50"
-                >
-                  {generatingPrompt ? (
-                    <><Loader2 className="w-3 h-3 animate-spin" /> Building...</>
-                  ) : (
-                    <><Brain className="w-3 h-3" /> Auto-fill from my data</>
-                  )}
-                </button>
-              </div>
+              <label className="block text-sm text-iron-400 mb-2">Additional Instructions <span className="text-iron-600">(optional)</span></label>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. I have a shoulder issue, prefer dumbbells for accessories, include paused bench, focus on time under tension..."
-                rows={4}
+                placeholder="e.g. I have a shoulder issue, prefer dumbbells for accessories, focus on time under tension, include paused bench..."
+                rows={3}
                 className="input-field w-full resize-none"
               />
+            </div>
+
+            {/* Model selector */}
+            <div>
+              <label className="block text-sm text-iron-400 mb-2">AI Model</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setModel('standard')}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    model === 'standard'
+                      ? 'bg-flame-500 text-white'
+                      : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                  }`}
+                >
+                  Standard
+                </button>
+                <button
+                  onClick={() => isAdmin && setModel('premium')}
+                  disabled={!isAdmin}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
+                    model === 'premium'
+                      ? 'bg-purple-500 text-white'
+                      : !isAdmin
+                        ? 'bg-iron-800/50 text-iron-600 cursor-not-allowed'
+                        : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                  }`}
+                >
+                  Premium {!isAdmin && '🔒'}
+                </button>
+              </div>
             </div>
 
             {/* Thinking animation */}
@@ -719,7 +676,7 @@ export default function ProgramsPage() {
 
             <button
               onClick={handleGenerate}
-              disabled={generating || trainingDays.length === 0 || (programType !== 'bodyweight' && !currentMax)}
+              disabled={generating || trainingDays.length === 0}
               className="btn-primary w-full flex items-center justify-center gap-2"
             >
               {generating ? (
