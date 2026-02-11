@@ -102,6 +102,7 @@ export default function ProgramsPage() {
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [model, setModel] = useState('standard')
+  const [customLift, setCustomLift] = useState('')
 
   // Thinking animation
   const [thinkingMessages, setThinkingMessages] = useState([])
@@ -180,6 +181,14 @@ export default function ProgramsPage() {
     )
   }
 
+  const addCustomLift = () => {
+    const trimmed = customLift.trim()
+    if (trimmed && !goalLifts.includes(trimmed)) {
+      setGoalLifts(prev => [...prev, trimmed])
+    }
+    setCustomLift('')
+  }
+
   const startThinking = () => {
     setThinkingMessages([])
     let i = 0
@@ -224,6 +233,7 @@ export default function ProgramsPage() {
       const maxLifts = {}
       const painHistory = {}
       const rpeAverages = {}
+      const now = new Date()
 
       const workoutsSnap = await getDocs(
         query(collection(db, 'workouts'), where('userId', '==', user.uid), limit(30))
@@ -231,6 +241,8 @@ export default function ProgramsPage() {
       workoutsSnap.docs.forEach(d => {
         const w = d.data()
         if (w.status !== 'completed') return
+        const workoutDate = w.date?.toDate ? w.date.toDate() : w.date ? new Date(w.date) : null
+        const daysSince = workoutDate ? Math.floor((now - workoutDate) / (1000 * 60 * 60 * 24)) : null
         ;(w.exercises || []).forEach(ex => {
           ;(ex.sets || []).forEach(s => {
             if (!s.actualWeight && !s.actualReps && s.prescribedWeight) return
@@ -243,9 +255,18 @@ export default function ProgramsPage() {
               }
             }
             if (s.painLevel && parseInt(s.painLevel) > 0) {
-              if (!painHistory[ex.name]) painHistory[ex.name] = { count: 0, maxPain: 0 }
+              const pain = parseInt(s.painLevel)
+              if (!painHistory[ex.name]) {
+                painHistory[ex.name] = { count: 0, maxPain: 0, lastDaysAgo: null, recentCount: 0 }
+              }
               painHistory[ex.name].count++
-              painHistory[ex.name].maxPain = Math.max(painHistory[ex.name].maxPain, parseInt(s.painLevel))
+              painHistory[ex.name].maxPain = Math.max(painHistory[ex.name].maxPain, pain)
+              if (daysSince !== null) {
+                if (painHistory[ex.name].lastDaysAgo === null || daysSince < painHistory[ex.name].lastDaysAgo) {
+                  painHistory[ex.name].lastDaysAgo = daysSince
+                }
+                if (daysSince <= 30) painHistory[ex.name].recentCount++
+              }
             }
             if (s.rpe) {
               if (!rpeAverages[ex.name]) rpeAverages[ex.name] = { sum: 0, count: 0 }
@@ -496,6 +517,37 @@ export default function ProgramsPage() {
                     ))}
                   </>
                 )}
+                {/* Custom-added exercises */}
+                {goalLifts.filter(l => 
+                  !COMMON_LIFTS.includes(l) && !BODYWEIGHT_EXERCISES.includes(l)
+                ).map(lift => (
+                  <button
+                    key={lift}
+                    onClick={() => toggleLift(lift)}
+                    className="px-3 py-1.5 rounded-lg text-sm bg-cyan-500 text-white flex items-center gap-1"
+                  >
+                    {lift} <span className="text-xs opacity-70">✕</span>
+                  </button>
+                ))}
+              </div>
+              {/* Custom exercise input */}
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={customLift}
+                  onChange={(e) => setCustomLift(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomLift() } }}
+                  placeholder="Type any exercise..."
+                  className="input-field flex-1 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={addCustomLift}
+                  disabled={!customLift.trim()}
+                  className="px-3 py-2 rounded-lg text-sm bg-iron-800 text-iron-300 hover:bg-iron-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  Add
+                </button>
               </div>
             </div>
 

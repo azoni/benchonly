@@ -455,17 +455,38 @@ export default function GoalsPage() {
                 <label className="block text-sm font-medium text-iron-400 mb-2">
                   Exercise *
                 </label>
-                <select
-                  value={formData.lift}
-                  onChange={(e) => setFormData(prev => ({ ...prev, lift: e.target.value }))}
-                  className="input-field w-full"
-                  required
-                >
-                  <option value="">Select an exercise</option>
+                <div className="flex flex-wrap gap-2 mb-2">
                   {COMMON_LIFTS.map(lift => (
-                    <option key={lift} value={lift}>{lift}</option>
+                    <button
+                      key={lift}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, lift }))}
+                      className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                        formData.lift === lift
+                          ? 'bg-flame-500 text-white'
+                          : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                      }`}
+                    >
+                      {lift}
+                    </button>
                   ))}
-                </select>
+                  {/* Show custom value as selected chip if not in presets */}
+                  {formData.lift && !COMMON_LIFTS.includes(formData.lift) && (
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded-lg text-sm bg-cyan-500 text-white"
+                    >
+                      {formData.lift}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={formData.lift && !COMMON_LIFTS.includes(formData.lift) ? formData.lift : ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, lift: e.target.value }))}
+                  placeholder="Or type any exercise..."
+                  className="input-field w-full text-sm"
+                />
               </div>
 
               {/* Metric Type */}

@@ -74,8 +74,25 @@ export async function handler(event) {
     
     if (context?.painHistory && Object.keys(context.painHistory).length > 0) {
       const pains = Object.entries(context.painHistory)
-        .map(([name, d]) => `${name}: ${d.maxPain}/10 pain (${d.count} occurrences)`)
-      contextParts.push(`⚠️ Pain history — AVOID or MODIFY these:\n${pains.join('\n')}`)
+        .map(([name, d]) => {
+          let status
+          if (d.recentCount > 0) {
+            status = `ACTIVE — last reported ${d.lastDaysAgo}d ago, ${d.recentCount} in last 30d`
+          } else if (d.lastDaysAgo !== null && d.lastDaysAgo > 60) {
+            status = `RECOVERING — last reported ${d.lastDaysAgo}d ago, none recently. Consider cautious reintroduction.`
+          } else if (d.lastDaysAgo !== null) {
+            status = `FADING — last reported ${d.lastDaysAgo}d ago, none in last 30d`
+          } else {
+            status = `${d.count} total occurrences`
+          }
+          return `${name}: ${d.maxPain}/10 peak pain — ${status}`
+        })
+      contextParts.push(`⚠️ Pain history:\n${pains.join('\n')}
+
+PAIN GUIDELINES:
+- ACTIVE pain (reported in last 30 days): AVOID this exercise. Substitute a similar movement pattern that doesn't aggravate it.
+- FADING pain (31-60 days ago, no recent reports): Include cautiously at REDUCED intensity/volume. Add a note like "Stop if any discomfort."
+- RECOVERING pain (60+ days, no recent reports): OK to program normally, but note it in coaching cues. Athlete may have moved past this.`)
     }
 
     if (context?.rpeAverages && Object.keys(context.rpeAverages).length > 0) {
@@ -180,7 +197,7 @@ ${type === 'mixed' ? '- Balance barbell/dumbbell work with bodyweight movements 
 - The "primaryScheme" is the main compound set/rep scheme (e.g. "5x5", "4x3", "3x1"${type !== 'strength' ? ', "5x30s"' : ''})
 - "accessories" are 2-4 short strings listing supplemental exercises with set/rep
 - CRITICAL: Every session must fit within ${duration} minutes. Scale volume accordingly.
-- Avoid exercises where athlete has reported pain — find alternatives
+- Follow the PAIN GUIDELINES above if pain history is provided — use the ACTIVE/FADING/RECOVERING categories to decide whether to avoid, modify, or cautiously include exercises
 - Be specific with progression — each week should build on the last
 - The final week should include a test/assessment day
 - Day "type" must be one of: "primary", "volume", "speed", "accessories", "deload", "test"

@@ -351,9 +351,19 @@ function buildContext(ctx, focus, intensity, settings = {}) {
     d.maxPain >= painThresholdMin || d.count >= painThresholdCount
   );
   if (pain.length) {
-    s += 'PAIN HISTORY [MUST AVOID OR SUBSTITUTE]:\n';
-    pain.forEach(([n, d]) => { 
-      s += `  ${n}: ${d.maxPain}/10 pain (${d.count}x)\n`; 
+    s += 'PAIN HISTORY:\n';
+    pain.forEach(([n, d]) => {
+      let status
+      if (d.recentCount > 0) {
+        status = `ACTIVE — last ${d.lastDaysAgo}d ago. AVOID or SUBSTITUTE.`
+      } else if (d.lastDaysAgo !== null && d.lastDaysAgo > 60) {
+        status = `RECOVERING (${d.lastDaysAgo}d ago) — OK to include cautiously at reduced load. Note: "Stop if discomfort."`
+      } else if (d.lastDaysAgo !== null) {
+        status = `FADING (${d.lastDaysAgo}d ago) — include at reduced intensity if needed.`
+      } else {
+        status = `${d.count}x total — AVOID or SUBSTITUTE.`
+      }
+      s += `  ${n}: ${d.maxPain}/10 peak — ${status}\n`;
     });
     s += '\n';
   }

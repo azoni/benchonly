@@ -112,8 +112,11 @@ export default function AIChatPanel() {
       const maxLifts = {};
       const painHistory = {};
       const rpeData = {};
+      const now = new Date();
 
       strengthWorkouts.slice(0, 25).forEach(w => {
+        const workoutDate = w.date?.toDate ? w.date.toDate() : w.date ? new Date(w.date) : null;
+        const daysSince = workoutDate && !isNaN(workoutDate.getTime()) ? Math.floor((now - workoutDate) / (1000 * 60 * 60 * 24)) : null;
         (w.exercises || []).forEach(ex => {
           if (!ex.name) return;
           (ex.sets || []).forEach(s => {
@@ -133,9 +136,15 @@ export default function AIChatPanel() {
               }
             }
             if (pain > 0) {
-              if (!painHistory[ex.name]) painHistory[ex.name] = { count: 0, maxPain: 0 };
+              if (!painHistory[ex.name]) painHistory[ex.name] = { count: 0, maxPain: 0, lastDaysAgo: null, recentCount: 0 };
               painHistory[ex.name].count++;
               painHistory[ex.name].maxPain = Math.max(painHistory[ex.name].maxPain, pain);
+              if (daysSince !== null) {
+                if (painHistory[ex.name].lastDaysAgo === null || daysSince < painHistory[ex.name].lastDaysAgo) {
+                  painHistory[ex.name].lastDaysAgo = daysSince;
+                }
+                if (daysSince <= 30) painHistory[ex.name].recentCount++;
+              }
             }
             if (rpe > 0) {
               if (!rpeData[ex.name]) rpeData[ex.name] = { total: 0, count: 0 };
