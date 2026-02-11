@@ -16,8 +16,10 @@ import {
   Activity,
   Calendar,
   MessageCircle,
+  BookOpen,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
 
 // AI thinking messages — same ones used in the real generator
 const THINKING_STEPS = [
@@ -489,9 +491,17 @@ export default function LoginPage() {
               </div>
               <span className="font-display text-sm text-iron-500">BENCH ONLY</span>
             </div>
-            <p className="text-xs text-iron-600">
-              © {new Date().getFullYear()} BenchPressOnly
-            </p>
+            <div className="flex items-center gap-4">
+              <Link to="/docs" className="text-xs text-iron-500 hover:text-iron-300 transition-colors flex items-center gap-1">
+                <BookOpen className="w-3 h-3" /> Docs
+              </Link>
+              <a href="https://azoni.ai" target="_blank" rel="noopener noreferrer" className="text-xs text-iron-500 hover:text-iron-300 transition-colors">
+                Built by Azoni
+              </a>
+              <p className="text-xs text-iron-600">
+                © {new Date().getFullYear()}
+              </p>
+            </div>
           </div>
         </footer>
       </div>

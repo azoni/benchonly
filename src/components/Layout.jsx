@@ -14,7 +14,6 @@ import {
   Eye,
   Home,
   User,
-  LayoutDashboard,
   Activity,
   Bell,
   Zap,
@@ -39,7 +38,6 @@ const baseNavItems = [
   { path: '/groups', icon: Users, label: 'Groups' },
   { path: '/feed', icon: Activity, label: 'Feed' },
   { path: '/goals', icon: Target, label: 'Goals' },
-  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/docs', icon: BookOpen, label: 'Docs' },
   { path: '/profile', icon: User, label: 'Profile' },
 ];

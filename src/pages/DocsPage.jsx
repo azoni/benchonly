@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, Link } from 'react-router-dom'
 import {
   BookOpen,
   Calculator,
@@ -17,7 +17,10 @@ import {
   Layers,
   Activity,
   Heart,
+  ArrowLeft,
+  LogIn,
 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 const SECTIONS = [
   {
@@ -666,6 +669,7 @@ function SectionContent({ id }) {
 export default function DocsPage() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { user, loading: authLoading } = useAuth()
   const [activeSection, setActiveSection] = useState('overview')
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const contentRef = useRef(null)
@@ -736,82 +740,132 @@ export default function DocsPage() {
   )
 
   return (
-    <div className="max-w-6xl mx-auto -m-4 lg:-m-6">
-      {/* Mobile doc header */}
-      <div className="lg:hidden sticky top-0 z-20 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 px-4 py-3 flex items-center gap-3">
-        <button
-          onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-          className="p-1.5 rounded-lg bg-iron-800/50 text-iron-300"
-        >
-          {mobileSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
-        <div className="flex items-center gap-2 text-sm">
-          <BookOpen className="w-4 h-4 text-flame-400" />
-          <span className="text-iron-300">Docs</span>
-          <ChevronRight className="w-3 h-3 text-iron-600" />
-          <span className="text-iron-100 font-medium">{SECTIONS.find(s => s.id === activeSection)?.label}</span>
-        </div>
-      </div>
-
-      {/* Mobile sidebar overlay */}
-      {mobileSidebarOpen && (
-        <>
-          <div
-            className="lg:hidden fixed inset-0 bg-black/50 z-10"
-            onClick={() => setMobileSidebarOpen(false)}
-          />
-          <div className="lg:hidden fixed left-0 top-0 bottom-0 w-64 bg-iron-900 z-20 border-r border-iron-800 overflow-y-auto pt-16 pb-8 px-2">
-            <Sidebar />
-          </div>
-        </>
-      )}
-
-      <div className="flex min-h-[calc(100vh-4rem)]">
-        {/* Desktop sidebar */}
-        <aside className="hidden lg:block w-56 flex-shrink-0 border-r border-iron-800">
-          <div className="sticky top-0 py-6 px-2 max-h-screen overflow-y-auto">
-            <div className="flex items-center gap-2 px-3 mb-6">
-              <BookOpen className="w-5 h-5 text-flame-400" />
-              <span className="font-display text-lg text-iron-100">Docs</span>
+    <div className="min-h-screen bg-iron-950">
+      {/* Top header bar */}
+      <header className="sticky top-0 z-30 bg-iron-900/95 backdrop-blur-sm border-b border-iron-800">
+        <div className="max-w-6xl mx-auto h-14 flex items-center justify-between px-4">
+          <Link to={user ? '/today' : '/login'} className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-flame-500 flex items-center justify-center">
+              <Dumbbell className="w-4.5 h-4.5 text-white" />
             </div>
-            <Sidebar />
+            <span className="font-display text-lg text-iron-50 tracking-wide hidden sm:block">BENCH ONLY</span>
+          </Link>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-sm text-iron-400">
+              <BookOpen className="w-4 h-4 text-flame-400" />
+              <span className="hidden sm:inline">Documentation</span>
+            </div>
+            {user ? (
+              <Link
+                to="/today"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-iron-300 hover:text-iron-100 
+                  bg-iron-800 hover:bg-iron-700 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Back to app
+              </Link>
+            ) : (
+              <Link
+                to="/login"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white
+                  bg-flame-500 hover:bg-flame-600 rounded-lg transition-colors"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                Sign in
+              </Link>
+            )}
           </div>
-        </aside>
+        </div>
+      </header>
 
-        {/* Content area */}
-        <div ref={contentRef} className="flex-1 min-w-0">
-          <div className="max-w-3xl mx-auto px-4 lg:px-10 py-6 lg:py-10">
-            <SectionContent id={activeSection} />
+      <div className="max-w-6xl mx-auto">
+        {/* Mobile doc breadcrumb */}
+        <div className="lg:hidden sticky top-14 z-20 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+            className="p-1.5 rounded-lg bg-iron-800/50 text-iron-300"
+          >
+            {mobileSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-iron-500">Docs</span>
+            <ChevronRight className="w-3 h-3 text-iron-600" />
+            <span className="text-iron-100 font-medium">{SECTIONS.find(s => s.id === activeSection)?.label}</span>
+          </div>
+        </div>
 
-            {/* Bottom navigation */}
-            <div className="mt-12 pt-6 border-t border-iron-800 flex items-stretch gap-3">
-              {prevSection ? (
-                <button
-                  onClick={() => goToSection(prevSection.id)}
-                  className="flex-1 flex items-center gap-3 p-4 rounded-xl bg-iron-900/50 border border-iron-800 
-                    hover:bg-iron-800/50 hover:border-iron-700 transition-colors text-left group"
-                >
-                  <ChevronLeft className="w-4 h-4 text-iron-500 group-hover:text-iron-300 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <span className="text-[11px] text-iron-500 uppercase tracking-wider">Previous</span>
-                    <p className="text-sm text-iron-200 font-medium truncate">{prevSection.label}</p>
+        {/* Mobile sidebar overlay */}
+        {mobileSidebarOpen && (
+          <>
+            <div
+              className="lg:hidden fixed inset-0 bg-black/50 z-10"
+              onClick={() => setMobileSidebarOpen(false)}
+            />
+            <div className="lg:hidden fixed left-0 top-0 bottom-0 w-64 bg-iron-900 z-20 border-r border-iron-800 overflow-y-auto pt-28 pb-8 px-2">
+              <Sidebar />
+            </div>
+          </>
+        )}
+
+        <div className="flex min-h-[calc(100vh-3.5rem)]">
+          {/* Desktop sidebar */}
+          <aside className="hidden lg:block w-56 flex-shrink-0 border-r border-iron-800">
+            <div className="sticky top-14 py-6 px-2 max-h-[calc(100vh-3.5rem)] overflow-y-auto">
+              <Sidebar />
+            </div>
+          </aside>
+
+          {/* Content area */}
+          <div ref={contentRef} className="flex-1 min-w-0">
+            <div className="max-w-3xl mx-auto px-4 lg:px-10 py-6 lg:py-10">
+              <SectionContent id={activeSection} />
+
+              {/* Bottom navigation */}
+              <div className="mt-12 pt-6 border-t border-iron-800 flex items-stretch gap-3">
+                {prevSection ? (
+                  <button
+                    onClick={() => goToSection(prevSection.id)}
+                    className="flex-1 flex items-center gap-3 p-4 rounded-xl bg-iron-900/50 border border-iron-800 
+                      hover:bg-iron-800/50 hover:border-iron-700 transition-colors text-left group"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-iron-500 group-hover:text-iron-300 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <span className="text-[11px] text-iron-500 uppercase tracking-wider">Previous</span>
+                      <p className="text-sm text-iron-200 font-medium truncate">{prevSection.label}</p>
+                    </div>
+                  </button>
+                ) : <div className="flex-1" />}
+                
+                {nextSection ? (
+                  <button
+                    onClick={() => goToSection(nextSection.id)}
+                    className="flex-1 flex items-center justify-end gap-3 p-4 rounded-xl bg-iron-900/50 border border-iron-800 
+                      hover:bg-iron-800/50 hover:border-iron-700 transition-colors text-right group"
+                  >
+                    <div className="min-w-0">
+                      <span className="text-[11px] text-iron-500 uppercase tracking-wider">Next</span>
+                      <p className="text-sm text-iron-200 font-medium truncate">{nextSection.label}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-iron-500 group-hover:text-iron-300 flex-shrink-0" />
+                  </button>
+                ) : <div className="flex-1" />}
+              </div>
+
+              {/* Footer */}
+              <div className="mt-8 pt-6 border-t border-iron-800/50 flex flex-col sm:flex-row items-center justify-between gap-3 pb-8">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-md bg-flame-500 flex items-center justify-center">
+                    <Dumbbell className="w-3 h-3 text-white" />
                   </div>
-                </button>
-              ) : <div className="flex-1" />}
-              
-              {nextSection ? (
-                <button
-                  onClick={() => goToSection(nextSection.id)}
-                  className="flex-1 flex items-center justify-end gap-3 p-4 rounded-xl bg-iron-900/50 border border-iron-800 
-                    hover:bg-iron-800/50 hover:border-iron-700 transition-colors text-right group"
-                >
-                  <div className="min-w-0">
-                    <span className="text-[11px] text-iron-500 uppercase tracking-wider">Next</span>
-                    <p className="text-sm text-iron-200 font-medium truncate">{nextSection.label}</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-iron-500 group-hover:text-iron-300 flex-shrink-0" />
-                </button>
-              ) : <div className="flex-1" />}
+                  <span className="font-display text-xs text-iron-500">BENCH ONLY</span>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-iron-600">
+                  <a href="https://azoni.ai" target="_blank" rel="noopener noreferrer" className="hover:text-iron-400 transition-colors">
+                    Built by Azoni
+                  </a>
+                  <span>© {new Date().getFullYear()}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

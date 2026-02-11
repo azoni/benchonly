@@ -128,6 +128,8 @@ export default function App() {
       />
       
       <Route path="/guest" element={<GuestRoute />} />
+
+      <Route path="/docs" element={<DocsPage />} />
       
       <Route 
         path="/onboarding" 
@@ -169,7 +171,6 @@ export default function App() {
         <Route path="usage" element={<UsagePage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="admin" element={<AdminPage />} />
-        <Route path="docs" element={<DocsPage />} />
       </Route>
       
       <Route path="*" element={<Navigate to="/" replace />} />
