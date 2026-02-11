@@ -1,6 +1,22 @@
 import { tokenUsageService } from './firestore';
+import { getAuth } from 'firebase/auth';
 
 const API_BASE = '/.netlify/functions';
+
+/**
+ * Get Authorization headers with Firebase ID token.
+ * Import this from any component that calls serverless functions directly.
+ */
+export async function getAuthHeaders() {
+  const auth = getAuth();
+  const user = auth.currentUser;
+  if (!user) throw new Error('Not authenticated');
+  const token = await user.getIdToken();
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+  };
+}
 
 class APIService {
   constructor() {
@@ -9,11 +25,10 @@ class APIService {
 
   async generateWorkout(params) {
     try {
+      const headers = await getAuthHeaders();
       const response = await fetch(`${this.baseUrl}/generate-workout`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(params),
       });
 
@@ -37,15 +52,13 @@ class APIService {
 
   async askAssistant(message, context = {}) {
     try {
+      const headers = await getAuthHeaders();
       const response = await fetch(`${this.baseUrl}/ask-assistant`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ 
           message, 
           context,
-          userId: context.userId
         }),
       });
 
@@ -69,11 +82,10 @@ class APIService {
 
   async autofillWorkout(workoutId, partialData) {
     try {
+      const headers = await getAuthHeaders();
       const response = await fetch(`${this.baseUrl}/autofill-workout`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ workoutId, partialData }),
       });
 
@@ -97,12 +109,11 @@ class APIService {
 
   async analyzeProgress(userId, liftType, timeRange) {
     try {
+      const headers = await getAuthHeaders();
       const response = await fetch(`${this.baseUrl}/analyze-progress`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ userId, liftType, timeRange }),
+        headers,
+        body: JSON.stringify({ liftType, timeRange }),
       });
 
       if (!response.ok) {

@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import admin from 'firebase-admin';
+import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE, admin } from './utils/auth.js';
 
 // Fire-and-forget activity logger (inlined — Netlify bundles each function independently)
 function logActivity({ type, title, description, reasoning, model, tokens, cost, metadata }) {
@@ -15,42 +15,27 @@ function logActivity({ type, title, description, reasoning, model, tokens, cost,
   }).catch(e => console.error('[activity-log] Failed:', e.message));
 }
 
-// Initialize Firebase Admin
-if (!admin.apps.length) {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-
-  if (projectId && clientEmail && privateKey) {
-    admin.initializeApp({
-      credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-    });
-  }
-}
-
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function handler(event) {
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' },
-      body: '',
-    };
-  }
+  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
+  const auth = await verifyAuth(event);
+  if (!auth) return UNAUTHORIZED;
+
   try {
-    const { coachId, groupId, athletes, prompt, workoutDate, model, settings } = JSON.parse(event.body);
+    const { groupId, athletes, prompt, workoutDate, model, settings } = JSON.parse(event.body);
+    const coachId = auth.uid;
 
     if (!groupId || !athletes?.length) {
       return {
         statusCode: 400,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
         body: JSON.stringify({ error: 'groupId and athletes required' }),
       };
     }

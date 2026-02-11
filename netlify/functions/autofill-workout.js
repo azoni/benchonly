@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
 
 // Fire-and-forget activity logger (inlined — Netlify bundles each function independently)
 function logActivity({ type, title, description, reasoning, model, tokens, cost, metadata }) {
@@ -19,12 +20,18 @@ const openai = new OpenAI({
 })
 
 export async function handler(event) {
+  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' }
   }
 
+  const auth = await verifyAuth(event);
+  if (!auth) return UNAUTHORIZED;
+
   try {
-    const { partialWorkout, recentWorkouts, goals, userId } = JSON.parse(event.body)
+    const { partialWorkout, recentWorkouts, goals } = JSON.parse(event.body)
+    const userId = auth.uid;
 
     const systemPrompt = `You are a strength training AI that helps complete partially filled workout logs. Based on the user's recent training history, goals, and the exercises already logged, suggest appropriate weights, reps, and sets.
 

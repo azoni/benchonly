@@ -1,11 +1,17 @@
 import OpenAI from 'openai';
+import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export const handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' };
   }
+
+  const auth = await verifyAuth(event);
+  if (!auth) return UNAUTHORIZED;
 
   try {
     const { exerciseName, exerciseType, sets, workoutContext, reason } = JSON.parse(event.body);

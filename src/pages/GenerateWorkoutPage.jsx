@@ -28,6 +28,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getAuthHeaders } from '../services/api';
 import { workoutService, creditService, CREDIT_COSTS, programService } from '../services/firestore';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -359,11 +360,12 @@ export default function GenerateWorkoutPage() {
         updateProfile({ credits: credits - cost });
       }
 
+      const authHeaders = await getAuthHeaders();
       const response = await fetch('/.netlify/functions/generate-workout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
-          userId: user.uid, prompt, workoutFocus, intensity,
+          prompt, workoutFocus, intensity,
           model: isAdmin ? model : 'standard',
           draftMode: true,
           context: {
@@ -503,9 +505,10 @@ export default function GenerateWorkoutPage() {
         .filter((_, i) => i !== exIdx)
         .map(e => e.name);
 
+      const swapHeaders = await getAuthHeaders();
       const response = await fetch('/.netlify/functions/swap-exercise', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: swapHeaders,
         body: JSON.stringify({
           exerciseName: ex.name,
           exerciseType: ex.type || 'weight',

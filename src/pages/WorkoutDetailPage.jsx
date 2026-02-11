@@ -28,6 +28,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { workoutService } from '../services/firestore'
+import { getAuthHeaders } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { getDisplayDate } from '../utils/dateUtils'
 import { ACTIVITY_METS } from '../services/calorieService'
@@ -142,9 +143,10 @@ export default function WorkoutDetailPage() {
         .filter((_, i) => i !== exIdx)
         .map(e => e.name)
 
+      const swapHeaders = await getAuthHeaders()
       const response = await fetch('/.netlify/functions/swap-exercise', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: swapHeaders,
         body: JSON.stringify({
           exerciseName: ex.name,
           exerciseType: ex.type || 'weight',

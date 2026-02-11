@@ -18,6 +18,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { getAuthHeaders } from '../services/api'
 import { programService, workoutService, creditService, CREDIT_COSTS } from '../services/firestore'
 import { collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '../services/firebase'
@@ -239,11 +240,11 @@ INSTRUCTIONS:
 ${day.type === 'deload' ? '- This is a DELOAD day. Reduce volume 40-50%, keep weights light.' : ''}
 ${day.type === 'test' ? '- This is a TEST day. Work up to a heavy single or rep max.' : ''}`
 
+      const authHeaders = await getAuthHeaders()
       const response = await fetch('/.netlify/functions/generate-workout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
-          userId: user.uid,
           prompt,
           workoutFocus: day.type === 'test' ? 'Testing' : day.type === 'deload' ? 'Recovery' : `${primaryLift} focused`,
           intensity: day.type === 'deload' ? 'recovery' : day.type === 'volume' ? 'moderate' : 'heavy',

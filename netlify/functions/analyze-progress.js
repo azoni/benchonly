@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
 
 // Fire-and-forget activity logger (inlined — Netlify bundles each function independently)
 function logActivity({ type, title, description, reasoning, model, tokens, cost, metadata }) {
@@ -19,12 +20,18 @@ const openai = new OpenAI({
 })
 
 export async function handler(event) {
+  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' }
   }
 
+  const auth = await verifyAuth(event);
+  if (!auth) return UNAUTHORIZED;
+
   try {
-    const { workouts, goals, timeframe, userId } = JSON.parse(event.body)
+    const { workouts, goals, timeframe } = JSON.parse(event.body)
+    const userId = auth.uid;
 
     const systemPrompt = `You are a strength training analyst. Analyze the user's workout data and provide actionable insights.
 

@@ -20,6 +20,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { getAuthHeaders } from '../services/api'
 import { programService, goalService, creditService, CREDIT_COSTS } from '../services/firestore'
 import { collection, query, where, getDocs, limit } from 'firebase/firestore'
 import { db } from '../services/firebase'
@@ -166,9 +167,11 @@ export default function ProgramsPage() {
   const prefillFromGoal = (goal) => {
     const lift = goal.lift || 'Bench Press'
     if (!goalLifts.includes(lift)) setGoalLifts(prev => [...prev, lift])
-    setCurrentMax(String(goal.currentWeight || ''))
-    setTargetMax(String(goal.targetWeight || ''))
-    if (goal.metricType === 'reps') {
+    const current = goal.currentValue ?? goal.currentWeight ?? ''
+    const target = goal.targetValue ?? goal.targetWeight ?? ''
+    setCurrentMax(String(current))
+    setTargetMax(String(target))
+    if (goal.metricType === 'reps' || goal.metricType === 'time') {
       setProgramType('bodyweight')
     }
   }
@@ -297,11 +300,11 @@ export default function ProgramsPage() {
             type: programType,
           }
 
+      const authHeaders = await getAuthHeaders()
       const response = await fetch('/.netlify/functions/generate-program', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
-          userId: user.uid,
           goal,
           weeks: numWeeks,
           trainingDays,
@@ -440,16 +443,20 @@ export default function ProgramsPage() {
               <div>
                 <label className="block text-sm text-iron-400 mb-2">Quick fill from a goal</label>
                 <div className="flex flex-wrap gap-2">
-                  {existingGoals.map(g => (
+                  {existingGoals.map(g => {
+                    const current = g.currentValue ?? g.currentWeight ?? ''
+                    const target = g.targetValue ?? g.targetWeight ?? ''
+                    const unit = g.metricType === 'time' ? 'sec' : g.metricType === 'reps' ? 'reps' : 'lb'
+                    return (
                     <button
                       key={g.id}
                       onClick={() => prefillFromGoal(g)}
                       className="px-3 py-1.5 rounded-lg text-sm bg-iron-800 text-iron-300 hover:bg-iron-700 transition-colors border border-iron-700"
                     >
-                      <span className="text-flame-400">{g.lift}</span>: {g.currentWeight} → {g.targetWeight}
-                      {g.metricType === 'reps' ? ' reps' : 'lb'}
+                      <span className="text-flame-400">{g.lift}</span>: {current || '—'} → {target}{unit}
                     </button>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}

@@ -20,6 +20,7 @@ import { format } from 'date-fns';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
+import { getAuthHeaders } from '../services/api';
 import { creditService, CREDIT_COSTS } from '../services/firestore';
 
 // Simulated thinking messages that rotate during AI generation
@@ -302,11 +303,12 @@ export default function GenerateGroupWorkoutModal({
         recentWorkouts: athleteContexts[uid]?.recentWorkouts || [],
       }));
 
+      const authHeaders = await getAuthHeaders();
       const response = await fetch('/.netlify/functions/generate-group-workout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
-          coachId, groupId: group.id, athletes: athleteData,
+          groupId: group.id, athletes: athleteData,
           prompt, workoutDate,
           model: isAdmin ? model : 'standard',
         }),

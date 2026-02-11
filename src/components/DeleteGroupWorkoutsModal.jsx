@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Loader2, AlertTriangle, Calendar, Check } from 'lucide-react';
 import { format } from 'date-fns';
+import { getAuthHeaders } from '../services/api';
 
 export default function DeleteGroupWorkoutsModal({
   isOpen,
@@ -60,12 +61,12 @@ export default function DeleteGroupWorkoutsModal({
     setError(null);
 
     try {
+      const authHeaders = await getAuthHeaders();
       const response = await fetch('/.netlify/functions/delete-group-workouts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
           groupId: group.id,
-          coachId,
           workoutIds: deleteMode === 'select' ? selectedWorkouts : undefined,
           deleteByDate: deleteMode === 'date' ? selectedDate : undefined,
         }),

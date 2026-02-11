@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
 
 function logActivity({ type, title, description, reasoning, model, tokens, cost, metadata }) {
   const secret = process.env.AGENT_WEBHOOK_SECRET;
@@ -16,21 +17,17 @@ function logActivity({ type, title, description, reasoning, model, tokens, cost,
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 export async function handler(event) {
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' },
-      body: '',
-    }
-  }
+  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' }
   }
 
+  const auth = await verifyAuth(event);
+  if (!auth) return UNAUTHORIZED;
+
   try {
     const {
-      userId,
       goal,             // { lifts: [], current, target, type }
       weeks,            // number of weeks (4-12)
       trainingDays,     // ['monday', 'wednesday', 'friday']
@@ -40,12 +37,13 @@ export async function handler(event) {
       context,          // { maxLifts, painHistory, rpeAverages }
       model,            // 'standard' or 'premium'
     } = JSON.parse(event.body)
+    const userId = auth.uid;
 
-    if (!userId || !trainingDays?.length) {
+    if (!trainingDays?.length) {
       return {
         statusCode: 400,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: 'Missing required fields: userId and trainingDays' }),
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        body: JSON.stringify({ error: 'Missing required fields: trainingDays' }),
       }
     }
 

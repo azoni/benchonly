@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
 
 // Fire-and-forget activity logger (inlined — Netlify bundles each function independently)
 function logActivity({ type, title, description, reasoning, model, tokens, cost, metadata }) {
@@ -19,21 +20,18 @@ const openai = new OpenAI({
 })
 
 export async function handler(event) {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  }
-
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: corsHeaders, body: '' }
-  }
+  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
 
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: corsHeaders, body: 'Method Not Allowed' }
+    return { statusCode: 405, headers: CORS_HEADERS, body: 'Method Not Allowed' }
   }
 
+  const auth = await verifyAuth(event);
+  if (!auth) return UNAUTHORIZED;
+
   try {
-    const { message, context, userId } = JSON.parse(event.body)
+    const { message, context } = JSON.parse(event.body)
+    const userId = auth.uid;
 
     // Build rich user context summary
     const userContext = []
