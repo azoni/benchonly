@@ -72,7 +72,7 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-iron-950 flex">
+    <div className="min-h-screen bg-iron-950 flex overflow-x-hidden">
       {/* Guest Mode Banner - positioned below mobile header */}
       {isGuest && (
         <div className="fixed left-0 right-0 z-30 bg-gradient-to-r from-flame-600 to-flame-500 text-white py-2 px-4 text-center text-sm
@@ -309,7 +309,7 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className={`flex-1 transition-all duration-300
+      <main className={`flex-1 min-w-0 transition-all duration-300
         ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}
         ${isGuest ? 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem+2.5rem)] lg:pt-16' : 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem)] lg:pt-0'}`}
       >

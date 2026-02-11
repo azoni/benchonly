@@ -372,9 +372,9 @@ export default function TodayPage() {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-lg text-iron-100">{workout.name}</h3>
-                  <span className="px-2 py-0.5 text-xs font-medium bg-cyan-500/20 text-cyan-400 rounded">Group</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold text-lg text-iron-100 truncate">{workout.name}</h3>
+                  <span className="px-2 py-0.5 text-xs font-medium bg-cyan-500/20 text-cyan-400 rounded flex-shrink-0">Group</span>
                 </div>
                 <p className="text-sm text-iron-500 mt-0.5">
                   {workout.exercises?.length || 0} exercises
@@ -409,7 +409,7 @@ export default function TodayPage() {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-lg text-iron-100">{workout.name}</h3>
+                <h3 className="font-semibold text-lg text-iron-100 truncate">{workout.name}</h3>
                 <p className="text-sm text-iron-500 mt-0.5">
                   {workout.workoutType === 'cardio'
                     ? `${workout.duration} min`
@@ -435,7 +435,7 @@ export default function TodayPage() {
                     <Repeat className="w-7 h-7 text-emerald-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-lg text-iron-100">{schedule.name || 'Scheduled Activity'}</h3>
+                    <h3 className="font-semibold text-lg text-iron-100 truncate">{schedule.name || 'Scheduled Activity'}</h3>
                     <p className="text-sm text-iron-500 mt-0.5">
                       Recurring
                       {schedule.duration && ` · ${schedule.duration} min`}
