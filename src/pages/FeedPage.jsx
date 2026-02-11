@@ -14,12 +14,11 @@ import {
   Trophy,
   Loader2,
   User,
-  Lock
+  Users,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { feedService, REACTIONS, FEED_TYPES } from '../services/feedService'
-import { ACTIVITY_METS } from '../services/calorieService'
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import { feedService } from '../services/feedService'
+import { collection, getDocs, query } from 'firebase/firestore'
 import { db } from '../services/firebase'
 
 export default function FeedPage() {
@@ -123,37 +122,6 @@ export default function FeedPage() {
     }
   }
 
-  const handleReaction = async (itemId, emoji) => {
-    if (!user || isGuest) return
-    
-    const item = feedItems.find(i => i.id === itemId)
-    const hasReacted = item?.reactions?.[emoji]?.includes(user.uid)
-    
-    if (hasReacted) {
-      await feedService.removeReaction(itemId, user.uid, emoji)
-    } else {
-      await feedService.addReaction(itemId, user.uid, emoji)
-    }
-    
-    // Update local state
-    setFeedItems(prev => prev.map(i => {
-      if (i.id !== itemId) return i
-      
-      const reactions = { ...i.reactions }
-      if (hasReacted) {
-        reactions[emoji] = (reactions[emoji] || []).filter(id => id !== user.uid)
-      } else {
-        reactions[emoji] = [...(reactions[emoji] || []), user.uid]
-      }
-      
-      return { 
-        ...i, 
-        reactions,
-        reactionCount: hasReacted ? i.reactionCount - 1 : i.reactionCount + 1
-      }
-    }))
-  }
-
   const openComments = async (item) => {
     setSelectedItem(item)
     const commentsData = await feedService.getComments(item.id)
@@ -165,7 +133,7 @@ export default function FeedPage() {
     
     setSubmittingComment(true)
     try {
-      const result = await feedService.addComment(selectedItem.id, user.uid, newComment.trim())
+      const result = await feedService.addComment(selectedItem.id, user.uid, newComment.trim(), user.displayName || '')
       if (result) {
         setComments(prev => [...prev, {
           id: result.id,
@@ -191,15 +159,17 @@ export default function FeedPage() {
 
   const getActivityIcon = (type) => {
     switch (type) {
-      case FEED_TYPES.WORKOUT_COMPLETED:
+      case 'workout':
         return <Dumbbell className="w-5 h-5 text-green-400" />
-      case FEED_TYPES.CARDIO_LOGGED:
+      case 'cardio':
         return <Activity className="w-5 h-5 text-orange-400" />
-      case FEED_TYPES.GOAL_COMPLETED:
+      case 'group_workout':
+        return <Users className="w-5 h-5 text-cyan-400" />
+      case 'goal_completed':
         return <Trophy className="w-5 h-5 text-yellow-400" />
-      case FEED_TYPES.GOAL_CREATED:
+      case 'goal_created':
         return <Target className="w-5 h-5 text-purple-400" />
-      case FEED_TYPES.PR:
+      case 'personal_record':
         return <Flame className="w-5 h-5 text-flame-400" />
       default:
         return <Activity className="w-5 h-5 text-iron-400" />
@@ -210,18 +180,20 @@ export default function FeedPage() {
     const userName = users[item.userId]?.displayName || 'Someone'
     
     switch (item.type) {
-      case FEED_TYPES.WORKOUT_COMPLETED:
-        return <><strong>{userName}</strong> completed a workout: <span className="text-flame-400">{item.data?.name || 'Workout'}</span></>
-      case FEED_TYPES.CARDIO_LOGGED:
+      case 'workout':
+        return <><strong>{userName}</strong> completed <span className="text-flame-400">{item.data?.name || 'a workout'}</span></>
+      case 'cardio':
         return <><strong>{userName}</strong> logged <span className="text-orange-400">{item.data?.duration}min of {item.data?.name || 'cardio'}</span></>
-      case FEED_TYPES.GOAL_COMPLETED:
-        return <><strong>{userName}</strong> achieved their goal: <span className="text-yellow-400">{item.data?.lift} - {item.data?.targetValue} {item.data?.unit}</span> 🎉</>
-      case FEED_TYPES.GOAL_CREATED:
+      case 'group_workout':
+        return <><strong>{userName}</strong> completed their workout{item.data?.groupName ? <> in <span className="text-cyan-400">{item.data.groupName}</span></> : ''}</>
+      case 'goal_completed':
+        return <><strong>{userName}</strong> achieved their goal: <span className="text-yellow-400">{item.data?.lift} - {item.data?.targetValue} {item.data?.unit}</span></>
+      case 'goal_created':
         return <><strong>{userName}</strong> set a new goal: <span className="text-purple-400">{item.data?.lift} - {item.data?.targetValue} {item.data?.unit}</span></>
-      case FEED_TYPES.PR:
-        return <><strong>{userName}</strong> hit a new PR: <span className="text-flame-400">{item.data?.exercise} - {item.data?.weight}lbs</span> 🔥</>
+      case 'personal_record':
+        return <><strong>{userName}</strong> hit a new PR: <span className="text-flame-400">{item.data?.exercise} - {item.data?.weight}lbs</span></>
       default:
-        return <><strong>{userName}</strong> did something awesome</>
+        return <><strong>{userName}</strong> was active</>
     }
   }
 
@@ -323,42 +295,21 @@ export default function FeedPage() {
               {/* Workout/Activity Details Link */}
               {item.data?.workoutId && (
                 <Link 
-                  to={`/workouts/${item.data.workoutId}`}
+                  to={item.type === 'group_workout' ? `/workouts/group/${item.data.workoutId}` : `/workouts/${item.data.workoutId}`}
                   className="mt-3 block p-3 bg-iron-800/50 rounded-lg text-sm text-iron-400 hover:text-iron-200 hover:bg-iron-800 transition-colors"
                 >
-                  View {item.type === FEED_TYPES.CARDIO_LOGGED ? 'activity' : 'workout'} details →
+                  View {item.type === 'cardio' ? 'activity' : 'workout'} details →
                 </Link>
               )}
 
-              {/* Reactions */}
-              <div className="mt-3 flex items-center gap-2 flex-wrap">
-                {REACTIONS.map(emoji => {
-                  const count = item.reactions?.[emoji]?.length || 0
-                  const hasReacted = item.reactions?.[emoji]?.includes(user?.uid)
-                  
-                  return (
-                    <button
-                      key={emoji}
-                      onClick={() => handleReaction(item.id, emoji)}
-                      className={`px-2 py-1 rounded-full text-sm flex items-center gap-1 transition-colors ${
-                        hasReacted 
-                          ? 'bg-flame-500/20 text-flame-400' 
-                          : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
-                      }`}
-                    >
-                      <span>{emoji}</span>
-                      {count > 0 && <span className="text-xs">{count}</span>}
-                    </button>
-                  )
-                })}
-                
-                {/* Comment button */}
+              {/* Actions */}
+              <div className="mt-3 flex items-center">
                 <button
                   onClick={() => openComments(item)}
-                  className="px-2 py-1 rounded-full text-sm flex items-center gap-1 bg-iron-800 text-iron-400 hover:bg-iron-700 transition-colors ml-auto"
+                  className="px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 bg-iron-800 text-iron-400 hover:bg-iron-700 transition-colors"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  {item.commentCount > 0 && <span className="text-xs">{item.commentCount}</span>}
+                  {item.commentCount > 0 ? `${item.commentCount} comment${item.commentCount !== 1 ? 's' : ''}` : 'Comment'}
                 </button>
               </div>
             </div>
@@ -423,8 +374,12 @@ export default function FeedPage() {
               ) : (
                 comments.map(comment => (
                   <div key={comment.id} className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 flex-shrink-0">
-                      {users[comment.userId]?.displayName?.[0] || '?'}
+                    <div className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 flex-shrink-0 overflow-hidden">
+                      {users[comment.userId]?.photoURL ? (
+                        <img src={users[comment.userId].photoURL} alt="" className="w-8 h-8 rounded-full" />
+                      ) : (
+                        <User className="w-4 h-4" />
+                      )}
                     </div>
                     <div className="flex-1">
                       <div className="bg-iron-800 rounded-lg p-3">

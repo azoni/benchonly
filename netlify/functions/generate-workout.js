@@ -101,6 +101,11 @@ WEIGHT PROGRESSION LOGIC:
 - Missed reps or RPE 9+: Keep same weight or reduce 5%
 - Pain reported on exercise: DO NOT increase weight, add note about monitoring
 
+EXERCISE TYPES:
+- "weight": Standard weighted exercises (bench press, squat, rows). Sets have prescribedWeight and prescribedReps.
+- "bodyweight": No external weight (pull-ups, push-ups, dips). Sets have prescribedReps only (NO prescribedWeight).
+- "time": Time-based exercises (planks, dead hangs, wall sits). Sets have prescribedTime (in seconds) only.
+
 OUTPUT JSON only, no markdown:
 {
   "name": "Workout Name",
@@ -109,11 +114,25 @@ OUTPUT JSON only, no markdown:
   "notes": "Coaching notes explaining workout design, weight selections, and any modifications or warnings.",
   "exercises": [
     {
-      "name": "Exercise Name",
+      "name": "Bench Press",
       "type": "weight",
       "sets": [{ "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 }],
       "restSeconds": 90,
       "notes": "Form cues or warnings"
+    },
+    {
+      "name": "Pull-ups",
+      "type": "bodyweight",
+      "sets": [{ "prescribedReps": 10, "targetRpe": 7 }],
+      "restSeconds": 90,
+      "notes": "Strict form, full ROM"
+    },
+    {
+      "name": "Dead Hang",
+      "type": "time",
+      "sets": [{ "prescribedTime": 45, "targetRpe": 7 }],
+      "restSeconds": 60,
+      "notes": "Active shoulders, full grip"
     }
   ]
 }`;
@@ -156,7 +175,8 @@ OUTPUT JSON only, no markdown:
       cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60;
     }
 
-    // Save to Firestore
+    // Save to Firestore (skip if draft mode)
+    const draftMode = body.draftMode === true;
     const workoutData = {
       name: workout.name || 'AI Workout',
       description: workout.description || '',
@@ -166,17 +186,36 @@ OUTPUT JSON only, no markdown:
         id: Date.now() + i,
         name: ex.name,
         type: ex.type || 'weight',
-        sets: (ex.sets || []).map((s, j) => ({
-          id: Date.now() + i * 100 + j,
-          prescribedWeight: String(s.prescribedWeight || ''),
-          prescribedReps: String(s.prescribedReps || ''),
-          targetRpe: s.targetRpe || null,
-          actualWeight: '',
-          actualReps: '',
-          rpe: '',
-          painLevel: 0,
-          completed: false,
-        })),
+        sets: (ex.sets || []).map((s, j) => {
+          const base = {
+            id: Date.now() + i * 100 + j,
+            targetRpe: s.targetRpe || null,
+            rpe: '',
+            painLevel: 0,
+            completed: false,
+          };
+          if (ex.type === 'time') {
+            return {
+              ...base,
+              prescribedTime: String(s.prescribedTime || ''),
+              actualTime: '',
+            };
+          }
+          if (ex.type === 'bodyweight') {
+            return {
+              ...base,
+              prescribedReps: String(s.prescribedReps || ''),
+              actualReps: '',
+            };
+          }
+          return {
+            ...base,
+            prescribedWeight: String(s.prescribedWeight || ''),
+            prescribedReps: String(s.prescribedReps || ''),
+            actualWeight: '',
+            actualReps: '',
+          };
+        }),
         restSeconds: ex.restSeconds || 90,
         notes: ex.notes || '',
         expanded: true,
@@ -186,10 +225,14 @@ OUTPUT JSON only, no markdown:
       userId,
       generatedByAI: true,
       aiModel: selectedModel,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    const docRef = await db.collection('workouts').add(workoutData);
+    let workoutId = null;
+    if (!draftMode) {
+      workoutData.createdAt = admin.firestore.FieldValue.serverTimestamp();
+      const docRef = await db.collection('workouts').add(workoutData);
+      workoutId = docRef.id;
+    }
 
     // Log AI usage for tracking
     try {
@@ -202,30 +245,34 @@ OUTPUT JSON only, no markdown:
         totalTokens: usage.total_tokens,
         estimatedCost: cost,
         responseTimeMs: responseTime,
+        draftMode,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     } catch (e) {
       console.error('Failed to log usage:', e);
     }
 
-    // Log to portfolio activity feed
-    logActivity({
-      type: 'workout_generated',
-      title: `Generated Workout: ${workout.name || 'AI Workout'}`,
-      description: `${(workout.exercises || []).length} exercises, ${selectedModel}`,
-      model: selectedModel,
-      tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
-      cost,
-      metadata: { workoutId: docRef.id, exerciseCount: (workout.exercises || []).length },
-    });
+    // Log to portfolio activity feed (only on actual save)
+    if (!draftMode && workoutId) {
+      logActivity({
+        type: 'workout_generated',
+        title: `Generated Workout: ${workout.name || 'AI Workout'}`,
+        description: `${(workout.exercises || []).length} exercises, ${selectedModel}`,
+        model: selectedModel,
+        tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
+        cost,
+        metadata: { workoutId, exerciseCount: (workout.exercises || []).length },
+      });
+    }
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
         success: true,
-        workoutId: docRef.id,
-        workout: { ...workout, id: docRef.id },
+        workoutId,
+        workout: workoutData,
+        draftMode,
         usage: {
           model: selectedModel,
           tokens: usage.total_tokens,

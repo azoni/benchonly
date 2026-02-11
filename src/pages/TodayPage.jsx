@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Dumbbell,
@@ -17,6 +17,7 @@ import {
   Zap,
   Plus,
   Calculator,
+  MessageCircle,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -24,20 +25,27 @@ import {
   groupWorkoutService,
   scheduleService,
   goalService,
+  userService,
 } from '../services/firestore'
 import { feedService } from '../services/feedService'
+import { notificationService } from '../services/feedService'
 import { format, startOfWeek, endOfWeek, subDays, isToday, startOfDay } from 'date-fns'
 import { toDateString } from '../utils/dateUtils'
 
 export default function TodayPage() {
   const { user, userProfile, isGuest } = useAuth()
+  const navigate = useNavigate()
   const [todayWorkouts, setTodayWorkouts] = useState([])
   const [todayGroupWorkouts, setTodayGroupWorkouts] = useState([])
   const [todaySchedules, setTodaySchedules] = useState([])
   const [pendingReviews, setPendingReviews] = useState([])
+  const [notifications, setNotifications] = useState([])
   const [weekStats, setWeekStats] = useState({ completed: 0, total: 0 })
   const [weekCompletedDates, setWeekCompletedDates] = useState(new Set())
+  const [weekScheduledDates, setWeekScheduledDates] = useState(new Set())
+  const [weekDayWorkouts, setWeekDayWorkouts] = useState({}) // dateStr -> { type, id }
   const [feedItems, setFeedItems] = useState([])
+  const [feedUsers, setFeedUsers] = useState({})
   const [goals, setGoals] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -130,15 +138,36 @@ export default function TodayPage() {
       setPendingReviews(reviews)
       setGoals(goalsData.filter(g => g.status === 'active'))
 
-      // Load feed in background (doesn't block page render)
-      feedService.getFeed(5).then(res => setFeedItems(res?.items || [])).catch(() => {})
+      // Load feed + users + notifications in background (doesn't block page render)
+      Promise.all([
+        feedService.getFeed(5),
+        userService.getAll(),
+        notificationService.getUnread(user.uid),
+      ]).then(([feedRes, allUsers, notifs]) => {
+        setFeedItems(feedRes?.items || [])
+        const usersMap = {}
+        ;(allUsers || []).forEach(u => { usersMap[u.uid] = u })
+        setFeedUsers(usersMap)
+        setNotifications(notifs || [])
+      }).catch(() => {})
 
       // This week's stats
       const completedDates = new Set()
+      const scheduledDates = new Set()
+      const dayWorkouts = {} // dateStr -> { type: 'personal'|'group', id }
+      
       const weekWorkouts = personalWorkouts.filter(w => {
         const d = w.date?.toDate ? w.date.toDate() : new Date(w.date)
         if (d >= weekStart && d <= weekEnd) {
-          if (w.status !== 'scheduled') completedDates.add(toDateString(d))
+          const dStr = toDateString(d)
+          if (w.status === 'completed') {
+            completedDates.add(dStr)
+          } else if (w.status === 'scheduled') {
+            scheduledDates.add(dStr)
+          } else {
+            completedDates.add(dStr)
+          }
+          if (!dayWorkouts[dStr]) dayWorkouts[dStr] = { type: 'personal', id: w.id }
           return true
         }
         return false
@@ -146,8 +175,14 @@ export default function TodayPage() {
       const weekGroupWorkouts = groupWorkouts.filter(w => {
         try {
           const d = w.date?.toDate ? w.date.toDate() : new Date(w.date)
-          if (d >= weekStart && d <= weekEnd && w.status === 'completed') {
-            completedDates.add(toDateString(d))
+          if (d >= weekStart && d <= weekEnd) {
+            const dStr = toDateString(d)
+            if (w.status === 'completed') {
+              completedDates.add(dStr)
+            } else {
+              scheduledDates.add(dStr)
+            }
+            if (!dayWorkouts[dStr]) dayWorkouts[dStr] = { type: 'group', id: w.id }
             return true
           }
         } catch {}
@@ -167,6 +202,8 @@ export default function TodayPage() {
         }
       })
       setWeekCompletedDates(completedDates)
+      setWeekScheduledDates(scheduledDates)
+      setWeekDayWorkouts(dayWorkouts)
       const scheduledThisWeek = schedulesData.filter(s => s.type === 'recurring').reduce((sum, s) => sum + (s.days?.length || 0), 0)
 
       setWeekStats({
@@ -255,6 +292,53 @@ export default function TodayPage() {
                   </Link>
                 </div>
               </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Notifications */}
+      {notifications.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="mb-6"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+              <MessageCircle className="w-3.5 h-3.5" />
+              New Activity ({notifications.length})
+            </h3>
+            <button
+              onClick={async () => {
+                await notificationService.markAllAsRead(user.uid)
+                setNotifications([])
+              }}
+              className="text-xs text-iron-500 hover:text-iron-300"
+            >
+              Dismiss all
+            </button>
+          </div>
+          <div className="space-y-2">
+            {notifications.slice(0, 3).map(notif => (
+              <Link
+                key={notif.id}
+                to="/feed"
+                onClick={() => notificationService.markAsRead(notif.id)}
+                className="card-steel p-3 border-cyan-500/20 bg-cyan-500/5 flex items-center gap-3 block"
+              >
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
+                  <MessageCircle className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-iron-100 truncate">
+                    {notif.fromUserName || 'Someone'} commented on your {notif.feedType === 'workout' ? 'workout' : notif.feedType === 'group_workout' ? 'group workout' : 'activity'}
+                  </p>
+                  <p className="text-xs text-iron-500 truncate">"{notif.commentText}"</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
+              </Link>
             ))}
           </div>
         </motion.div>
@@ -423,23 +507,43 @@ export default function TodayPage() {
               const isCurrentDay = isToday(dayDate)
               const isPastDay = dayDate < startOfDay(now) && !isCurrentDay
               const hadWorkout = weekCompletedDates.has(dayStr)
+              const hasScheduled = weekScheduledDates.has(dayStr)
+              const dayWorkout = weekDayWorkouts[dayStr]
+              const isClickable = !!dayWorkout
+
+              const handleDayClick = () => {
+                if (!dayWorkout) return
+                if (dayWorkout.type === 'group') {
+                  navigate(`/workouts/group/${dayWorkout.id}`)
+                } else {
+                  navigate(`/workouts/${dayWorkout.id}`)
+                }
+              }
 
               return (
                 <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
                   <span className={`text-xs font-medium ${isCurrentDay ? 'text-flame-400' : 'text-iron-600'}`}>
                     {dayLabel}
                   </span>
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium ${
-                    isCurrentDay
-                      ? 'bg-flame-500/20 text-flame-400 ring-2 ring-flame-500/30'
-                      : hadWorkout
-                        ? 'bg-green-500/20 text-green-400'
-                        : isPastDay
-                          ? 'bg-iron-800/50 text-iron-600'
-                          : 'bg-iron-800/30 text-iron-600'
-                  }`}>
+                  <button
+                    onClick={handleDayClick}
+                    disabled={!isClickable}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium transition-colors ${
+                      isCurrentDay
+                        ? hadWorkout
+                          ? 'bg-green-500/20 text-green-400 ring-2 ring-flame-500/30'
+                          : 'bg-flame-500/20 text-flame-400 ring-2 ring-flame-500/30'
+                        : hadWorkout
+                          ? 'bg-green-500/20 text-green-400'
+                          : hasScheduled
+                            ? 'bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/30'
+                            : isPastDay
+                              ? 'bg-iron-800/50 text-iron-600'
+                              : 'bg-iron-800/30 text-iron-600'
+                    } ${isClickable ? 'cursor-pointer hover:ring-2 hover:ring-flame-500/30' : 'cursor-default'}`}
+                  >
                     {format(dayDate, 'd')}
-                  </div>
+                  </button>
                 </div>
               )
             })}
@@ -506,25 +610,35 @@ export default function TodayPage() {
             <Link to="/feed" className="text-xs text-flame-400 hover:text-flame-300">View all →</Link>
           </div>
           <div className="card-steel divide-y divide-iron-800">
-            {feedItems.slice(0, 4).map(item => (
-              <div key={item.id} className="flex items-center gap-3 p-3">
-                <div className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 text-xs flex-shrink-0">
-                  {item.userName?.[0] || '?'}
+            {feedItems.slice(0, 4).map(item => {
+              const feedUser = feedUsers[item.userId]
+              const userName = feedUser?.displayName || 'Someone'
+              return (
+                <div key={item.id} className="flex items-center gap-3 p-3">
+                  <div className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 text-xs flex-shrink-0 overflow-hidden">
+                    {feedUser?.photoURL ? (
+                      <img src={feedUser.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" />
+                    ) : (
+                      <span>{userName[0]}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-iron-300 truncate">
+                      <span className="text-iron-200 font-medium">{userName}</span>{' '}
+                      {item.type === 'workout' ? `completed ${item.data?.name || 'a workout'}` :
+                       item.type === 'group_workout' ? `completed their workout${item.data?.groupName ? ` in ${item.data.groupName}` : ''}` :
+                       item.type === 'goal_completed' ? `achieved ${item.data?.lift}` :
+                       item.type === 'cardio' ? `logged ${item.data?.duration}min ${item.data?.name || 'cardio'}` :
+                       item.type === 'personal_record' ? `hit a new PR on ${item.data?.exercise}` :
+                       'was active'}
+                    </p>
+                    <p className="text-xs text-iron-600">
+                      {item.createdAt?.toDate && format(item.createdAt.toDate(), 'EEE, h:mm a')}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-iron-300 truncate">
-                    {item.userName || 'Someone'}{' '}
-                    {item.type === 'workout' ? `completed ${item.data?.name || 'a workout'}` :
-                     item.type === 'goal_completed' ? `achieved ${item.data?.lift}` :
-                     item.type === 'cardio' ? `logged ${item.data?.duration}min cardio` :
-                     'was active'}
-                  </p>
-                  <p className="text-xs text-iron-600">
-                    {item.createdAt?.toDate && format(item.createdAt.toDate(), 'EEE, h:mm a')}
-                  </p>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </motion.div>
       )}

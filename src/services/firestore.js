@@ -1080,6 +1080,28 @@ export const groupWorkoutService = {
       }
     }
     
+    // Create feed item for group workout completion
+    if (targetUserId) {
+      try {
+        const workoutDoc = await getDoc(docRef);
+        const workoutData = workoutDoc.data();
+        let groupName = '';
+        if (workoutData?.groupId) {
+          const groupDoc = await getDoc(doc(db, 'groups', workoutData.groupId));
+          groupName = groupDoc.data()?.name || '';
+        }
+        await feedService.createFeedItem(targetUserId, FEED_TYPES.GROUP_WORKOUT, {
+          workoutId,
+          name: workoutData?.name || actualData?.name || 'Group Workout',
+          groupName,
+          groupId: workoutData?.groupId,
+          exerciseCount: actualData?.exercises?.length || 0,
+        });
+      } catch (e) {
+        console.error('Feed error:', e);
+      }
+    }
+    
     return { id: workoutId, status: 'completed', ...updateData };
   },
 

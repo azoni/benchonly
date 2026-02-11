@@ -132,7 +132,7 @@ export const feedService = {
   },
 
   // Add a comment
-  async addComment(feedId, userId, text) {
+  async addComment(feedId, userId, text, commenterName = '') {
     const commentRef = await addDoc(collection(db, 'feed', feedId, 'comments'), {
       userId,
       text,
@@ -143,6 +143,29 @@ export const feedService = {
     await updateDoc(doc(db, 'feed', feedId), {
       commentCount: increment(1)
     })
+    
+    // Create notification for the feed item owner
+    try {
+      const feedDoc = await getDoc(doc(db, 'feed', feedId))
+      if (feedDoc.exists()) {
+        const feedOwnerId = feedDoc.data().userId
+        if (feedOwnerId && feedOwnerId !== userId) {
+          await addDoc(collection(db, 'notifications'), {
+            userId: feedOwnerId, // who receives it
+            type: 'comment',
+            fromUserId: userId,
+            fromUserName: commenterName,
+            feedId,
+            feedType: feedDoc.data().type,
+            commentText: text.slice(0, 100),
+            read: false,
+            createdAt: serverTimestamp(),
+          })
+        }
+      }
+    } catch (e) {
+      console.error('Notification error:', e)
+    }
     
     return { id: commentRef.id }
   },
@@ -175,6 +198,7 @@ export const feedService = {
 export const FEED_TYPES = {
   WORKOUT: 'workout',
   CARDIO: 'cardio',
+  GROUP_WORKOUT: 'group_workout',
   GOAL_COMPLETED: 'goal_completed',
   GOAL_CREATED: 'goal_created',
   STREAK: 'streak',
@@ -183,3 +207,49 @@ export const FEED_TYPES = {
 
 // Available reactions
 export const REACTIONS = ['💪', '🔥', '👏', '🎉', '⚡', '❤️']
+
+// ============ NOTIFICATION SERVICE ============
+export const notificationService = {
+  async getUnread(userId) {
+    try {
+      const q = query(
+        collection(db, 'notifications'),
+        where('userId', '==', userId),
+        where('read', '==', false),
+        orderBy('createdAt', 'desc'),
+        limit(20)
+      )
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    } catch (error) {
+      console.error('Error getting notifications:', error)
+      return []
+    }
+  },
+
+  async markAsRead(notificationId) {
+    try {
+      await updateDoc(doc(db, 'notifications', notificationId), { read: true })
+    } catch (e) {
+      console.error('Error marking notification read:', e)
+    }
+  },
+
+  async markAllAsRead(userId) {
+    try {
+      const q = query(
+        collection(db, 'notifications'),
+        where('userId', '==', userId),
+        where('read', '==', false)
+      )
+      const snapshot = await getDocs(q)
+      const batch = []
+      snapshot.docs.forEach(d => {
+        batch.push(updateDoc(doc(db, 'notifications', d.id), { read: true }))
+      })
+      await Promise.all(batch)
+    } catch (e) {
+      console.error('Error marking all read:', e)
+    }
+  },
+}
