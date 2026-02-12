@@ -12,7 +12,6 @@ import {
   Brain,
   ChevronDown,
   ChevronUp,
-  Lock,
   Zap,
   MessageSquare,
 } from 'lucide-react';
@@ -21,7 +20,7 @@ import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
-import { creditService, CREDIT_COSTS } from '../services/firestore';
+import { creditService, CREDIT_COSTS, PREMIUM_CREDIT_COST } from '../services/firestore';
 
 // Simulated thinking messages that rotate during AI generation
 const THINKING_MESSAGES = [
@@ -273,11 +272,14 @@ export default function GenerateGroupWorkoutModal({
       return;
     }
 
-    // Check credits (5 per athlete) — admin bypasses
-    const creditCost = CREDIT_COSTS['generate-group-workout'] * selectedAthletes.length;
+    // Check credits — premium costs 100, standard costs 5 per athlete — admin bypasses
+    const baseCost = model === 'premium' ? PREMIUM_CREDIT_COST : CREDIT_COSTS['generate-group-workout'] * selectedAthletes.length;
+    const creditCost = baseCost;
     const credits = userProfile?.credits ?? 0;
     if (!isAdmin && credits < creditCost) {
-      setError(`Not enough credits. Need ${creditCost} (${CREDIT_COSTS['generate-group-workout']} × ${selectedAthletes.length} athletes) but you have ${credits}.`);
+      setError(model === 'premium'
+        ? `Not enough credits. Premium costs ${PREMIUM_CREDIT_COST} credits, you have ${credits}.`
+        : `Not enough credits. Need ${creditCost} (${CREDIT_COSTS['generate-group-workout']} x ${selectedAthletes.length} athletes) but you have ${credits}.`);
       return;
     }
 
@@ -289,7 +291,11 @@ export default function GenerateGroupWorkoutModal({
     try {
       // Deduct credits upfront (admin bypasses)
       if (!isAdmin) {
-        await creditService.deduct(user.uid, 'generate-group-workout', selectedAthletes.length);
+        if (model === 'premium') {
+          await creditService.deduct(user.uid, 'generate-group-workout', PREMIUM_CREDIT_COST / CREDIT_COSTS['generate-group-workout']);
+        } else {
+          await creditService.deduct(user.uid, 'generate-group-workout', selectedAthletes.length);
+        }
         updateProfile({ credits: credits - creditCost });
       }
 
@@ -310,7 +316,7 @@ export default function GenerateGroupWorkoutModal({
         body: JSON.stringify({
           groupId: group.id, athletes: athleteData,
           prompt, workoutDate,
-          model: isAdmin ? model : 'standard',
+          model,
         }),
       });
 
@@ -617,24 +623,20 @@ export default function GenerateGroupWorkoutModal({
                           <div className="font-medium flex items-center gap-2">
                             <Zap className="w-3 h-3" />Standard
                           </div>
-                          <div className="text-xs text-iron-500">Fast</div>
+                          <div className="text-xs text-iron-500">{CREDIT_COSTS['generate-group-workout']}/athlete</div>
                         </button>
                         <button
-                          onClick={() => isAdmin && setModel('premium')}
-                          disabled={!isAdmin}
+                          onClick={() => setModel('premium')}
                           className={`px-3 py-2 text-sm rounded-lg border transition-colors text-left
                             ${model === 'premium'
                               ? 'border-purple-500 bg-purple-500/10 text-purple-400'
-                              : !isAdmin 
-                                ? 'border-iron-800 text-iron-600 cursor-not-allowed opacity-60'
-                                : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                              : 'border-iron-700 text-iron-400 hover:border-iron-600'
                             }`}
                         >
                           <div className="font-medium flex items-center gap-2">
                             <Sparkles className="w-3 h-3" />Premium
-                            {!isAdmin && <Lock className="w-3 h-3" />}
                           </div>
-                          <div className="text-xs text-iron-500">Higher quality</div>
+                          <div className="text-xs text-iron-500">{PREMIUM_CREDIT_COST} credits</div>
                         </button>
                       </div>
                     </div>
@@ -839,13 +841,13 @@ export default function GenerateGroupWorkoutModal({
                 <button onClick={handleClose} className="btn-secondary flex-1">Cancel</button>
                 <button
                   onClick={handleGenerate}
-                  disabled={loading || loadingContext || selectedAthletes.length === 0 || (!isAdmin && (userProfile?.credits ?? 0) < CREDIT_COSTS['generate-group-workout'] * selectedAthletes.length)}
+                  disabled={loading || loadingContext || selectedAthletes.length === 0 || (!isAdmin && (userProfile?.credits ?? 0) < (model === 'premium' ? PREMIUM_CREDIT_COST : CREDIT_COSTS['generate-group-workout'] * selectedAthletes.length))}
                   className="btn-primary flex-1 flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <><Loader2 className="w-5 h-5 animate-spin" />Generating...</>
                   ) : (
-                    <><Sparkles className="w-5 h-5" />Generate for {selectedAthletes.length} <span className="text-xs opacity-70">({CREDIT_COSTS['generate-group-workout'] * selectedAthletes.length} cr)</span></>
+                    <><Sparkles className="w-5 h-5" />Generate for {selectedAthletes.length} <span className="text-xs opacity-70">({model === 'premium' ? PREMIUM_CREDIT_COST : CREDIT_COSTS['generate-group-workout'] * selectedAthletes.length} cr)</span></>
                   )}
                 </button>
               </>

@@ -245,11 +245,12 @@ ${day.type === 'test' ? '- This is a TEST day. Work up to a heavy single or rep 
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
+          targetUserId: user.uid, // supports admin impersonation
           prompt,
           workoutFocus: day.type === 'test' ? 'Testing' : day.type === 'deload' ? 'Recovery' : `${primaryLift} focused`,
           intensity: day.type === 'deload' ? 'recovery' : day.type === 'volume' ? 'moderate' : 'heavy',
           context: { maxLifts, painHistory, recentWorkouts: workoutsSnap.docs.slice(0, 5).map(d => d.data()) },
-          model: isAdmin ? 'premium' : 'standard',
+          model: 'standard',
           settings: {},
           draftMode: false,
         }),

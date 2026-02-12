@@ -1101,6 +1101,8 @@ export const CREDIT_COSTS = {
   'generate-program': 10,
 };
 
+export const PREMIUM_CREDIT_COST = 100;
+
 export const creditService = {
   async getBalance(userId) {
     const userRef = doc(db, 'users', userId);

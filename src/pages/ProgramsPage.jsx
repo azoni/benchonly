@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getAuthHeaders } from '../services/api'
-import { programService, goalService, creditService, CREDIT_COSTS } from '../services/firestore'
+import { programService, goalService, creditService, CREDIT_COSTS, PREMIUM_CREDIT_COST } from '../services/firestore'
 import { collection, query, where, getDocs, limit } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import { format, addWeeks, startOfWeek, addDays } from 'date-fns'
@@ -213,9 +213,9 @@ export default function ProgramsPage() {
       return
     }
 
-    // Credit check: 10 credits for program generation (admin bypasses)
+    // Credit check: 10 credits for standard, 100 for premium (admin bypasses)
     const credits = userProfile?.credits ?? 0
-    const cost = 10
+    const cost = model === 'premium' ? PREMIUM_CREDIT_COST : CREDIT_COSTS['generate-program']
     if (!isAdmin && credits < cost) {
       setError(`Not enough credits. Program generation costs ${cost} credits, you have ${credits}.`)
       return
@@ -228,7 +228,7 @@ export default function ProgramsPage() {
 
     try {
       if (!isAdmin) {
-        await creditService.deduct(user.uid, 'generate-program')
+        await creditService.deduct(user.uid, 'generate-program', model === 'premium' ? PREMIUM_CREDIT_COST / CREDIT_COSTS['generate-program'] : 1)
         updateProfile({ credits: credits - cost })
       }
 
@@ -312,7 +312,7 @@ export default function ProgramsPage() {
           programType,
           prompt: prompt || undefined,
           context: { maxLifts, painHistory, rpeAverages: rpeAvg },
-          model: isAdmin ? model : 'standard',
+          model,
         }),
       })
 
@@ -687,19 +687,18 @@ export default function ProgramsPage() {
                   }`}
                 >
                   Standard
+                  <span className="block text-xs opacity-70">{CREDIT_COSTS['generate-program']} credits</span>
                 </button>
                 <button
-                  onClick={() => isAdmin && setModel('premium')}
-                  disabled={!isAdmin}
+                  onClick={() => setModel('premium')}
                   className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
                     model === 'premium'
                       ? 'bg-purple-500 text-white'
-                      : !isAdmin
-                        ? 'bg-iron-800/50 text-iron-600 cursor-not-allowed'
-                        : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                      : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
                   }`}
                 >
-                  Premium {!isAdmin && '(locked)'}
+                  Premium
+                  <span className="block text-xs opacity-70">{PREMIUM_CREDIT_COST} credits</span>
                 </button>
               </div>
             </div>

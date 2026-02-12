@@ -16,7 +16,6 @@ import {
   Activity,
   Calendar,
   Brain,
-  Lock,
   Zap,
   Users,
   MessageSquare,
@@ -29,7 +28,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
-import { workoutService, creditService, CREDIT_COSTS, programService } from '../services/firestore';
+import { workoutService, creditService, CREDIT_COSTS, PREMIUM_CREDIT_COST, programService } from '../services/firestore';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
@@ -342,7 +341,7 @@ export default function GenerateWorkoutPage() {
   const handleGenerate = async () => {
     // Check credits (admin bypasses)
     const credits = userProfile?.credits ?? 0;
-    const cost = CREDIT_COSTS['generate-workout'];
+    const cost = model === 'premium' ? PREMIUM_CREDIT_COST : CREDIT_COSTS['generate-workout'];
     if (!isAdmin && credits < cost) {
       setError(`Not enough credits. You need ${cost} credits but have ${credits}. Check Settings for your usage.`);
       return;
@@ -356,7 +355,7 @@ export default function GenerateWorkoutPage() {
     try {
       // Deduct credits upfront (admin bypasses)
       if (!isAdmin) {
-        await creditService.deduct(user.uid, 'generate-workout');
+        await creditService.deduct(user.uid, 'generate-workout', model === 'premium' ? PREMIUM_CREDIT_COST / CREDIT_COSTS['generate-workout'] : 1);
         updateProfile({ credits: credits - cost });
       }
 
@@ -366,7 +365,7 @@ export default function GenerateWorkoutPage() {
         headers: authHeaders,
         body: JSON.stringify({
           prompt, workoutFocus, intensity,
-          model: isAdmin ? model : 'standard',
+          model,
           draftMode: true,
           context: {
             recentWorkouts: userContext.recentWorkouts.slice(0, 10),
@@ -870,37 +869,33 @@ export default function GenerateWorkoutPage() {
                       }`}
                   >
                     <div className="font-medium flex items-center gap-2"><Zap className="w-4 h-4" />Standard</div>
-                    <div className="text-xs text-iron-500 mt-1">GPT-4o-mini · Fast</div>
+                    <div className="text-xs text-iron-500 mt-1">{CREDIT_COSTS['generate-workout']} credits</div>
                   </button>
                   <button
-                    onClick={() => isAdmin && setModel('premium')}
-                    disabled={!isAdmin}
+                    onClick={() => setModel('premium')}
                     className={`px-4 py-3 text-sm rounded-lg border transition-colors text-left relative
                       ${model === 'premium'
                         ? 'border-purple-500 bg-purple-500/10 text-purple-400'
-                        : !isAdmin 
-                          ? 'border-iron-800 text-iron-600 cursor-not-allowed opacity-60'
-                          : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                        : 'border-iron-700 text-iron-400 hover:border-iron-600'
                       }`}
                   >
                     <div className="font-medium flex items-center gap-2">
                       <Sparkles className="w-4 h-4" />Premium
-                      {!isAdmin && <Lock className="w-3 h-3" />}
                     </div>
-                    <div className="text-xs text-iron-500 mt-1">GPT-4o · Higher quality</div>
+                    <div className="text-xs text-iron-500 mt-1">{PREMIUM_CREDIT_COST} credits</div>
                   </button>
                 </div>
               </div>
               
               <button
                 onClick={handleGenerate}
-                disabled={loading || loadingContext || (!isAdmin && (userProfile?.credits ?? 0) < CREDIT_COSTS['generate-workout'])}
+                disabled={loading || loadingContext || (!isAdmin && (userProfile?.credits ?? 0) < (model === 'premium' ? PREMIUM_CREDIT_COST : CREDIT_COSTS['generate-workout']))}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <><Loader2 className="w-5 h-5 animate-spin" />Generating...</>
                 ) : (
-                  <><Sparkles className="w-5 h-5" />Generate Workout<span className="text-xs opacity-70 ml-1">({CREDIT_COSTS['generate-workout']} credits)</span></>
+                  <><Sparkles className="w-5 h-5" />Generate Workout<span className="text-xs opacity-70 ml-1">({model === 'premium' ? PREMIUM_CREDIT_COST : CREDIT_COSTS['generate-workout']} credits)</span></>
                 )}
               </button>
               
