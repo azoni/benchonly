@@ -1193,41 +1193,15 @@ export const groupWorkoutService = {
     return { id: docRef.id, ...workoutData, groupId, assignedTo, status: 'scheduled' };
   },
 
-  // Get all group workouts for a specific group (user must be a member)
+  // Get all group workouts for a specific group
   async getByGroup(groupId, userId) {
-    // Primary query: use groupMembers array-contains to satisfy Firestore rules
-    try {
-      const q = query(
-        collection(db, 'groupWorkouts'),
-        where('groupId', '==', groupId),
-        where('groupMembers', 'array-contains', userId),
-        orderBy('date', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    } catch (e) {
-      // Fallback for older docs without groupMembers field — try groupAdmins
-      try {
-        const q = query(
-          collection(db, 'groupWorkouts'),
-          where('groupId', '==', groupId),
-          where('groupAdmins', 'array-contains', userId),
-          orderBy('date', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      } catch (e2) {
-        // Final fallback: just get own workouts
-        const q = query(
-          collection(db, 'groupWorkouts'),
-          where('groupId', '==', groupId),
-          where('assignedTo', '==', userId),
-          orderBy('date', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      }
-    }
+    const q = query(
+      collection(db, 'groupWorkouts'),
+      where('groupId', '==', groupId),
+      orderBy('date', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   },
 
   // Get group workouts assigned to a specific user
@@ -1318,7 +1292,7 @@ export const groupWorkoutService = {
           groupName,
           groupId: workoutData?.groupId,
           exerciseCount: actualData?.exercises?.length || 0,
-        });
+        }, 'group');
       } catch (e) {
         console.error('Feed error:', e);
       }

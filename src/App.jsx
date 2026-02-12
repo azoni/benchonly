@@ -19,6 +19,7 @@ import UsagePage from './pages/UsagePage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import FeedPage from './pages/FeedPage'
+import FriendsPage from './pages/FriendsPage'
 import ProfilePage from './pages/ProfilePage'
 import GenerateWorkoutPage from './pages/GenerateWorkoutPage'
 import ProgramsPage from './pages/ProgramsPage'
@@ -166,6 +167,7 @@ export default function App() {
         <Route path="tools" element={<ToolsPage />} />
         <Route path="health" element={<HealthPage />} />
         <Route path="feed" element={<FeedPage />} />
+        <Route path="friends" element={<FriendsPage />} />
         <Route path="profile/:userId" element={<ProfilePage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="usage" element={<UsagePage />} />

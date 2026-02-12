@@ -15,9 +15,14 @@ import {
   Loader2,
   User,
   Users,
+  UserPlus,
+  Globe,
+  Lock,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { feedService } from '../services/feedService'
+import { friendService } from '../services/friendService'
+import { groupService } from '../services/firestore'
 import { collection, getDocs, query } from 'firebase/firestore'
 import { db } from '../services/firebase'
 
@@ -34,6 +39,24 @@ export default function FeedPage() {
   const [comments, setComments] = useState([])
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
+  const [friendSet, setFriendSet] = useState(new Set())
+  const [userGroupIds, setUserGroupIds] = useState(new Set())
+  const [feedFilter, setFeedFilter] = useState('all') // 'all' | 'friends' | 'mine'
+
+  // Visibility check — determines if current user can see a feed item
+  const canSeeItem = (item) => {
+    if (!user) return item.visibility === 'public' || !item.visibility
+    if (item.userId === user.uid) return true
+
+    const visibility = item.visibility || 'public'
+    switch (visibility) {
+      case 'public': return true
+      case 'friends': return friendSet.has(item.userId)
+      case 'group': return item.groupId && userGroupIds.has(item.groupId)
+      case 'private': return false
+      default: return true
+    }
+  }
 
   useEffect(() => {
     loadInitialData()
@@ -42,28 +65,27 @@ export default function FeedPage() {
   const loadInitialData = async () => {
     setLoading(true)
     try {
-      // Load users first to know who is public
-      const snapshot = await getDocs(collection(db, 'users'))
+      // Load users, friends, and groups in parallel
+      const [usersSnap, friends, groups] = await Promise.all([
+        getDocs(collection(db, 'users')),
+        user && !isGuest ? friendService.getFriendSet(user.uid) : Promise.resolve(new Set()),
+        user && !isGuest ? groupService.getByUser(user.uid) : Promise.resolve([]),
+      ])
+
       const usersMap = {}
-      const publicUserIds = new Set()
-      
-      snapshot.docs.forEach(doc => {
-        const data = doc.data()
-        usersMap[doc.id] = { id: doc.id, ...data }
-        // Track public users (and always include current user)
-        if (!data.isPrivate || doc.id === user?.uid) {
-          publicUserIds.add(doc.id)
-        }
+      usersSnap.docs.forEach(doc => {
+        usersMap[doc.id] = { id: doc.id, ...doc.data() }
       })
       setUsers(usersMap)
+      setFriendSet(friends)
+      setUserGroupIds(new Set(groups.map(g => g.id)))
       
-      // Now load feed and filter by public users
-      const result = await feedService.getFeed(30) // Get more to account for filtering
-      const publicItems = result.items.filter(item => publicUserIds.has(item.userId))
+      // Load feed — visibility filtering happens in render via canSeeItem
+      const result = await feedService.getFeed(30)
       
-      setFeedItems(publicItems)
+      setFeedItems(result.items)
       setLastDoc(result.lastDoc)
-      setHasMore(result.hasMore && publicItems.length >= 15)
+      setHasMore(result.hasMore)
     } catch (error) {
       console.error('Error loading feed:', error)
     } finally {
@@ -98,22 +120,14 @@ export default function FeedPage() {
     try {
       const result = await feedService.getFeed(30, loadMore ? lastDoc : null)
       
-      // Filter out items from private users
-      const publicUserIds = new Set(
-        Object.entries(users)
-          .filter(([id, u]) => !u.isPrivate || id === user?.uid)
-          .map(([id]) => id)
-      )
-      const publicItems = result.items.filter(item => publicUserIds.has(item.userId))
-      
       if (loadMore) {
-        setFeedItems(prev => [...prev, ...publicItems])
+        setFeedItems(prev => [...prev, ...result.items])
       } else {
-        setFeedItems(publicItems)
+        setFeedItems(result.items)
       }
       
       setLastDoc(result.lastDoc)
-      setHasMore(result.hasMore && publicItems.length > 0)
+      setHasMore(result.hasMore && result.items.length > 0)
     } catch (error) {
       console.error('Error loading feed:', error)
     } finally {
@@ -197,14 +211,23 @@ export default function FeedPage() {
     }
   }
 
+  // Apply visibility filter, then tab filter, then search
+  const visibleItems = feedItems.filter(canSeeItem)
+  
+  const tabFilteredItems = feedFilter === 'all' 
+    ? visibleItems
+    : feedFilter === 'friends'
+    ? visibleItems.filter(item => friendSet.has(item.userId) || item.userId === user?.uid)
+    : visibleItems.filter(item => item.userId === user?.uid) // 'mine'
+
   const filteredItems = searchQuery
-    ? feedItems.filter(item => {
+    ? tabFilteredItems.filter(item => {
         const userName = users[item.userId]?.displayName?.toLowerCase() || ''
         const activityName = item.data?.name?.toLowerCase() || ''
-        const query = searchQuery.toLowerCase()
-        return userName.includes(query) || activityName.includes(query)
+        const q = searchQuery.toLowerCase()
+        return userName.includes(q) || activityName.includes(q)
       })
-    : feedItems
+    : tabFilteredItems
 
   if (isGuest) {
     return (
@@ -240,7 +263,7 @@ export default function FeedPage() {
       </div>
 
       {/* Search */}
-      <div className="card-steel p-4 mb-6">
+      <div className="card-steel p-4 mb-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iron-500" />
           <input
@@ -251,6 +274,35 @@ export default function FeedPage() {
             className="input-field w-full pl-10"
           />
         </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2 mb-6">
+        {[
+          { key: 'all', label: 'All', icon: Globe },
+          { key: 'friends', label: 'Friends', icon: Users },
+          { key: 'mine', label: 'Mine', icon: User },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setFeedFilter(tab.key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              feedFilter === tab.key
+                ? 'bg-flame-500/20 text-flame-400 border border-flame-500/30'
+                : 'bg-iron-800/50 text-iron-400 border border-iron-700/50 hover:text-iron-200'
+            }`}
+          >
+            <tab.icon className="w-3.5 h-3.5" />
+            {tab.label}
+          </button>
+        ))}
+        <Link 
+          to="/friends"
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-iron-800/50 text-iron-400 border border-iron-700/50 hover:text-iron-200 transition-colors"
+        >
+          <UserPlus className="w-3.5 h-3.5" />
+          Friends
+        </Link>
       </div>
 
       {/* Feed */}
@@ -293,9 +345,21 @@ export default function FeedPage() {
                       {getActivityText(item)}
                     </p>
                   </div>
-                  <p className="text-xs text-iron-600 mt-1">
-                    {item.createdAt?.toDate && formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true })}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-xs text-iron-600">
+                      {item.createdAt?.toDate && formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true })}
+                    </p>
+                    {item.visibility && item.visibility !== 'public' && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        item.visibility === 'friends' ? 'bg-blue-500/10 text-blue-400' :
+                        item.visibility === 'group' ? 'bg-green-500/10 text-green-400' :
+                        'bg-iron-700 text-iron-500'
+                      }`}>
+                        {item.visibility === 'friends' ? '👥 Friends' : 
+                         item.visibility === 'group' ? '🏋️ Group' : '🔒 Private'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 

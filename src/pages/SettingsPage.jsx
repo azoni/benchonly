@@ -68,7 +68,8 @@ export default function SettingsPage() {
     units: userProfile?.settings?.units || 'lbs',
     theme: userProfile?.settings?.theme || 'dark',
     weekStartDay: userProfile?.settings?.weekStartDay || 'monday',
-    isPrivate: userProfile?.isPrivate || false
+    isPrivate: userProfile?.isPrivate || false,
+    defaultVisibility: userProfile?.defaultVisibility || (userProfile?.isPrivate ? 'private' : 'public'),
   })
 
   const [profile, setProfile] = useState({
@@ -880,41 +881,59 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Privacy Toggle */}
-        <button
-          onClick={async () => {
-            const newValue = !settings.isPrivate
-            setSettings(prev => ({ ...prev, isPrivate: newValue }))
-            try {
-              await updateProfile({ isPrivate: newValue })
-            } catch (error) {
-              console.error('Error updating privacy:', error)
-              setSettings(prev => ({ ...prev, isPrivate: !newValue }))
-            }
-          }}
-          className="card-steel p-4 w-full flex items-center gap-4 hover:border-iron-600 transition-colors"
-        >
-          <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-            {settings.isPrivate ? (
-              <EyeOff className="w-5 h-5 text-orange-400" />
-            ) : (
-              <Eye className="w-5 h-5 text-orange-400" />
-            )}
+        {/* Default Visibility */}
+        <div className="card-steel overflow-hidden">
+          <div className="p-4 border-b border-iron-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <Eye className="w-5 h-5 text-orange-400" />
+              </div>
+              <div>
+                <p className="font-medium text-iron-200">Default Visibility</p>
+                <p className="text-sm text-iron-500">Who can see your activity in the feed</p>
+              </div>
+            </div>
           </div>
-          <div className="flex-1 text-left">
-            <p className="font-medium text-iron-200">Private Profile</p>
-            <p className="text-sm text-iron-500">
-              {settings.isPrivate ? 'Your activity is hidden from the feed' : 'Your activity appears in the feed'}
-            </p>
+          <div className="p-2">
+            {[
+              { key: 'public', label: 'Public', desc: 'Everyone can see your activity', icon: '🌍' },
+              { key: 'friends', label: 'Friends', desc: 'Only friends see your activity', icon: '👥' },
+              { key: 'private', label: 'Private', desc: 'Your activity is hidden from the feed', icon: '🔒' },
+            ].map(opt => (
+              <button
+                key={opt.key}
+                onClick={async () => {
+                  const newValue = opt.key
+                  setSettings(prev => ({ ...prev, defaultVisibility: newValue, isPrivate: newValue === 'private' }))
+                  try {
+                    await updateProfile({ defaultVisibility: newValue, isPrivate: newValue === 'private' })
+                  } catch (error) {
+                    console.error('Error updating visibility:', error)
+                    setSettings(prev => ({ ...prev, defaultVisibility: settings.defaultVisibility }))
+                  }
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  settings.defaultVisibility === opt.key
+                    ? 'bg-flame-500/10 border border-flame-500/30'
+                    : 'hover:bg-iron-800/50'
+                }`}
+              >
+                <span className="text-lg">{opt.icon}</span>
+                <div className="text-left flex-1">
+                  <p className={`text-sm font-medium ${settings.defaultVisibility === opt.key ? 'text-flame-400' : 'text-iron-200'}`}>
+                    {opt.label}
+                  </p>
+                  <p className="text-xs text-iron-500">{opt.desc}</p>
+                </div>
+                {settings.defaultVisibility === opt.key && (
+                  <div className="w-5 h-5 rounded-full bg-flame-500 flex items-center justify-center">
+                    <Check className="w-3 h-3 text-white" />
+                  </div>
+                )}
+              </button>
+            ))}
           </div>
-          <div className={`w-12 h-7 rounded-full transition-colors ${
-            settings.isPrivate ? 'bg-flame-500' : 'bg-iron-700'
-          }`}>
-            <div className={`w-5 h-5 bg-white rounded-full mt-1 transition-transform ${
-              settings.isPrivate ? 'translate-x-6' : 'translate-x-1'
-            }`} />
-          </div>
-        </button>
+        </div>
 
         {/* AI Usage Stats */}
         <div className="card-steel overflow-hidden">

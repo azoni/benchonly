@@ -15,11 +15,42 @@ import {
   Calendar as CalendarIcon,
   Heart,
   Settings,
+  UserPlus,
+  UserMinus,
+  Clock,
+  Check,
+  X as XIcon,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { userService, workoutService, goalService, groupWorkoutService } from '../services/firestore'
 import { feedService, FEED_TYPES } from '../services/feedService'
+import { friendService, FRIEND_STATUS } from '../services/friendService'
 import { toDateString } from '../utils/dateUtils'
+
+function FriendButton({ friendStatus, loading, onAction }) {
+  if (!friendStatus) return null
+  
+  const config = {
+    [FRIEND_STATUS.NONE]: { label: 'Add Friend', icon: UserPlus, className: 'bg-flame-500/20 text-flame-400 hover:bg-flame-500/30' },
+    [FRIEND_STATUS.PENDING_SENT]: { label: 'Pending', icon: Clock, className: 'bg-iron-700 text-iron-300 hover:bg-iron-600' },
+    [FRIEND_STATUS.PENDING_RECEIVED]: { label: 'Accept', icon: Check, className: 'bg-green-500/20 text-green-400 hover:bg-green-500/30' },
+    [FRIEND_STATUS.FRIENDS]: { label: 'Friends', icon: Heart, className: 'bg-blue-500/10 text-blue-400 hover:bg-red-500/10 hover:text-red-400' },
+  }
+  
+  const c = config[friendStatus.status] || config[FRIEND_STATUS.NONE]
+  const Icon = c.icon
+  
+  return (
+    <button
+      onClick={onAction}
+      disabled={loading}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${c.className}`}
+    >
+      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className="w-4 h-4" />}
+      {c.label}
+    </button>
+  )
+}
 
 export default function ProfilePage() {
   const { userId: handle } = useParams() // Can be username or uid
@@ -36,7 +67,11 @@ export default function ProfilePage() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [workouts, setWorkouts] = useState([])
   const [goals, setGoals] = useState([])
-
+  
+  // Friend state
+  const [friendStatus, setFriendStatus] = useState(null) // { status, requestId?, friendshipId? }
+  const [friendActionLoading, setFriendActionLoading] = useState(false)
+  const [friendCount, setFriendCount] = useState(0)
   // Smart back navigation
   const handleBack = () => {
     if (location.state?.from) {
@@ -83,9 +118,34 @@ export default function ProfilePage() {
         return
       }
 
-      // Check if profile is private and not own profile
-      if (userData.isPrivate && targetUserId !== currentUser?.uid) {
-        setProfile({ ...userData, isPrivate: true })
+      // Load friend status for non-own profiles
+      let currentFriendStatus = { status: FRIEND_STATUS.NONE }
+      if (currentUser && targetUserId !== currentUser.uid) {
+        try {
+          currentFriendStatus = await friendService.getFriendshipStatus(currentUser.uid, targetUserId)
+          setFriendStatus(currentFriendStatus)
+        } catch (e) {
+          console.error('Friend status error:', e)
+        }
+      }
+
+      // Load friend count
+      try {
+        const count = await friendService.getFriendCount(targetUserId)
+        setFriendCount(count)
+      } catch (e) {
+        console.error('Friend count error:', e)
+      }
+
+      // Check visibility — allow friends to see "friends" visibility profiles
+      const defaultVis = userData.defaultVisibility || (userData.isPrivate ? 'private' : 'public')
+      const isFriend = currentFriendStatus.status === FRIEND_STATUS.FRIENDS
+      const canView = targetUserId === currentUser?.uid || 
+                       defaultVis === 'public' || 
+                       (defaultVis === 'friends' && isFriend)
+      
+      if (!canView) {
+        setProfile({ ...userData, isPrivate: true, defaultVisibility: defaultVis, uid: targetUserId })
         setLoading(false)
         return
       }
@@ -211,11 +271,58 @@ export default function ProfilePage() {
   }
 
   if (profile.isPrivate && !isOwnProfile) {
+    const handleFriendAction = async () => {
+      if (!currentUser) return
+      setFriendActionLoading(true)
+      try {
+        if (!friendStatus || friendStatus.status === FRIEND_STATUS.NONE) {
+          await friendService.sendRequest(currentUser.uid, profile.uid || handle)
+          setFriendStatus({ status: FRIEND_STATUS.PENDING_SENT })
+        } else if (friendStatus.status === FRIEND_STATUS.PENDING_SENT) {
+          await friendService.cancelRequest(friendStatus.requestId)
+          setFriendStatus({ status: FRIEND_STATUS.NONE })
+        } else if (friendStatus.status === FRIEND_STATUS.PENDING_RECEIVED) {
+          await friendService.acceptRequest(friendStatus.requestId)
+          setFriendStatus({ status: FRIEND_STATUS.FRIENDS })
+          loadProfile() // Reload to show full profile
+        }
+      } catch (e) {
+        console.error('Friend action error:', e)
+      } finally {
+        setFriendActionLoading(false)
+      }
+    }
+
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 text-center">
         <Lock className="w-16 h-16 text-iron-600 mx-auto mb-4" />
-        <h2 className="text-xl font-display text-iron-200 mb-2">Private Profile</h2>
-        <p className="text-iron-500 mb-6">This user has set their profile to private.</p>
+        <h2 className="text-xl font-display text-iron-200 mb-2">
+          {profile.defaultVisibility === 'friends' ? 'Friends Only' : 'Private Profile'}
+        </h2>
+        <p className="text-iron-500 mb-6">
+          {profile.defaultVisibility === 'friends' 
+            ? 'This user only shares their activity with friends.'
+            : 'This user has set their profile to private.'}
+        </p>
+        {currentUser && profile.defaultVisibility === 'friends' && (
+          <button
+            onClick={handleFriendAction}
+            disabled={friendActionLoading || friendStatus?.status === FRIEND_STATUS.FRIENDS}
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors mb-4 ${
+              friendStatus?.status === FRIEND_STATUS.PENDING_SENT
+                ? 'bg-iron-700 text-iron-300 hover:bg-iron-600'
+                : friendStatus?.status === FRIEND_STATUS.PENDING_RECEIVED
+                ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                : 'bg-flame-500/20 text-flame-400 hover:bg-flame-500/30'
+            }`}
+          >
+            {friendActionLoading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : null}
+            {friendStatus?.status === FRIEND_STATUS.PENDING_SENT ? 'Cancel Request' :
+             friendStatus?.status === FRIEND_STATUS.PENDING_RECEIVED ? 'Accept Friend Request' :
+             'Send Friend Request'}
+          </button>
+        )}
+        <br />
         <button onClick={handleBack} className="btn-primary">Go Back</button>
       </div>
     )
@@ -255,17 +362,52 @@ export default function ProfilePage() {
             {profile.createdAt && (
               <p className="text-xs text-iron-500 mt-1">
                 Member since {format(profile.createdAt.toDate ? profile.createdAt.toDate() : new Date(profile.createdAt), 'MMMM yyyy')}
+                {friendCount > 0 && (
+                  <> · <Link to="/friends" className="text-flame-400 hover:text-flame-300">{friendCount} friend{friendCount !== 1 ? 's' : ''}</Link></>
+                )}
               </p>
             )}
           </div>
 
-          {isOwnProfile && (
+          {isOwnProfile ? (
             <Link 
               to="/settings" 
               className="btn-secondary text-sm"
             >
               Edit Profile
             </Link>
+          ) : currentUser && (
+            <FriendButton 
+              friendStatus={friendStatus} 
+              loading={friendActionLoading}
+              onAction={async () => {
+                setFriendActionLoading(true)
+                try {
+                  const targetId = profile.uid || handle
+                  if (!friendStatus || friendStatus.status === FRIEND_STATUS.NONE) {
+                    await friendService.sendRequest(currentUser.uid, targetId)
+                    setFriendStatus({ status: FRIEND_STATUS.PENDING_SENT })
+                  } else if (friendStatus.status === FRIEND_STATUS.PENDING_SENT) {
+                    await friendService.cancelRequest(friendStatus.requestId)
+                    setFriendStatus({ status: FRIEND_STATUS.NONE })
+                  } else if (friendStatus.status === FRIEND_STATUS.PENDING_RECEIVED) {
+                    await friendService.acceptRequest(friendStatus.requestId)
+                    setFriendStatus({ status: FRIEND_STATUS.FRIENDS })
+                  } else if (friendStatus.status === FRIEND_STATUS.FRIENDS) {
+                    if (confirm('Remove this friend?')) {
+                      await friendService.removeFriend(currentUser.uid, targetId)
+                      setFriendStatus({ status: FRIEND_STATUS.NONE })
+                      setFriendCount(prev => Math.max(0, prev - 1))
+                    }
+                  }
+                } catch (e) {
+                  console.error('Friend action error:', e)
+                  alert(e.message)
+                } finally {
+                  setFriendActionLoading(false)
+                }
+              }}
+            />
           )}
         </div>
       </div>

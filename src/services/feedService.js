@@ -23,12 +23,33 @@ import {
 
 export const feedService = {
   // Create a feed item when user does something
-  async createFeedItem(userId, type, data) {
+  async createFeedItem(userId, type, data, visibility = null) {
     try {
+      // Look up user's default visibility if not explicitly provided
+      let resolvedVisibility = visibility
+      if (!resolvedVisibility) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', userId))
+          const userData = userDoc.exists() ? userDoc.data() : {}
+          // Map legacy isPrivate to new system
+          if (userData.defaultVisibility) {
+            resolvedVisibility = userData.defaultVisibility
+          } else if (userData.isPrivate) {
+            resolvedVisibility = 'private'
+          } else {
+            resolvedVisibility = 'public'
+          }
+        } catch {
+          resolvedVisibility = 'public'
+        }
+      }
+
       const docRef = await addDoc(collection(db, 'feed'), {
         userId,
         type, // 'workout', 'cardio', 'goal_completed', 'goal_created', 'streak'
         data, // { workoutId, workoutName, exerciseCount, etc. }
+        visibility: resolvedVisibility,
+        groupId: data?.groupId || null,
         reactions: {},  // { '💪': ['userId1', 'userId2'], '🔥': ['userId3'] }
         reactionCount: 0,
         commentCount: 0,
