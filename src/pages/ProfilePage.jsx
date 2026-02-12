@@ -20,12 +20,16 @@ import {
   Clock,
   Check,
   X as XIcon,
+  Search,
+  Users,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { userService, workoutService, goalService, groupWorkoutService } from '../services/firestore'
 import { feedService, FEED_TYPES } from '../services/feedService'
 import { friendService, FRIEND_STATUS } from '../services/friendService'
 import { toDateString } from '../utils/dateUtils'
+import { collection, getDocs } from 'firebase/firestore'
+import { db } from '../services/firebase'
 
 function FriendButton({ friendStatus, loading, onAction }) {
   if (!friendStatus) return null
@@ -72,6 +76,17 @@ export default function ProfilePage() {
   const [friendStatus, setFriendStatus] = useState(null) // { status, requestId?, friendshipId? }
   const [friendActionLoading, setFriendActionLoading] = useState(false)
   const [friendCount, setFriendCount] = useState(0)
+  
+  // Profile tabs (own profile only)
+  const [profileTab, setProfileTab] = useState('overview') // 'overview' | 'friends'
+  const [friendsList, setFriendsList] = useState([])
+  const [receivedRequests, setReceivedRequests] = useState([])
+  const [sentRequests, setSentRequests] = useState([])
+  const [friendsLoading, setFriendsLoading] = useState(false)
+  const [friendsTab, setFriendsTab] = useState('friends') // 'friends' | 'requests' | 'find'
+  const [friendSearch, setFriendSearch] = useState('')
+  const [allUsers, setAllUsers] = useState([])
+  const [friendActionStates, setFriendActionStates] = useState({}) // { [id]: loading }
   // Smart back navigation
   const handleBack = () => {
     if (location.state?.from) {
@@ -133,6 +148,11 @@ export default function ProfilePage() {
       try {
         const count = await friendService.getFriendCount(targetUserId)
         setFriendCount(count)
+        // For own profile, also load pending request count for tab badge
+        if (targetUserId === currentUser?.uid) {
+          const received = await friendService.getReceivedRequests(currentUser.uid)
+          setReceivedRequests(received)
+        }
       } catch (e) {
         console.error('Friend count error:', e)
       }
@@ -213,6 +233,68 @@ export default function ProfilePage() {
       console.error('Error loading profile:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Load friends data when Friends tab is selected
+  const loadFriendsData = async () => {
+    if (!currentUser || friendsLoading) return
+    setFriendsLoading(true)
+    try {
+      const usersSnap = await getDocs(collection(db, 'users'))
+      const uMap = {}
+      const uList = []
+      usersSnap.docs.forEach(d => {
+        const data = { id: d.id, uid: d.id, ...d.data() }
+        uMap[d.id] = data
+        if (d.id !== currentUser.uid) uList.push(data)
+      })
+      setAllUsers(uList)
+
+      const [friendIds, received, sent] = await Promise.all([
+        friendService.getFriends(currentUser.uid),
+        friendService.getReceivedRequests(currentUser.uid),
+        friendService.getSentRequests(currentUser.uid),
+      ])
+
+      setFriendsList(friendIds.map(id => uMap[id]).filter(Boolean))
+      setReceivedRequests(received)
+      setSentRequests(sent)
+      setFriendCount(friendIds.length)
+    } catch (e) {
+      console.error('Error loading friends:', e)
+    } finally {
+      setFriendsLoading(false)
+    }
+  }
+
+  const handleFriendsTabAction = async (action, id, extra) => {
+    setFriendActionStates(prev => ({ ...prev, [id]: true }))
+    try {
+      if (action === 'accept') {
+        await friendService.acceptRequest(id)
+        await loadFriendsData()
+      } else if (action === 'decline') {
+        await friendService.declineRequest(id)
+        setReceivedRequests(prev => prev.filter(r => r.id !== id))
+      } else if (action === 'cancel') {
+        await friendService.cancelRequest(id)
+        setSentRequests(prev => prev.filter(r => r.id !== id))
+      } else if (action === 'remove') {
+        if (!confirm('Remove this friend?')) return
+        await friendService.removeFriend(currentUser.uid, id)
+        setFriendsList(prev => prev.filter(f => (f.uid || f.id) !== id))
+        setFriendCount(prev => Math.max(0, prev - 1))
+      } else if (action === 'send') {
+        await friendService.sendRequest(currentUser.uid, id)
+        const sent = await friendService.getSentRequests(currentUser.uid)
+        setSentRequests(sent)
+      }
+    } catch (e) {
+      console.error('Friend action error:', e)
+      alert(e.message)
+    } finally {
+      setFriendActionStates(prev => ({ ...prev, [id]: false }))
     }
   }
 
@@ -363,7 +445,10 @@ export default function ProfilePage() {
               <p className="text-xs text-iron-500 mt-1">
                 Member since {format(profile.createdAt.toDate ? profile.createdAt.toDate() : new Date(profile.createdAt), 'MMMM yyyy')}
                 {friendCount > 0 && (
-                  <> · <Link to="/friends" className="text-flame-400 hover:text-flame-300">{friendCount} friend{friendCount !== 1 ? 's' : ''}</Link></>
+                  <> · <button 
+                    onClick={() => { setProfileTab('friends'); if (friendsList.length === 0) loadFriendsData() }}
+                    className="text-flame-400 hover:text-flame-300"
+                  >{friendCount} friend{friendCount !== 1 ? 's' : ''}</button></>
                 )}
               </p>
             )}
@@ -411,6 +496,300 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Profile Tabs — own profile only */}
+      {isOwnProfile && (
+        <div className="flex gap-2 mb-6">
+          {[
+            { key: 'overview', label: 'Overview', icon: Activity },
+            { key: 'friends', label: 'Friends', icon: Users, badge: receivedRequests.length || null },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => {
+                setProfileTab(tab.key)
+                if (tab.key === 'friends' && friendsList.length === 0 && !friendsLoading) {
+                  loadFriendsData()
+                }
+              }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                profileTab === tab.key
+                  ? 'bg-flame-500/20 text-flame-400 border border-flame-500/30'
+                  : 'bg-iron-800/50 text-iron-400 border border-iron-700/50 hover:text-iron-200'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+              {tab.badge > 0 && (
+                <span className="text-xs px-1.5 py-0.5 rounded-full bg-flame-500 text-white font-bold">
+                  {tab.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ===== FRIENDS TAB ===== */}
+      {isOwnProfile && profileTab === 'friends' && (
+        <div>
+          {/* Friends sub-tabs */}
+          <div className="flex gap-2 mb-4">
+            {[
+              { key: 'friends', label: 'My Friends', count: friendsList.length },
+              { key: 'requests', label: 'Requests', count: receivedRequests.length + sentRequests.length },
+              { key: 'find', label: 'Find People' },
+            ].map(t => (
+              <button
+                key={t.key}
+                onClick={() => setFriendsTab(t.key)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  friendsTab === t.key
+                    ? 'bg-iron-800 text-iron-100'
+                    : 'text-iron-500 hover:text-iron-300'
+                }`}
+              >
+                {t.label}
+                {t.count > 0 && (
+                  <span className="ml-1.5 text-xs opacity-60">{t.count}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {friendsLoading ? (
+            <div className="card-steel p-12 text-center">
+              <Loader2 className="w-6 h-6 text-flame-500 animate-spin mx-auto" />
+              <p className="text-iron-500 mt-3 text-sm">Loading friends...</p>
+            </div>
+          ) : friendsTab === 'friends' ? (
+            /* Friends List */
+            friendsList.length === 0 ? (
+              <div className="card-steel p-12 text-center">
+                <Users className="w-12 h-12 text-iron-600 mx-auto mb-4" />
+                <p className="text-iron-500 mb-2">No friends yet</p>
+                <button onClick={() => setFriendsTab('find')} className="text-sm text-flame-400 hover:text-flame-300">
+                  Find people to add
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {friendsList.map(friend => {
+                  const fid = friend.uid || friend.id
+                  return (
+                    <div key={fid} className="card-steel p-4 flex items-center gap-3">
+                      <Link 
+                        to={`/profile/${friend.username || fid}`}
+                        className="w-10 h-10 rounded-full bg-iron-800 flex items-center justify-center hover:bg-iron-700 transition-colors"
+                      >
+                        {friend.photoURL ? (
+                          <img src={friend.photoURL} alt="" className="w-10 h-10 rounded-full" />
+                        ) : (
+                          <User className="w-5 h-5 text-iron-400" />
+                        )}
+                      </Link>
+                      <Link to={`/profile/${friend.username || fid}`} className="flex-1 min-w-0">
+                        <p className="font-medium text-iron-200 truncate">{friend.displayName || 'User'}</p>
+                        {friend.username && <p className="text-xs text-flame-400">@{friend.username}</p>}
+                      </Link>
+                      <button
+                        onClick={() => handleFriendsTabAction('remove', fid)}
+                        disabled={friendActionStates[fid]}
+                        className="p-2 text-iron-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                        title="Remove friend"
+                      >
+                        {friendActionStates[fid] ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          ) : friendsTab === 'requests' ? (
+            /* Requests */
+            <div className="space-y-4">
+              {receivedRequests.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-iron-400 mb-2">Received</h3>
+                  <div className="space-y-2">
+                    {receivedRequests.map(req => {
+                      const fromUser = allUsers.find(u => u.id === req.from) || { displayName: 'User' }
+                      return (
+                        <div key={req.id} className="card-steel p-4 flex items-center gap-3">
+                          <Link 
+                            to={`/profile/${fromUser.username || req.from}`}
+                            className="w-10 h-10 rounded-full bg-iron-800 flex items-center justify-center hover:bg-iron-700 transition-colors"
+                          >
+                            {fromUser.photoURL ? (
+                              <img src={fromUser.photoURL} alt="" className="w-10 h-10 rounded-full" />
+                            ) : (
+                              <User className="w-5 h-5 text-iron-400" />
+                            )}
+                          </Link>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-iron-200 truncate">{fromUser.displayName}</p>
+                            {fromUser.username && <p className="text-xs text-flame-400">@{fromUser.username}</p>}
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleFriendsTabAction('accept', req.id)}
+                              disabled={friendActionStates[req.id]}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg text-sm font-medium transition-colors"
+                            >
+                              {friendActionStates[req.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                              Accept
+                            </button>
+                            <button
+                              onClick={() => handleFriendsTabAction('decline', req.id)}
+                              disabled={friendActionStates[req.id]}
+                              className="p-1.5 text-iron-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                            >
+                              <XIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {sentRequests.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-iron-400 mb-2">Sent</h3>
+                  <div className="space-y-2">
+                    {sentRequests.map(req => {
+                      const toUser = allUsers.find(u => u.id === req.to) || { displayName: 'User' }
+                      return (
+                        <div key={req.id} className="card-steel p-4 flex items-center gap-3">
+                          <Link 
+                            to={`/profile/${toUser.username || req.to}`}
+                            className="w-10 h-10 rounded-full bg-iron-800 flex items-center justify-center hover:bg-iron-700 transition-colors"
+                          >
+                            {toUser.photoURL ? (
+                              <img src={toUser.photoURL} alt="" className="w-10 h-10 rounded-full" />
+                            ) : (
+                              <User className="w-5 h-5 text-iron-400" />
+                            )}
+                          </Link>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-iron-200 truncate">{toUser.displayName}</p>
+                            {toUser.username && <p className="text-xs text-flame-400">@{toUser.username}</p>}
+                          </div>
+                          <button
+                            onClick={() => handleFriendsTabAction('cancel', req.id)}
+                            disabled={friendActionStates[req.id]}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-iron-700 text-iron-300 hover:bg-iron-600 rounded-lg text-sm font-medium transition-colors"
+                          >
+                            {friendActionStates[req.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XIcon className="w-3.5 h-3.5" />}
+                            Cancel
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {receivedRequests.length === 0 && sentRequests.length === 0 && (
+                <div className="card-steel p-12 text-center">
+                  <Clock className="w-12 h-12 text-iron-600 mx-auto mb-4" />
+                  <p className="text-iron-500">No pending requests</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Find People */
+            <div>
+              <div className="card-steel p-4 mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iron-500" />
+                  <input
+                    type="text"
+                    placeholder="Search by name or username..."
+                    value={friendSearch}
+                    onChange={(e) => setFriendSearch(e.target.value)}
+                    className="input-field w-full pl-10"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              {friendSearch.trim() ? (() => {
+                const friendIdSet = new Set(friendsList.map(f => f.uid || f.id))
+                const sentToSet = new Set(sentRequests.map(r => r.to))
+                const receivedFromSet = new Set(receivedRequests.map(r => r.from))
+                const results = allUsers.filter(u => {
+                  const q = friendSearch.toLowerCase()
+                  return (u.displayName?.toLowerCase().includes(q) || u.username?.toLowerCase().includes(q))
+                    && !friendIdSet.has(u.id)
+                })
+                return results.length === 0 ? (
+                  <div className="card-steel p-8 text-center">
+                    <p className="text-iron-500">No users found matching "{friendSearch}"</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {results.map(u => {
+                      const isSent = sentToSet.has(u.id)
+                      const isReceived = receivedFromSet.has(u.id)
+                      return (
+                        <div key={u.id} className="card-steel p-4 flex items-center gap-3">
+                          <Link 
+                            to={`/profile/${u.username || u.id}`}
+                            className="w-10 h-10 rounded-full bg-iron-800 flex items-center justify-center hover:bg-iron-700 transition-colors"
+                          >
+                            {u.photoURL ? (
+                              <img src={u.photoURL} alt="" className="w-10 h-10 rounded-full" />
+                            ) : (
+                              <User className="w-5 h-5 text-iron-400" />
+                            )}
+                          </Link>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-iron-200 truncate">{u.displayName || 'User'}</p>
+                            {u.username && <p className="text-xs text-flame-400">@{u.username}</p>}
+                          </div>
+                          {isSent ? (
+                            <span className="text-xs text-iron-500 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5" /> Pending
+                            </span>
+                          ) : isReceived ? (
+                            <button
+                              onClick={() => {
+                                const req = receivedRequests.find(r => r.from === u.id)
+                                if (req) handleFriendsTabAction('accept', req.id)
+                              }}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg text-sm font-medium transition-colors"
+                            >
+                              <Check className="w-3.5 h-3.5" /> Accept
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleFriendsTabAction('send', u.id)}
+                              disabled={friendActionStates[u.id]}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-flame-500/20 text-flame-400 hover:bg-flame-500/30 rounded-lg text-sm font-medium transition-colors"
+                            >
+                              {friendActionStates[u.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+                              Add
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })() : (
+                <div className="card-steel p-8 text-center">
+                  <Search className="w-12 h-12 text-iron-600 mx-auto mb-4" />
+                  <p className="text-iron-500">Type a name or username to find people</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== OVERVIEW TAB ===== */}
+      {(profileTab === 'overview' || !isOwnProfile) && (<>
 
       {/* Maxes */}
       {stats && (
@@ -600,6 +979,7 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+      </>)}
     </div>
   )
 }

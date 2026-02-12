@@ -15,9 +15,7 @@ import {
   Loader2,
   User,
   Users,
-  UserPlus,
   Globe,
-  Lock,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { feedService } from '../services/feedService'
@@ -296,13 +294,6 @@ export default function FeedPage() {
             {tab.label}
           </button>
         ))}
-        <Link 
-          to="/friends"
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-iron-800/50 text-iron-400 border border-iron-700/50 hover:text-iron-200 transition-colors"
-        >
-          <UserPlus className="w-3.5 h-3.5" />
-          Friends
-        </Link>
       </div>
 
       {/* Feed */}
