@@ -1,19 +1,6 @@
 import OpenAI from 'openai';
 import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE, admin } from './utils/auth.js';
-
-// Fire-and-forget activity logger (inlined — Netlify bundles each function independently)
-function logActivity({ type, title, description, reasoning, model, tokens, cost, metadata }) {
-  const secret = process.env.AGENT_WEBHOOK_SECRET;
-  if (!secret) return;
-  fetch('https://azoni.ai/.netlify/functions/log-agent-activity', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type, title, description: description || '', reasoning: reasoning || '',
-      source: 'benchpressonly', model, tokens, cost, metadata: metadata || {}, secret,
-    }),
-  }).catch(e => console.error('[activity-log] Failed:', e.message));
-}
+import { logActivity, logError } from './utils/logger.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -342,6 +329,7 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
     };
   } catch (error) {
     console.error('Error:', error);
+    logError('generate-group-workout', error, 'high', { action: 'generate' });
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },

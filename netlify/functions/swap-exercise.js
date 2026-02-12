@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
+import { logActivity, logError } from './utils/logger.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -70,8 +71,20 @@ Rules:
       exercise = JSON.parse(cleanJson);
     } catch (parseErr) {
       console.error('Parse error:', parseErr, '\nRaw:', responseText);
+      logError('swap-exercise', parseErr, 'medium', { action: 'parse-response', exercise: exerciseName });
       return { statusCode: 500, body: JSON.stringify({ error: 'Failed to parse AI response' }) };
     }
+
+    const usage = completion.usage;
+    logActivity({
+      type: 'exercise_swapped',
+      title: `Swapped: ${exerciseName} → ${exercise.name}`,
+      description: reason || 'User requested exercise swap',
+      model: 'gpt-4o-mini',
+      tokens: usage?.total_tokens || 0,
+      cost: ((usage?.prompt_tokens || 0) / 1e6) * 0.15 + ((usage?.completion_tokens || 0) / 1e6) * 0.60,
+      metadata: { original: exerciseName, replacement: exercise.name, type: exerciseType },
+    });
 
     return {
       statusCode: 200,
@@ -80,6 +93,7 @@ Rules:
     };
   } catch (err) {
     console.error('Swap exercise error:', err);
+    logError('swap-exercise', err, 'high', { action: 'swap' });
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message || 'Failed to swap exercise' }),

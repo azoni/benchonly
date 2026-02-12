@@ -1,18 +1,6 @@
 import OpenAI from 'openai'
 import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
-
-function logActivity({ type, title, description, reasoning, model, tokens, cost, metadata }) {
-  const secret = process.env.AGENT_WEBHOOK_SECRET;
-  if (!secret) return;
-  fetch('https://azoni.ai/.netlify/functions/log-agent-activity', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type, title, description: description || '', reasoning: reasoning || '',
-      source: 'benchpressonly', model, tokens, cost, metadata: metadata || {}, secret,
-    }),
-  }).catch(e => console.error('[activity-log] Failed:', e.message));
-}
+import { logActivity, logError } from './utils/logger.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
@@ -51,7 +39,7 @@ export async function handler(event) {
     const daysPerWeek = trainingDays.length
     const duration = workoutDuration || 45
     const type = programType || 'strength'
-    const selectedModel = model === 'premium' ? 'gpt-4o' : 'gpt-4o-mini'
+    const selectedModel = (model === 'premium' && auth.isAdmin) ? 'gpt-4o' : 'gpt-4o-mini'
 
     // Normalize goal — support both old {lift} and new {lifts[]} format
     const lifts = goal?.lifts?.length > 0 ? goal.lifts : (goal?.lift ? [goal.lift] : [])
@@ -255,6 +243,7 @@ ${type === 'mixed' ? '- Balance barbell/dumbbell work with bodyweight movements 
       program = JSON.parse(cleanJson)
     } catch (parseErr) {
       console.error('JSON parse error:', parseErr, '\nRaw:', responseText.slice(0, 500))
+      logError('generate-program', parseErr, 'medium', { action: 'parse-response' });
       return {
         statusCode: 500,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -326,6 +315,7 @@ ${type === 'mixed' ? '- Balance barbell/dumbbell work with bodyweight movements 
     }
   } catch (error) {
     console.error('Program generation error:', error)
+    logError('generate-program', error, 'high', { action: 'generate' });
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },

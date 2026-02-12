@@ -3,6 +3,16 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+    include: ['src/**/*.test.{js,jsx}', 'netlify/**/*.test.js'],
+    coverage: {
+      reporter: ['text', 'text-summary'],
+      include: ['src/utils/**', 'src/services/**', 'netlify/functions/**'],
+    },
+  },
   plugins: [
     react(),
     VitePWA({

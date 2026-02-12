@@ -1,19 +1,6 @@
 import OpenAI from 'openai';
 import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE, admin } from './utils/auth.js';
-
-// Fire-and-forget activity logger (inlined — Netlify bundles each function independently)
-function logActivity({ type, title, description, reasoning, model, tokens, cost, metadata }) {
-  const secret = process.env.AGENT_WEBHOOK_SECRET;
-  if (!secret) return;
-  fetch('https://azoni.ai/.netlify/functions/log-agent-activity', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type, title, description: description || '', reasoning: reasoning || '',
-      source: 'benchpressonly', model, tokens, cost, metadata: metadata || {}, secret,
-    }),
-  }).catch(e => console.error('[activity-log] Failed:', e.message));
-}
+import { logActivity, logError } from './utils/logger.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -29,8 +16,11 @@ export async function handler(event) {
   if (!auth) return UNAUTHORIZED;
 
   try {
-    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput } = JSON.parse(event.body);
-    const userId = auth.uid;
+    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId } = JSON.parse(event.body);
+    // Use targetUserId only if caller is admin (for impersonation)
+    const userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
+    // Enforce admin-only premium model
+    const selectedModel = (model === 'premium' && auth.isAdmin) ? 'gpt-4o' : 'gpt-4o-mini';
 
     if (!db) {
       return {
@@ -47,9 +37,6 @@ export async function handler(event) {
     };
 
     const contextStr = buildContext(context, workoutFocus, intensity, adminSettings);
-
-    // Select model based on request
-    const selectedModel = model === 'premium' ? 'gpt-4o' : 'gpt-4o-mini';
 
     const systemPrompt = `You are an expert strength coach. Create a personalized workout.
 
@@ -288,6 +275,7 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
     };
   } catch (error) {
     console.error('Error:', error);
+    logError('generate-workout', error, 'high', { action: 'generate' });
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },

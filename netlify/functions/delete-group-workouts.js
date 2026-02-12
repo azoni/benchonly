@@ -1,4 +1,5 @@
 import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE, admin } from './utils/auth.js';
+import { logError } from './utils/logger.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 
@@ -98,6 +99,7 @@ export async function handler(event) {
     };
   } catch (error) {
     console.error('Error:', error);
+    logError('delete-group-workouts', error, 'high', { action: 'delete' });
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },

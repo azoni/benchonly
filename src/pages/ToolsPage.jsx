@@ -84,8 +84,8 @@ export default function ToolsPage() {
   const loadAnalyticsData = async () => {
     try {
       const [workoutsData, goalsData] = await Promise.all([
-        workoutService.getAll(user.uid),
-        goalService.getAll(user.uid)
+        workoutService.getByUser(user.uid),
+        goalService.getByUser(user.uid)
       ])
       setWorkouts(workoutsData)
       setGoals(goalsData)

@@ -1,19 +1,6 @@
 import OpenAI from 'openai'
 import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
-
-// Fire-and-forget activity logger (inlined — Netlify bundles each function independently)
-function logActivity({ type, title, description, reasoning, model, tokens, cost, metadata }) {
-  const secret = process.env.AGENT_WEBHOOK_SECRET;
-  if (!secret) return;
-  fetch('https://azoni.ai/.netlify/functions/log-agent-activity', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type, title, description: description || '', reasoning: reasoning || '',
-      source: 'benchpressonly', model, tokens, cost, metadata: metadata || {}, secret,
-    }),
-  }).catch(e => console.error('[activity-log] Failed:', e.message));
-}
+import { logActivity, logError } from './utils/logger.js';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -122,6 +109,7 @@ Fill in missing weights and reps based on progression from recent workouts.`
     }
   } catch (error) {
     console.error('Autofill workout error:', error)
+    logError('autofill-workout', error, 'high', { action: 'autofill' });
     return {
       statusCode: 500,
       body: JSON.stringify({ error: 'Failed to autofill workout' })
