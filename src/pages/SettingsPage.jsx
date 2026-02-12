@@ -27,6 +27,9 @@ import {
   Timer,
   Zap,
   Download,
+  Globe,
+  Users,
+  Lock,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
@@ -349,6 +352,8 @@ export default function SettingsPage() {
       setUsageStats({ totalTokens, totalRequests, byFeature })
     } catch (e) {
       console.error('Error loading usage:', e)
+      // Set empty stats so UI shows "no usage" instead of nothing
+      setUsageStats({ totalTokens: 0, totalRequests: 0, byFeature: {}, error: true })
     } finally {
       setUsageLoading(false)
     }
@@ -504,7 +509,7 @@ export default function SettingsPage() {
             <div className="flex-1 text-left">
               <p className="font-medium text-iron-200">Calorie Tracking Profile</p>
               <p className="text-sm text-iron-500">
-                {profileComplete ? 'Profile complete ✓' : 'Set up for calorie estimates'}
+                {profileComplete ? 'Profile complete' : 'Set up for calorie estimates'}
               </p>
             </div>
             <ChevronDown className={`w-5 h-5 text-iron-500 transition-transform ${showProfileSection ? 'rotate-180' : ''}`} />
@@ -896,9 +901,9 @@ export default function SettingsPage() {
           </div>
           <div className="p-2">
             {[
-              { key: 'public', label: 'Public', desc: 'Everyone can see your activity', icon: '🌍' },
-              { key: 'friends', label: 'Friends', desc: 'Only friends see your activity', icon: '👥' },
-              { key: 'private', label: 'Private', desc: 'Your activity is hidden from the feed', icon: '🔒' },
+              { key: 'public', label: 'Public', desc: 'Everyone can see your activity', Icon: Globe },
+              { key: 'friends', label: 'Friends', desc: 'Only friends see your activity', Icon: Users },
+              { key: 'private', label: 'Private', desc: 'Your activity is hidden from the feed', Icon: Lock },
             ].map(opt => (
               <button
                 key={opt.key}
@@ -918,7 +923,7 @@ export default function SettingsPage() {
                     : 'hover:bg-iron-800/50'
                 }`}
               >
-                <span className="text-lg">{opt.icon}</span>
+                <opt.Icon className={`w-5 h-5 ${settings.defaultVisibility === opt.key ? 'text-flame-400' : 'text-iron-500'}`} />
                 <div className="text-left flex-1">
                   <p className={`text-sm font-medium ${settings.defaultVisibility === opt.key ? 'text-flame-400' : 'text-iron-200'}`}>
                     {opt.label}
@@ -962,6 +967,12 @@ export default function SettingsPage() {
                 </div>
               ) : usageStats ? (
                 <div className="space-y-4">
+                  {usageStats.error ? (
+                    <p className="text-sm text-iron-500 text-center py-2">
+                      Usage data requires a Firestore index. Check the browser console for a link to create it.
+                    </p>
+                  ) : (
+                  <>
                   <div className="flex gap-3">
                     <div className="flex-1 bg-iron-800/50 rounded-lg p-3 text-center">
                       <p className="text-xl font-display text-iron-100">{usageStats.totalRequests}</p>
@@ -998,8 +1009,10 @@ export default function SettingsPage() {
                     </div>
                   )}
                   
-                  {usageStats.totalRequests === 0 && (
+                  {usageStats.totalRequests === 0 && !usageStats.error && (
                     <p className="text-sm text-iron-500 text-center py-2">No AI usage yet</p>
+                  )}
+                  </>
                   )}
                 </div>
               ) : null}
@@ -1079,7 +1092,7 @@ export default function SettingsPage() {
       {/* Version */}
       <div className="mt-12 text-center text-sm text-iron-600">
         <p>Bench Only v1.3.0</p>
-        <p className="mt-1">Made with 💪 for serious lifters</p>
+        <p className="mt-1">Made for serious lifters</p>
       </div>
     </div>
   )

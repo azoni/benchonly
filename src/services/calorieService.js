@@ -71,15 +71,15 @@ export const ACTIVITY_METS = {
 
 // Activity categories for UI grouping
 export const ACTIVITY_CATEGORIES = [
-  { id: 'running', label: 'Running', icon: '🏃' },
-  { id: 'cycling', label: 'Cycling', icon: '🚴' },
-  { id: 'swimming', label: 'Swimming', icon: '🏊' },
-  { id: 'walking', label: 'Walking', icon: '🚶' },
-  { id: 'sports', label: 'Sports', icon: '🎾' },
-  { id: 'gym', label: 'Gym/Fitness', icon: '💪' },
-  { id: 'outdoor', label: 'Outdoor', icon: '🏔️' },
-  { id: 'dance', label: 'Dance', icon: '💃' },
-  { id: 'other', label: 'Other', icon: '⭐' },
+  { id: 'running', label: 'Running' },
+  { id: 'cycling', label: 'Cycling' },
+  { id: 'swimming', label: 'Swimming' },
+  { id: 'walking', label: 'Walking' },
+  { id: 'sports', label: 'Sports' },
+  { id: 'gym', label: 'Gym/Fitness' },
+  { id: 'outdoor', label: 'Outdoor' },
+  { id: 'dance', label: 'Dance' },
+  { id: 'other', label: 'Other' },
 ]
 
 // Daily activity level - describes NON-EXERCISE activity (NEAT)

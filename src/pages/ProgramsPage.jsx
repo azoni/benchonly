@@ -533,7 +533,7 @@ export default function ProgramsPage() {
                     onClick={() => toggleLift(lift)}
                     className="px-3 py-1.5 rounded-lg text-sm bg-cyan-500 text-white flex items-center gap-1"
                   >
-                    {lift} <span className="text-xs opacity-70">✕</span>
+                    {lift} <span className="text-xs opacity-70">x</span>
                   </button>
                 ))}
               </div>
@@ -699,7 +699,7 @@ export default function ProgramsPage() {
                         : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
                   }`}
                 >
-                  Premium {!isAdmin && '🔒'}
+                  Premium {!isAdmin && '(locked)'}
                 </button>
               </div>
             </div>

@@ -26,12 +26,12 @@ const STEPS = [
 ]
 
 const TRAINING_FOCUSES = [
-  { id: 'bench-pr', label: 'Bench Press PR', desc: 'Chasing a new max', icon: '🏋️' },
-  { id: 'strength', label: 'General Strength', desc: 'Get stronger all around', icon: '💪' },
-  { id: 'hypertrophy', label: 'Hypertrophy', desc: 'Build muscle mass', icon: '📐' },
-  { id: 'powerlifting', label: 'Powerlifting', desc: 'Compete in the big 3', icon: '🔥' },
-  { id: 'fitness', label: 'General Fitness', desc: 'Stay healthy and active', icon: '🎯' },
-  { id: 'rehab', label: 'Rehab / Return', desc: 'Coming back from injury', icon: '🩹' },
+  { id: 'bench-pr', label: 'Bench Press PR', desc: 'Chasing a new max' },
+  { id: 'strength', label: 'General Strength', desc: 'Get stronger all around' },
+  { id: 'hypertrophy', label: 'Hypertrophy', desc: 'Build muscle mass' },
+  { id: 'powerlifting', label: 'Powerlifting', desc: 'Compete in the big 3' },
+  { id: 'fitness', label: 'General Fitness', desc: 'Stay healthy and active' },
+  { id: 'rehab', label: 'Rehab / Return', desc: 'Coming back from injury' },
 ]
 
 const COMMON_LIFTS = [
@@ -107,8 +107,7 @@ export default function OnboardingPage() {
       // Create goal if provided
       if (!skipGoal && goal.currentWeight && goal.targetWeight) {
         const { goalService } = await import('../services/firestore')
-        await goalService.create({
-          userId: user.uid,
+        await goalService.create(user.uid, {
           lift: goal.lift,
           startWeight: parseFloat(goal.currentWeight),
           currentWeight: parseFloat(goal.currentWeight),
@@ -286,8 +285,7 @@ export default function OnboardingPage() {
                         : 'border-iron-700 bg-iron-800/50 hover:border-iron-600'
                     }`}
                   >
-                    <span className="text-lg">{f.icon}</span>
-                    <p className={`text-sm font-medium mt-1 ${selected ? 'text-flame-300' : 'text-iron-200'}`}>
+                    <p className={`text-sm font-medium ${selected ? 'text-flame-300' : 'text-iron-200'}`}>
                       {f.label}
                     </p>
                     <p className="text-xs text-iron-500 mt-0.5">{f.desc}</p>

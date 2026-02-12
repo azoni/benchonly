@@ -925,10 +925,7 @@ export default function ProfilePage() {
                 {/* Reaction summary */}
                 {item.reactionCount > 0 && (
                   <div className="flex items-center gap-1 text-xs text-iron-500">
-                    {Object.entries(item.reactions || {}).slice(0, 3).map(([emoji, users]) => (
-                      users.length > 0 && <span key={emoji}>{emoji}</span>
-                    ))}
-                    <span>{item.reactionCount}</span>
+                    <span>{item.reactionCount} reaction{item.reactionCount !== 1 ? 's' : ''}</span>
                   </div>
                 )}
               </div>

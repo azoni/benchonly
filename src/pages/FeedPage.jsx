@@ -357,8 +357,8 @@ export default function FeedPage() {
                         item.visibility === 'group' ? 'bg-green-500/10 text-green-400' :
                         'bg-iron-700 text-iron-500'
                       }`}>
-                        {item.visibility === 'friends' ? '👥 Friends' : 
-                         item.visibility === 'group' ? '🏋️ Group' : '🔒 Private'}
+                        {item.visibility === 'friends' ? 'Friends' : 
+                         item.visibility === 'group' ? 'Group' : 'Private'}
                       </span>
                     )}
                   </div>

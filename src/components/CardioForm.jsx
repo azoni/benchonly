@@ -305,8 +305,7 @@ export default function CardioForm({ onBack }) {
                 
                 return (
                   <div key={category.id} className="mb-6">
-                    <h4 className="text-sm font-medium text-iron-400 mb-2 flex items-center gap-2">
-                      <span>{category.icon}</span>
+                    <h4 className="text-sm font-medium text-iron-400 mb-2">
                       {category.label}
                     </h4>
                     <div className="space-y-1">

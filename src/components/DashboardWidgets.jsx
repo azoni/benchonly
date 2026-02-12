@@ -536,7 +536,7 @@ export function FeedWidget({ feedItems = [], users = {} }) {
       case 'cardio':
         return `${userName} logged ${item.data?.duration}min cardio`
       case 'goal_completed':
-        return `${userName} achieved ${item.data?.lift} 🎉`
+        return `${userName} achieved ${item.data?.lift}`
       case 'personal_record':
         return `${userName} set a new PR`
       default:
@@ -576,7 +576,7 @@ export function FeedWidget({ feedItems = [], users = {} }) {
                 </p>
               </div>
               {item.reactionCount > 0 && (
-                <span className="text-xs text-iron-500">{item.reactionCount} 💪</span>
+                <span className="text-xs text-iron-500">{item.reactionCount}</span>
               )}
             </div>
           ))}

@@ -658,7 +658,7 @@ export default function CalendarPage() {
                         {completedGoal.targetValue || completedGoal.targetWeight} {completedGoal.metricType === 'reps' ? 'reps' : completedGoal.metricType === 'time' ? 'sec' : 'lbs'}
                       </p>
                     </div>
-                    <span className="text-yellow-400 text-xs font-medium">🎉</span>
+                    <span className="text-yellow-400 text-xs font-medium">!</span>
                   </div>
                 </div>
               );
