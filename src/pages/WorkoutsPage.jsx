@@ -479,15 +479,15 @@ export default function WorkoutsPage() {
 
                 {/* Actions Menu - not for recurring */}
                 {!isRecurring && (
-                  <>
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
                     <button
                       onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
                         setActiveMenu(activeMenu === workout.id ? null : workout.id)
                       }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-iron-500
-                        hover:text-iron-300 hover:bg-iron-800 rounded-lg transition-colors z-10"
+                      className="p-2 text-iron-500
+                        hover:text-iron-300 hover:bg-iron-800 rounded-lg transition-colors"
                     >
                       <MoreVertical className="w-4 h-4" />
                     </button>
@@ -498,7 +498,7 @@ export default function WorkoutsPage() {
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.95 }}
-                          className="absolute right-2 top-14 bg-iron-800 border border-iron-700
+                          className="absolute right-0 top-full mt-1 bg-iron-800 border border-iron-700
                             rounded-lg shadow-xl z-20 py-1 min-w-[140px]"
                         >
                           {!workout.isGroupWorkout && (
@@ -533,7 +533,7 @@ export default function WorkoutsPage() {
                         </motion.div>
                       )}
                     </AnimatePresence>
-                  </>
+                  </div>
                 )}
               </motion.div>
             )
