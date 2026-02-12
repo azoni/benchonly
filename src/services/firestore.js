@@ -244,6 +244,48 @@ export const workoutService = {
     
     return { id: workoutId, status: 'completed' };
   },
+
+  // Complete a workout with full payload (exercises, notes, etc.)
+  async complete(workoutId, payload) {
+    const docRef = doc(db, 'workouts', workoutId);
+    const workoutDoc = await getDoc(docRef);
+    const workoutData = workoutDoc.data();
+    const userId = workoutData?.userId;
+    
+    await updateDoc(docRef, {
+      ...payload,
+      status: 'completed',
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    // Check goals
+    if (userId && payload.exercises) {
+      await this.checkAndUpdateGoals(userId, { exercises: payload.exercises });
+    }
+
+    // Track analytics
+    if (userId) {
+      analyticsService.logAction(userId, ACTIONS.WORKOUT_COMPLETED, {
+        exerciseCount: payload.exercises?.length || 0
+      });
+    }
+
+    // Create feed item
+    try {
+      if (userId) {
+        await feedService.createFeedItem(userId, FEED_TYPES.WORKOUT, {
+          workoutId,
+          name: workoutData?.name || 'Workout',
+          exerciseCount: payload.exercises?.length || 0
+        });
+      }
+    } catch (e) {
+      console.error('Feed error:', e);
+    }
+
+    return { id: workoutId, status: 'completed' };
+  },
   
   // Get cardio activities by user
   async getCardioByUser(userId, limitCount = 30) {
