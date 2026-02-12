@@ -723,7 +723,7 @@ export default function TodayPage() {
       )}
 
       {/* Active Goals */}
-      {goals.length > 0 && (
+      {goals.length > 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -763,6 +763,24 @@ export default function TodayPage() {
               )
             })}
           </div>
+        </motion.div>
+      ) : !loading && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="mb-6"
+        >
+          <Link to="/goals" className="card-steel p-4 flex items-center gap-3 hover:border-iron-600 transition-colors block">
+            <div className="w-9 h-9 rounded-lg bg-flame-500/10 flex items-center justify-center flex-shrink-0">
+              <Target className="w-5 h-5 text-flame-400" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-iron-200">Set a goal</p>
+              <p className="text-xs text-iron-500">Track your progress toward a target</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-iron-600" />
+          </Link>
         </motion.div>
       )}
 
