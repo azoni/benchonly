@@ -293,11 +293,12 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Admin impersonation — always check REAL user
-  const isAppAdmin = user?.email === 'charltonuw@gmail.com' && !isGuest;
+  // Admin impersonation — isRealAdmin is always true for admin, isAppAdmin respects impersonation
+  const isRealAdmin = user?.email === 'charltonuw@gmail.com' && !isGuest;
+  const isAppAdmin = isRealAdmin && !impersonating;
   
   const startImpersonating = async (targetUid) => {
-    if (!isAppAdmin) return;
+    if (!isRealAdmin) return;
     try {
       const userRef = doc(db, 'users', targetUid);
       const userSnap = await getDoc(userRef);
@@ -356,6 +357,7 @@ export function AuthProvider({ children }) {
     loading,
     isGuest,
     isAppAdmin,
+    isRealAdmin,
     impersonating,
     startImpersonating,
     stopImpersonating,

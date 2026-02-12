@@ -31,7 +31,7 @@ const ADMIN_EMAILS = ['charltonuw@gmail.com']
 
 export default function AdminPage() {
   const navigate = useNavigate()
-  const { user, userProfile, isAppAdmin, startImpersonating: startContextImpersonation, impersonating: contextImpersonating } = useAuth()
+  const { user, userProfile, isRealAdmin, startImpersonating: startContextImpersonation, impersonating: contextImpersonating } = useAuth()
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
   const [impersonating, setImpersonating] = useState(null)
@@ -82,7 +82,7 @@ export default function AdminPage() {
   }
 
   // Check if current user is admin
-  const isAdmin = isAppAdmin
+  const isAdmin = isRealAdmin
 
   useEffect(() => {
     if (!isAdmin) {

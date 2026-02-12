@@ -45,7 +45,7 @@ const baseNavItems = [
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, userProfile, signOut, signInWithGoogle, isGuest, isAppAdmin, impersonating, stopImpersonating } = useAuth();
+  const { user, userProfile, signOut, signInWithGoogle, isGuest, isRealAdmin, impersonating, stopImpersonating } = useAuth();
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
@@ -76,7 +76,7 @@ export default function Layout() {
     }
   }, [location.pathname, user, isGuest])
 
-  const isAdmin = isAppAdmin;
+  const isAdmin = isRealAdmin;
   
   // Add admin nav item if user is admin
   const navItems = isAdmin 
