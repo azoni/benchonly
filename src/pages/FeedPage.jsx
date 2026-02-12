@@ -26,7 +26,7 @@ import { collection, getDocs, query } from 'firebase/firestore'
 import { db } from '../services/firebase'
 
 export default function FeedPage() {
-  const { user, isGuest } = useAuth()
+  const { user, isGuest, isAppAdmin } = useAuth()
   const [feedItems, setFeedItems] = useState([])
   const [users, setUsers] = useState({})
   const [loading, setLoading] = useState(true)
@@ -173,7 +173,7 @@ export default function FeedPage() {
   const handleDeleteFeedItem = async (feedId) => {
     if (!confirm('Delete this post from the feed?')) return
     try {
-      await feedService.deleteFeedItem(feedId, user.uid)
+      await feedService.deleteFeedItem(feedId, user.uid, isAppAdmin)
       setFeedItems(prev => prev.filter(i => i.id !== feedId))
     } catch (e) {
       console.error('Error deleting feed item:', e)
@@ -384,7 +384,7 @@ export default function FeedPage() {
                   <MessageCircle className="w-4 h-4" />
                   {item.commentCount > 0 ? `${item.commentCount} comment${item.commentCount !== 1 ? 's' : ''}` : 'Comment'}
                 </button>
-                {item.userId === user?.uid && (
+                {isAppAdmin && (
                   <button
                     onClick={() => handleDeleteFeedItem(item.id)}
                     className="ml-auto p-1.5 rounded-lg text-iron-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"

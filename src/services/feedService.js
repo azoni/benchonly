@@ -204,12 +204,12 @@ export const feedService = {
     }
   },
 
-  // Delete a feed item (owner only)
-  async deleteFeedItem(feedId, userId) {
+  // Delete a feed item (owner or admin)
+  async deleteFeedItem(feedId, userId, isAdmin = false) {
     const feedRef = doc(db, 'feed', feedId)
     const feedDoc = await getDoc(feedRef)
     
-    if (feedDoc.exists() && feedDoc.data().userId === userId) {
+    if (feedDoc.exists() && (isAdmin || feedDoc.data().userId === userId)) {
       await deleteDoc(feedRef)
     }
   }
