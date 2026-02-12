@@ -16,6 +16,7 @@ import {
   User,
   Users,
   Globe,
+  Trash2,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { feedService } from '../services/feedService'
@@ -166,6 +167,16 @@ export default function FeedPage() {
       console.error('Error adding comment:', error)
     } finally {
       setSubmittingComment(false)
+    }
+  }
+
+  const handleDeleteFeedItem = async (feedId) => {
+    if (!confirm('Delete this post from the feed?')) return
+    try {
+      await feedService.deleteFeedItem(feedId, user.uid)
+      setFeedItems(prev => prev.filter(i => i.id !== feedId))
+    } catch (e) {
+      console.error('Error deleting feed item:', e)
     }
   }
 
@@ -354,8 +365,8 @@ export default function FeedPage() {
                 </div>
               </div>
 
-              {/* Workout/Activity Details Link */}
-              {item.data?.workoutId && (
+              {/* Workout/Activity Details Link — only for own workouts (Firestore rules block reading others') */}
+              {item.data?.workoutId && item.userId === user?.uid && (
                 <Link 
                   to={item.type === 'group_workout' ? `/workouts/group/${item.data.workoutId}` : `/workouts/${item.data.workoutId}`}
                   className="mt-3 block p-3 bg-iron-800/50 rounded-lg text-sm text-iron-400 hover:text-iron-200 hover:bg-iron-800 transition-colors"
@@ -365,7 +376,7 @@ export default function FeedPage() {
               )}
 
               {/* Actions */}
-              <div className="mt-3 flex items-center">
+              <div className="mt-3 flex items-center gap-2">
                 <button
                   onClick={() => openComments(item)}
                   className="px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 bg-iron-800 text-iron-400 hover:bg-iron-700 transition-colors"
@@ -373,6 +384,15 @@ export default function FeedPage() {
                   <MessageCircle className="w-4 h-4" />
                   {item.commentCount > 0 ? `${item.commentCount} comment${item.commentCount !== 1 ? 's' : ''}` : 'Comment'}
                 </button>
+                {item.userId === user?.uid && (
+                  <button
+                    onClick={() => handleDeleteFeedItem(item.id)}
+                    className="ml-auto p-1.5 rounded-lg text-iron-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    title="Delete post"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
             )

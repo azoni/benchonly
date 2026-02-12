@@ -532,6 +532,21 @@ export const workoutService = {
 
   async delete(workoutId) {
     await deleteDoc(doc(db, 'workouts', workoutId));
+    
+    // Clean up associated feed items
+    try {
+      const feedQ = query(
+        collection(db, 'feed'),
+        where('data.workoutId', '==', workoutId)
+      );
+      const feedSnap = await getDocs(feedQ);
+      const deletes = feedSnap.docs.map(d => deleteDoc(doc(db, 'feed', d.id)));
+      await Promise.all(deletes);
+    } catch (e) {
+      // Feed cleanup is best-effort — don't block the delete
+      console.error('Feed cleanup error:', e);
+    }
+    
     return workoutId;
   },
 
@@ -1326,6 +1341,20 @@ export const groupWorkoutService = {
   // Delete a group workout
   async delete(workoutId) {
     await deleteDoc(doc(db, 'groupWorkouts', workoutId));
+    
+    // Clean up associated feed items
+    try {
+      const feedQ = query(
+        collection(db, 'feed'),
+        where('data.workoutId', '==', workoutId)
+      );
+      const feedSnap = await getDocs(feedQ);
+      const deletes = feedSnap.docs.map(d => deleteDoc(doc(db, 'feed', d.id)));
+      await Promise.all(deletes);
+    } catch (e) {
+      console.error('Feed cleanup error:', e);
+    }
+    
     return workoutId;
   },
 
