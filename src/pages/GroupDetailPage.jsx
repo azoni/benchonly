@@ -145,21 +145,38 @@ export default function GroupDetailPage() {
           const attendanceData = {}
           const goalsData = {}
           for (const memberId of groupData.members) {
-            const records = await attendanceService.getByDateRange(memberId, weekStart, weekEnd)
-            attendanceData[memberId] = records
+            try {
+              const records = await attendanceService.getByDateRange(memberId, weekStart, weekEnd)
+              attendanceData[memberId] = records
+            } catch (e) {
+              attendanceData[memberId] = []
+            }
             
-            // Fetch active goals for each member
-            const goals = await goalService.getByUser(memberId)
-            goalsData[memberId] = goals.filter(g => g.status === 'active')
+            // Fetch active goals — only own goals or all if app admin
+            try {
+              if (memberId === user.uid || isAppAdmin) {
+                const goals = await goalService.getByUser(memberId)
+                goalsData[memberId] = goals.filter(g => g.status === 'active')
+              } else {
+                goalsData[memberId] = []
+              }
+            } catch (e) {
+              goalsData[memberId] = []
+            }
           }
           
           setMembers(memberData)
           setAttendance(attendanceData)
           setMemberGoals(goalsData)
           
-          // Fetch group workouts
-          const workouts = await groupWorkoutService.getByGroup(id)
-          setGroupWorkouts(workouts)
+          // Fetch group workouts (passes userId for Firestore rules)
+          try {
+            const workouts = await groupWorkoutService.getByGroup(id, user.uid)
+            setGroupWorkouts(workouts)
+          } catch (e) {
+            console.error('Error loading group workouts:', e)
+            setGroupWorkouts([])
+          }
         }
       } catch (error) {
         console.error('Error fetching group:', error)
@@ -603,12 +620,13 @@ export default function GroupDetailPage() {
           id,
           group.admins,
           localDate,
-          memberWorkouts
+          memberWorkouts,
+          group.members
         )
       }
 
       // Refresh workouts list
-      const workouts = await groupWorkoutService.getByGroup(id)
+      const workouts = await groupWorkoutService.getByGroup(id, user.uid)
       setGroupWorkouts(workouts)
 
       setShowWorkoutModal(false)
@@ -1798,7 +1816,7 @@ export default function GroupDetailPage() {
         isAdmin={isAppAdmin}
         onSuccess={() => {
           // Refresh workouts list
-          groupWorkoutService.getByGroup(id).then(setGroupWorkouts)
+          groupWorkoutService.getByGroup(id, user.uid).then(setGroupWorkouts)
         }}
       />
     </div>

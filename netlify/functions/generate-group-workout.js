@@ -54,8 +54,22 @@ export async function handler(event) {
       painThresholdCount: 2,
     };
 
-    // Model selection - gpt-4o for premium, gpt-4o-mini for standard
-    const selectedModel = model === 'premium' ? 'gpt-4o' : 'gpt-4o-mini';
+    // Model selection - enforce admin-only premium
+    const selectedModel = (model === 'premium' && auth.isAdmin) ? 'gpt-4o' : 'gpt-4o-mini';
+
+    // Fetch group data for Firestore rules compliance
+    let groupAdmins = [coachId];
+    let groupMembers = [coachId];
+    try {
+      const groupDoc = await db.collection('groups').doc(groupId).get();
+      if (groupDoc.exists) {
+        const groupData = groupDoc.data();
+        groupAdmins = groupData.admins || [coachId];
+        groupMembers = groupData.members || [coachId];
+      }
+    } catch (e) {
+      console.error('Failed to fetch group:', e);
+    }
 
     const contextStr = buildGroupContext(athletes, adminSettings);
 
@@ -261,6 +275,8 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
         assignedTo: athleteId,
         assignedBy: coachId,
         groupId,
+        groupAdmins,
+        groupMembers,
         generatedByAI: true,
         aiModel: selectedModel,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),

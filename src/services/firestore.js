@@ -1179,11 +1179,12 @@ export const healthService = {
 // ============ GROUP WORKOUTS ============
 export const groupWorkoutService = {
   // Create a workout assigned to a specific group member
-  async create(groupId, groupAdmins, assignedTo, workoutData) {
+  async create(groupId, groupAdmins, assignedTo, workoutData, groupMembers = []) {
     const docRef = await addDoc(collection(db, 'groupWorkouts'), {
       ...workoutData,
       groupId,
       groupAdmins,
+      groupMembers: groupMembers.length > 0 ? groupMembers : groupAdmins,
       assignedTo,
       status: 'scheduled', // scheduled, completed
       createdAt: serverTimestamp(),
@@ -1192,15 +1193,41 @@ export const groupWorkoutService = {
     return { id: docRef.id, ...workoutData, groupId, assignedTo, status: 'scheduled' };
   },
 
-  // Get all group workouts for a specific group
-  async getByGroup(groupId) {
-    const q = query(
-      collection(db, 'groupWorkouts'),
-      where('groupId', '==', groupId),
-      orderBy('date', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  // Get all group workouts for a specific group (user must be a member)
+  async getByGroup(groupId, userId) {
+    // Primary query: use groupMembers array-contains to satisfy Firestore rules
+    try {
+      const q = query(
+        collection(db, 'groupWorkouts'),
+        where('groupId', '==', groupId),
+        where('groupMembers', 'array-contains', userId),
+        orderBy('date', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    } catch (e) {
+      // Fallback for older docs without groupMembers field — try groupAdmins
+      try {
+        const q = query(
+          collection(db, 'groupWorkouts'),
+          where('groupId', '==', groupId),
+          where('groupAdmins', 'array-contains', userId),
+          orderBy('date', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      } catch (e2) {
+        // Final fallback: just get own workouts
+        const q = query(
+          collection(db, 'groupWorkouts'),
+          where('groupId', '==', groupId),
+          where('assignedTo', '==', userId),
+          orderBy('date', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      }
+    }
   },
 
   // Get group workouts assigned to a specific user
@@ -1329,15 +1356,17 @@ export const groupWorkoutService = {
   },
 
   // Batch create workouts for multiple members (same date, different prescriptions)
-  async createBatch(groupId, groupAdmins, date, memberWorkouts) {
+  async createBatch(groupId, groupAdmins, date, memberWorkouts, groupMembers = []) {
     const batch = writeBatch(db);
     const results = [];
+    const members = groupMembers.length > 0 ? groupMembers : groupAdmins;
 
     for (const { assignedTo, name, exercises } of memberWorkouts) {
       const docRef = doc(collection(db, 'groupWorkouts'));
       const workoutData = {
         groupId,
         groupAdmins,
+        groupMembers: members,
         assignedTo,
         userId: assignedTo, // Add userId for consistency
         name,
