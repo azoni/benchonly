@@ -405,6 +405,7 @@ export default function NewWorkoutPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="font-display text-xl text-iron-100">Exercises</h2>
+          {isEditMode && (
           <button
             onClick={() => setRpeModalOpen(true)}
             className="text-sm text-flame-400 hover:text-flame-300 flex items-center gap-1"
@@ -412,6 +413,7 @@ export default function NewWorkoutPage() {
             <Info className="w-4 h-4" />
             What is RPE?
           </button>
+          )}
         </div>
 
         <AnimatePresence>
@@ -514,22 +516,26 @@ export default function NewWorkoutPage() {
                   >
                     <div className="p-4">
                       {/* Set Headers - Desktop */}
-                      <div className="hidden md:grid grid-cols-12 gap-2 mb-2 text-xs text-iron-500 uppercase tracking-wider">
+                      <div className={`hidden md:grid gap-2 mb-2 text-xs text-iron-500 uppercase tracking-wider ${isEditMode ? 'grid-cols-12' : 'grid-cols-8'}`}>
                         <div className="col-span-1">Set</div>
-                        <div className="col-span-3">Target</div>
-                        <div className="col-span-3">Actual</div>
-                        <div className="col-span-2">
-                          <span className="flex items-center gap-1">
-                            RPE
-                            <button
-                              onClick={() => setRpeModalOpen(true)}
-                              className="text-flame-400 hover:text-flame-300"
-                            >
-                              <Info className="w-3 h-3" />
-                            </button>
-                          </span>
-                        </div>
-                        <div className="col-span-2">Pain</div>
+                        <div className={isEditMode ? 'col-span-3' : 'col-span-6'}>Target</div>
+                        {isEditMode && (
+                          <>
+                            <div className="col-span-3">Actual</div>
+                            <div className="col-span-2">
+                              <span className="flex items-center gap-1">
+                                RPE
+                                <button
+                                  onClick={() => setRpeModalOpen(true)}
+                                  className="text-flame-400 hover:text-flame-300"
+                                >
+                                  <Info className="w-3 h-3" />
+                                </button>
+                              </span>
+                            </div>
+                            <div className="col-span-2">Pain</div>
+                          </>
+                        )}
                         <div className="col-span-1"></div>
                       </div>
 
@@ -553,7 +559,7 @@ export default function NewWorkoutPage() {
                             
                             {/* Time-based exercise */}
                             {exercise.type === 'time' ? (
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className={`grid gap-3 ${isEditMode ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                 <div>
                                   <label className="block text-xs text-iron-500 mb-1">Target (sec)</label>
                                   <input
@@ -569,6 +575,7 @@ export default function NewWorkoutPage() {
                                     className="w-full input-field text-base py-3 px-4"
                                   />
                                 </div>
+                                {isEditMode && (
                                 <div>
                                   <label className="block text-xs text-flame-400 mb-1">Actual (sec)</label>
                                   <input
@@ -584,10 +591,11 @@ export default function NewWorkoutPage() {
                                     className="w-full input-field text-base py-3 px-4 border-flame-500/30"
                                   />
                                 </div>
+                                )}
                               </div>
                             ) : exercise.type === 'bodyweight' ? (
                               /* Bodyweight exercise - reps only */
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className={`grid gap-3 ${isEditMode ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                 <div>
                                   <label className="block text-xs text-iron-500 mb-1">Target Reps</label>
                                   <input
@@ -608,6 +616,7 @@ export default function NewWorkoutPage() {
                                     className="w-full input-field text-base py-3 px-4"
                                   />
                                 </div>
+                                {isEditMode && (
                                 <div>
                                   <label className="block text-xs text-flame-400 mb-1">Actual Reps</label>
                                   <input
@@ -623,6 +632,7 @@ export default function NewWorkoutPage() {
                                     className="w-full input-field text-base py-3 px-4 border-flame-500/30"
                                   />
                                 </div>
+                                )}
                               </div>
                             ) : (
                               /* Weight exercise - weight + reps */
@@ -661,6 +671,8 @@ export default function NewWorkoutPage() {
                                     className="w-full input-field text-base py-3 px-4"
                                   />
                                 </div>
+                                {isEditMode && (
+                                <>
                                 <div>
                                   <label className="block text-xs text-flame-400 mb-1">Actual Weight</label>
                                   <input
@@ -690,9 +702,12 @@ export default function NewWorkoutPage() {
                                     className="w-full input-field text-base py-3 px-4 border-flame-500/30"
                                   />
                                 </div>
+                                </>
+                                )}
                               </div>
                             )}
                             
+                            {isEditMode && (
                             <div className="grid grid-cols-2 gap-3">
                               <div>
                                 <label className="block text-xs text-iron-500 mb-1 flex items-center gap-1">
@@ -736,10 +751,11 @@ export default function NewWorkoutPage() {
                                 </select>
                               </div>
                             </div>
+                            )}
                           </div>
 
                           {/* Desktop Layout */}
-                          <div className="hidden md:grid grid-cols-12 gap-2 items-center">
+                          <div className={`hidden md:grid gap-2 items-center ${isEditMode ? 'grid-cols-12' : 'grid-cols-8'}`}>
                             <div className="col-span-1">
                               <span className="text-iron-400 text-sm font-medium">
                                 {setIndex + 1}
@@ -749,7 +765,7 @@ export default function NewWorkoutPage() {
                             {exercise.type === 'time' ? (
                               /* Time exercise - single time fields */
                               <>
-                                <div className="col-span-3">
+                                <div className={isEditMode ? 'col-span-3' : 'col-span-6'}>
                                   <input
                                     type="number"
                                     inputMode="numeric"
@@ -763,6 +779,7 @@ export default function NewWorkoutPage() {
                                     className="w-full input-field text-sm py-2 px-3"
                                   />
                                 </div>
+                                {isEditMode && (
                                 <div className="col-span-3">
                                   <input
                                     type="number"
@@ -777,11 +794,12 @@ export default function NewWorkoutPage() {
                                     className="w-full input-field text-sm py-2 px-3 border-flame-500/30"
                                   />
                                 </div>
+                                )}
                               </>
                             ) : exercise.type === 'bodyweight' ? (
                               /* Bodyweight exercise - reps only */
                               <>
-                                <div className="col-span-3">
+                                <div className={isEditMode ? 'col-span-3' : 'col-span-6'}>
                                   <input
                                     type="text"
                                     inputMode="numeric"
@@ -800,6 +818,7 @@ export default function NewWorkoutPage() {
                                     className="w-full input-field text-sm py-2 px-3"
                                   />
                                 </div>
+                                {isEditMode && (
                                 <div className="col-span-3">
                                   <input
                                     type="number"
@@ -814,11 +833,12 @@ export default function NewWorkoutPage() {
                                     className="w-full input-field text-sm py-2 px-3 border-flame-500/30"
                                   />
                                 </div>
+                                )}
                               </>
                             ) : (
                               /* Weight exercise - weight x reps */
                               <>
-                                <div className="col-span-3">
+                                <div className={isEditMode ? 'col-span-3' : 'col-span-6'}>
                                   <div className="flex gap-1 items-center">
                                     <input
                                       type="text"
@@ -851,6 +871,7 @@ export default function NewWorkoutPage() {
                                     />
                                   </div>
                                 </div>
+                                {isEditMode && (
                                 <div className="col-span-3">
                                   <div className="flex gap-1 items-center">
                                     <input
@@ -879,10 +900,12 @@ export default function NewWorkoutPage() {
                                     />
                                   </div>
                                 </div>
+                                )}
                               </>
                             )}
 
-                          {/* RPE */}
+                          {/* RPE - edit mode only */}
+                          {isEditMode && (
                           <div className="col-span-2">
                             <select
                               value={set.rpe}
@@ -901,8 +924,10 @@ export default function NewWorkoutPage() {
                               ))}
                             </select>
                           </div>
+                          )}
 
-                          {/* Pain Level - Now a dropdown */}
+                          {/* Pain Level - edit mode only */}
+                          {isEditMode && (
                           <div className="col-span-2">
                             <select
                               value={set.painLevel}
@@ -930,6 +955,7 @@ export default function NewWorkoutPage() {
                               <option value="10">10 - Severe</option>
                             </select>
                           </div>
+                          )}
 
                           {/* Delete Set */}
                           <div className="col-span-1 flex justify-end">

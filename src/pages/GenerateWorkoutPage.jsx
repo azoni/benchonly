@@ -29,6 +29,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
 import { workoutService, creditService, CREDIT_COSTS, PREMIUM_CREDIT_COST, programService } from '../services/firestore';
+import { ouraService } from '../services/ouraService';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
@@ -78,7 +79,7 @@ export default function GenerateWorkoutPage() {
   const thinkingIntervalRef = useRef(null);
   
   const [userContext, setUserContext] = useState({
-    recentWorkouts: [], goals: [], maxLifts: {}, painHistory: {}, rpeAverages: {}, cardioHistory: [],
+    recentWorkouts: [], goals: [], maxLifts: {}, painHistory: {}, rpeAverages: {}, cardioHistory: [], ouraData: null,
   });
   
   const [prompt, setPrompt] = useState(() => {
@@ -327,8 +328,19 @@ export default function GenerateWorkoutPage() {
       addAnalysisStep('Loading cardio history', 'complete',
         cardioHistory.length > 0 ? `${cardioHistory.length} recent cardio sessions` : 'No cardio data'
       );
+
+      // Load Oura data if connected
+      let ouraData = null;
+      try {
+        ouraData = await ouraService.getLatestScores(user.uid);
+        if (ouraData) {
+          addAnalysisStep('Loading Oura data', 'complete',
+            `Readiness: ${ouraData.latest?.readiness?.score || '—'}, Sleep: ${ouraData.latest?.sleep?.score || '—'}`
+          );
+        }
+      } catch (e) { /* Oura not connected, skip */ }
       
-      setUserContext({ recentWorkouts: allWorkouts, goals, maxLifts, painHistory, rpeAverages, cardioHistory });
+      setUserContext({ recentWorkouts: allWorkouts, goals, maxLifts, painHistory, rpeAverages, cardioHistory, ouraData });
       setCurrentStep(null);
       
     } catch (err) {
@@ -372,6 +384,7 @@ export default function GenerateWorkoutPage() {
             goals: userContext.goals, maxLifts: userContext.maxLifts,
             painHistory: userContext.painHistory, rpeAverages: userContext.rpeAverages,
             cardioHistory: userContext.cardioHistory,
+            ouraData: userContext.ouraData,
           },
         }),
       });

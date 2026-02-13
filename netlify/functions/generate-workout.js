@@ -368,6 +368,33 @@ function buildContext(ctx, focus, intensity, settings = {}) {
     s += '\n';
   }
 
+  // Include Oura Ring recovery data
+  if (ctx?.ouraData) {
+    const { latest, averages } = ctx.ouraData;
+    s += 'OURA RING DATA (adjust workout intensity based on recovery):\n';
+    if (latest?.readiness?.score) {
+      s += `  Readiness Score: ${latest.readiness.score}/100`;
+      if (latest.readiness.score < 70) s += ' (LOW - consider reducing intensity)';
+      else if (latest.readiness.score >= 85) s += ' (HIGH - good for heavy training)';
+      s += '\n';
+    }
+    if (latest?.sleep?.score) {
+      s += `  Sleep Score: ${latest.sleep.score}/100`;
+      if (latest.sleep.score < 70) s += ' (POOR SLEEP - reduce volume/intensity)';
+      s += '\n';
+    }
+    if (latest?.activity?.score) {
+      s += `  Activity Score: ${latest.activity.score}/100\n`;
+    }
+    if (averages?.readinessScore) {
+      s += `  7-Day Avg Readiness: ${averages.readinessScore}/100\n`;
+    }
+    if (averages?.sleepScore) {
+      s += `  7-Day Avg Sleep: ${averages.sleepScore}/100\n`;
+    }
+    s += '\n';
+  }
+
   if (ctx?.recentWorkouts?.length) {
     s += `\nRECENT WORKOUTS (${ctx.recentWorkouts.length} total) - IMPORTANT FOR REPEAT REQUESTS:\n`;
     ctx.recentWorkouts.slice(0, 5).forEach(w => {

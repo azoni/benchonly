@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { 
   User, 
   Bell, 
@@ -32,6 +32,9 @@ import {
   Lock,
   Gift,
   Search,
+  RefreshCw,
+  Link2,
+  Unlink,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
@@ -39,9 +42,11 @@ import { auth } from '../services/firebase'
 import { ACTIVITY_LEVELS } from '../services/calorieService'
 import { userService, tokenUsageService, creditService } from '../services/firestore'
 import { friendService } from '../services/friendService'
+import { ouraService } from '../services/ouraService'
 
 export default function SettingsPage() {
   const { user, userProfile, updateProfile, isGuest } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [photoURL, setPhotoURL] = useState(userProfile?.photoURL || user?.photoURL)
@@ -60,6 +65,12 @@ export default function SettingsPage() {
   const [giftSelectedUser, setGiftSelectedUser] = useState(null)
   const [giftAmount, setGiftAmount] = useState('')
   const [giftLoading, setGiftLoading] = useState(false)
+  
+  // Oura integration state
+  const [showOuraSection, setShowOuraSection] = useState(false)
+  const [ouraStatus, setOuraStatus] = useState(null)
+  const [ouraLoading, setOuraLoading] = useState(false)
+  const [ouraSyncing, setOuraSyncing] = useState(false)
   
   // Custom exercises state
   const [customExercises, setCustomExercises] = useState({
@@ -414,6 +425,75 @@ export default function SettingsPage() {
       setGiftLoading(false)
     }
   }
+
+  // Oura integration handlers
+  const loadOuraStatus = async () => {
+    if (!user) return
+    setOuraLoading(true)
+    try {
+      const status = await ouraService.getStatus(user.uid)
+      setOuraStatus(status)
+    } catch (e) {
+      console.error('Error loading Oura status:', e)
+    } finally {
+      setOuraLoading(false)
+    }
+  }
+
+  const handleOuraConnect = async () => {
+    setOuraLoading(true)
+    try {
+      const authUrl = await ouraService.connect()
+      window.location.href = authUrl
+    } catch (e) {
+      console.error('Oura connect error:', e)
+      alert(e.message)
+      setOuraLoading(false)
+    }
+  }
+
+  const handleOuraSync = async () => {
+    setOuraSyncing(true)
+    try {
+      const result = await ouraService.sync()
+      setOuraStatus(prev => ({ ...prev, connected: true, data: result.data, lastSynced: new Date().toISOString() }))
+    } catch (e) {
+      console.error('Oura sync error:', e)
+      if (e.message.includes('expired') || e.message.includes('reconnect')) {
+        setOuraStatus(prev => ({ ...prev, status: 'expired', connected: false }))
+      }
+      alert(e.message)
+    } finally {
+      setOuraSyncing(false)
+    }
+  }
+
+  const handleOuraDisconnect = async () => {
+    if (!confirm('Disconnect Oura Ring? Your synced data will be removed.')) return
+    try {
+      await ouraService.disconnect(user.uid)
+      setOuraStatus({ connected: false })
+    } catch (e) {
+      console.error('Oura disconnect error:', e)
+    }
+  }
+
+  // Check for Oura callback params on mount
+  useEffect(() => {
+    const ouraParam = searchParams.get('oura')
+    if (ouraParam) {
+      setShowOuraSection(true)
+      if (ouraParam === 'connected') {
+        loadOuraStatus()
+        // Auto-sync after connecting
+        setTimeout(() => handleOuraSync(), 500)
+      }
+      // Clean up URL params
+      searchParams.delete('oura')
+      searchParams.delete('reason')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [])
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 pb-24">
@@ -1198,6 +1278,191 @@ export default function SettingsPage() {
           )}
         </div>
 
+      </div>
+
+      {/* Integrations */}
+      <div className="space-y-3 mt-8">
+        <h3 className="text-sm font-medium text-iron-400 px-1">Integrations</h3>
+
+        {/* Oura Ring */}
+        <div className="card-steel overflow-hidden">
+          <button
+            onClick={() => {
+              setShowOuraSection(!showOuraSection)
+              if (!showOuraSection && !ouraStatus) loadOuraStatus()
+            }}
+            className="w-full p-4 flex items-center gap-4"
+          >
+            <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center">
+              <Activity className="w-5 h-5 text-teal-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium text-iron-200">Oura Ring</p>
+              <p className="text-sm text-iron-500">
+                {ouraStatus?.connected ? 'Connected' : 'Sleep, readiness & recovery data'}
+              </p>
+            </div>
+            {ouraStatus?.connected && (
+              <span className="text-xs px-2 py-1 rounded-full bg-teal-500/20 text-teal-400">Active</span>
+            )}
+            <ChevronDown className={`w-5 h-5 text-iron-500 transition-transform ${showOuraSection ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showOuraSection && (
+            <div className="px-4 pb-4 border-t border-iron-800 pt-4">
+              {ouraLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="w-5 h-5 text-teal-500 animate-spin" />
+                </div>
+              ) : !ouraStatus?.connected ? (
+                <div className="text-center py-4">
+                  {ouraStatus?.status === 'expired' && (
+                    <p className="text-sm text-amber-400 mb-3">Your Oura connection expired. Please reconnect.</p>
+                  )}
+                  <p className="text-sm text-iron-400 mb-4">
+                    Connect your Oura Ring to include sleep scores, readiness, and recovery data 
+                    in your AI-generated workouts.
+                  </p>
+                  <button
+                    onClick={handleOuraConnect}
+                    disabled={ouraLoading}
+                    className="btn-primary text-sm px-6 flex items-center gap-2 mx-auto"
+                  >
+                    {ouraLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                    Connect Oura Ring
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Status bar */}
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-iron-500">
+                      {ouraStatus.lastSynced 
+                        ? `Last synced: ${new Date(ouraStatus.lastSynced?.toDate ? ouraStatus.lastSynced.toDate() : ouraStatus.lastSynced).toLocaleString()}`
+                        : 'Not synced yet'}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleOuraSync}
+                        disabled={ouraSyncing}
+                        className="flex items-center gap-1 text-xs text-teal-400 hover:text-teal-300"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${ouraSyncing ? 'animate-spin' : ''}`} />
+                        Sync
+                      </button>
+                      <button
+                        onClick={handleOuraDisconnect}
+                        className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300"
+                      >
+                        <Unlink className="w-3.5 h-3.5" />
+                        Disconnect
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Score cards */}
+                  {ouraStatus.data && (
+                    <div className="space-y-3">
+                      {/* Latest scores */}
+                      <div className="grid grid-cols-3 gap-2">
+                        {(() => {
+                          const s = ouraStatus.data.sleep;
+                          const r = ouraStatus.data.readiness;
+                          const a = ouraStatus.data.activity;
+                          const latestSleep = s?.length ? s[s.length - 1] : null;
+                          const latestReadiness = r?.length ? r[r.length - 1] : null;
+                          const latestActivity = a?.length ? a[a.length - 1] : null;
+                          return (
+                            <>
+                              <div className="bg-iron-800/50 rounded-lg p-3 text-center">
+                                <p className="text-xs text-iron-500 mb-1">Sleep</p>
+                                <p className={`text-2xl font-bold ${
+                                  (latestSleep?.score || 0) >= 85 ? 'text-green-400' :
+                                  (latestSleep?.score || 0) >= 70 ? 'text-yellow-400' :
+                                  'text-red-400'
+                                }`}>
+                                  {latestSleep?.score || '—'}
+                                </p>
+                                <p className="text-xs text-iron-600 mt-1">{latestSleep?.day || ''}</p>
+                              </div>
+                              <div className="bg-iron-800/50 rounded-lg p-3 text-center">
+                                <p className="text-xs text-iron-500 mb-1">Readiness</p>
+                                <p className={`text-2xl font-bold ${
+                                  (latestReadiness?.score || 0) >= 85 ? 'text-green-400' :
+                                  (latestReadiness?.score || 0) >= 70 ? 'text-yellow-400' :
+                                  'text-red-400'
+                                }`}>
+                                  {latestReadiness?.score || '—'}
+                                </p>
+                                <p className="text-xs text-iron-600 mt-1">{latestReadiness?.day || ''}</p>
+                              </div>
+                              <div className="bg-iron-800/50 rounded-lg p-3 text-center">
+                                <p className="text-xs text-iron-500 mb-1">Activity</p>
+                                <p className={`text-2xl font-bold ${
+                                  (latestActivity?.score || 0) >= 85 ? 'text-green-400' :
+                                  (latestActivity?.score || 0) >= 70 ? 'text-yellow-400' :
+                                  'text-red-400'
+                                }`}>
+                                  {latestActivity?.score || '—'}
+                                </p>
+                                <p className="text-xs text-iron-600 mt-1">{latestActivity?.day || ''}</p>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      {/* 7-day trend */}
+                      {ouraStatus.data.readiness?.length > 1 && (
+                        <div className="bg-iron-800/50 rounded-lg p-3">
+                          <p className="text-xs text-iron-500 mb-2">7-Day Readiness</p>
+                          <div className="flex items-end gap-1 h-12">
+                            {ouraStatus.data.readiness.map((r, i) => (
+                              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                                <div
+                                  className={`w-full rounded-sm transition-all ${
+                                    (r.score || 0) >= 85 ? 'bg-green-500' :
+                                    (r.score || 0) >= 70 ? 'bg-yellow-500' :
+                                    'bg-red-500'
+                                  }`}
+                                  style={{ height: `${Math.max(4, ((r.score || 0) / 100) * 48)}px` }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-1 mt-1">
+                            {ouraStatus.data.readiness.map((r, i) => (
+                              <div key={i} className="flex-1 text-center">
+                                <span className="text-[9px] text-iron-600">{r.day?.slice(5) || ''}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-iron-600">
+                        This data is automatically included when generating workouts to optimize intensity and recovery.
+                      </p>
+                    </div>
+                  )}
+
+                  {!ouraStatus.data && (
+                    <div className="text-center py-2">
+                      <button
+                        onClick={handleOuraSync}
+                        disabled={ouraSyncing}
+                        className="btn-primary text-sm px-4 flex items-center gap-2 mx-auto"
+                      >
+                        {ouraSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                        Sync Data
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {!window.matchMedia('(display-mode: standalone)').matches && (
