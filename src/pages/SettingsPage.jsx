@@ -30,12 +30,15 @@ import {
   Globe,
   Users,
   Lock,
+  Gift,
+  Search,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
 import { auth } from '../services/firebase'
 import { ACTIVITY_LEVELS } from '../services/calorieService'
-import { userService, tokenUsageService } from '../services/firestore'
+import { userService, tokenUsageService, creditService } from '../services/firestore'
+import { friendService } from '../services/friendService'
 
 export default function SettingsPage() {
   const { user, userProfile, updateProfile, isGuest } = useAuth()
@@ -48,6 +51,15 @@ export default function SettingsPage() {
   const [showUsageSection, setShowUsageSection] = useState(false)
   const [usageStats, setUsageStats] = useState(null)
   const [usageLoading, setUsageLoading] = useState(false)
+  
+  // Gift credits state
+  const [showGiftSection, setShowGiftSection] = useState(false)
+  const [giftFriends, setGiftFriends] = useState([])
+  const [giftFriendsLoading, setGiftFriendsLoading] = useState(false)
+  const [giftSearch, setGiftSearch] = useState('')
+  const [giftSelectedUser, setGiftSelectedUser] = useState(null)
+  const [giftAmount, setGiftAmount] = useState('')
+  const [giftLoading, setGiftLoading] = useState(false)
   
   // Custom exercises state
   const [customExercises, setCustomExercises] = useState({
@@ -360,6 +372,48 @@ export default function SettingsPage() {
   }
 
   const profileComplete = profile.weight && profile.heightFeet && profile.age && profile.gender
+
+  const loadGiftFriends = async () => {
+    if (giftFriends.length > 0 || giftFriendsLoading || !user) return
+    setGiftFriendsLoading(true)
+    try {
+      const friendIds = await friendService.getFriends(user.uid)
+      const friends = []
+      for (const fid of friendIds) {
+        const u = await userService.get(fid)
+        if (u) friends.push({ uid: fid, ...u })
+      }
+      setGiftFriends(friends)
+    } catch (e) {
+      console.error('Error loading friends:', e)
+    } finally {
+      setGiftFriendsLoading(false)
+    }
+  }
+
+  const handleGiftCredits = async () => {
+    const amount = parseInt(giftAmount)
+    if (!amount || amount <= 0 || !giftSelectedUser) return
+    setGiftLoading(true)
+    try {
+      const result = await creditService.gift(user.uid, giftSelectedUser.uid, amount)
+      if (!result.success) {
+        alert(result.error === 'insufficient_credits' 
+          ? `Not enough credits. You have ${result.balance}.` 
+          : result.error)
+        return
+      }
+      updateProfile({ credits: result.balance })
+      alert(`Gifted ${amount} credits to ${giftSelectedUser.displayName || 'friend'}!`)
+      setGiftAmount('')
+      setGiftSelectedUser(null)
+    } catch (e) {
+      console.error('Gift error:', e)
+      alert('Failed to gift credits. Please try again.')
+    } finally {
+      setGiftLoading(false)
+    }
+  }
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 pb-24">
@@ -1020,9 +1074,132 @@ export default function SettingsPage() {
           )}
         </div>
 
+        {/* Gift Credits */}
+        <div className="card-steel overflow-hidden">
+          <button
+            onClick={() => {
+              setShowGiftSection(!showGiftSection)
+              if (!showGiftSection) loadGiftFriends()
+            }}
+            className="w-full p-4 flex items-center gap-4"
+          >
+            <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+              <Gift className="w-5 h-5 text-purple-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium text-iron-200">Gift Credits</p>
+              <p className="text-sm text-iron-500">Send credits to a friend</p>
+            </div>
+            <ChevronDown className={`w-5 h-5 text-iron-500 transition-transform ${showGiftSection ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showGiftSection && (
+            <div className="px-4 pb-4 border-t border-iron-800 pt-4">
+              <p className="text-xs text-iron-500 mb-3">Your balance: {userProfile?.credits ?? 0} credits</p>
+              
+              {giftFriendsLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="w-5 h-5 text-flame-500 animate-spin" />
+                </div>
+              ) : giftFriends.length === 0 ? (
+                <p className="text-sm text-iron-500 text-center py-4">Add friends to gift them credits</p>
+              ) : (
+                <div className="space-y-3">
+                  {/* Friend search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iron-500" />
+                    <input
+                      type="text"
+                      value={giftSearch}
+                      onChange={e => setGiftSearch(e.target.value)}
+                      placeholder="Search friends..."
+                      className="input-field w-full pl-9 text-sm"
+                    />
+                  </div>
+
+                  {/* Friend list */}
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {giftFriends
+                      .filter(f => !giftSearch || 
+                        (f.displayName || '').toLowerCase().includes(giftSearch.toLowerCase()) ||
+                        (f.username || '').toLowerCase().includes(giftSearch.toLowerCase())
+                      )
+                      .map(friend => (
+                        <button
+                          key={friend.uid}
+                          onClick={() => setGiftSelectedUser(giftSelectedUser?.uid === friend.uid ? null : friend)}
+                          className={`w-full flex items-center gap-3 p-2 rounded-lg text-left transition-colors ${
+                            giftSelectedUser?.uid === friend.uid
+                              ? 'bg-purple-500/10 border border-purple-500/30'
+                              : 'hover:bg-iron-800/50'
+                          }`}
+                        >
+                          <div className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center flex-shrink-0">
+                            {friend.photoURL 
+                              ? <img src={friend.photoURL} alt="" className="w-8 h-8 rounded-full" />
+                              : <User className="w-4 h-4 text-iron-500" />
+                            }
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-iron-200 truncate">{friend.displayName || 'User'}</p>
+                            {friend.username && <p className="text-xs text-iron-500">@{friend.username}</p>}
+                          </div>
+                          {giftSelectedUser?.uid === friend.uid && (
+                            <Check className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                  </div>
+
+                  {/* Amount + send */}
+                  {giftSelectedUser && (
+                    <div className="pt-2 border-t border-iron-800">
+                      <p className="text-xs text-iron-400 mb-2">
+                        Sending to <span className="text-purple-400">{giftSelectedUser.displayName || 'friend'}</span>
+                      </p>
+                      <div className="flex gap-2 mb-2">
+                        {[10, 25, 50, 100].map(amt => (
+                          <button
+                            key={amt}
+                            onClick={() => setGiftAmount(String(amt))}
+                            className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              giftAmount === String(amt)
+                                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                            }`}
+                          >
+                            {amt}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={giftAmount}
+                          onChange={e => setGiftAmount(e.target.value)}
+                          placeholder="Custom amount"
+                          min="1"
+                          className="input-field flex-1 text-sm"
+                        />
+                        <button
+                          onClick={handleGiftCredits}
+                          disabled={giftLoading || !giftAmount || parseInt(giftAmount) <= 0}
+                          className="btn-primary text-sm px-4 flex items-center gap-2"
+                        >
+                          {giftLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gift className="w-4 h-4" />}
+                          Send
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
       </div>
 
-      {/* Install App */}
       {!window.matchMedia('(display-mode: standalone)').matches && (
         <div className="space-y-3 mt-8">
           <h3 className="text-sm font-medium text-iron-400 px-1">Install</h3>

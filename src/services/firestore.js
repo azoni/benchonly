@@ -1128,6 +1128,19 @@ export const creditService = {
     return { success: true };
   },
 
+  async gift(fromUserId, toUserId, amount) {
+    if (amount <= 0) return { success: false, error: 'Amount must be positive' };
+    const balance = await this.getBalance(fromUserId);
+    if (balance < amount) {
+      return { success: false, balance, amount, error: 'insufficient_credits' };
+    }
+    const fromRef = doc(db, 'users', fromUserId);
+    const toRef = doc(db, 'users', toUserId);
+    await updateDoc(fromRef, { credits: increment(-amount) });
+    await updateDoc(toRef, { credits: increment(amount) });
+    return { success: true, balance: balance - amount };
+  },
+
   // Initialize credits for existing users who don't have any
   async ensureCredits(userId) {
     const userRef = doc(db, 'users', userId);
