@@ -804,13 +804,13 @@ export default function TodayPage() {
               const userName = feedUser?.displayName || 'Someone'
               return (
                 <div key={item.id} className="flex items-center gap-3 p-3">
-                  <div className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 text-xs flex-shrink-0 overflow-hidden">
+                  <Link to={`/profile/${item.userId}`} className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 text-xs flex-shrink-0 overflow-hidden">
                     {feedUser?.photoURL ? (
                       <img src={feedUser.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" />
                     ) : (
                       <span>{userName[0]}</span>
                     )}
-                  </div>
+                  </Link>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-iron-300 truncate">
                       <span className="text-iron-200 font-medium">{userName}</span>{' '}

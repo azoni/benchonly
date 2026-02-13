@@ -127,33 +127,35 @@ export default function CardioForm({ onBack }) {
         </div>
       </div>
 
-      {/* Date */}
+      {/* Date & Activity */}
       <div className="card-steel p-5 mb-4">
-        <label className="block text-sm font-medium text-iron-300 mb-2">
-          Date
-        </label>
-        <input
-          type="date"
-          value={cardio.date}
-          onChange={(e) => setCardio(prev => ({ ...prev, date: e.target.value }))}
-          className="input-field w-full"
-        />
-      </div>
-
-      {/* Activity Picker */}
-      <div className="card-steel p-5 mb-4">
-        <label className="block text-sm font-medium text-iron-300 mb-2">
-          Activity Type
-        </label>
-        <button
-          onClick={() => setShowActivityPicker(true)}
-          className="input-field w-full text-left flex items-center justify-between"
-        >
-          <span className={selectedActivity ? 'text-iron-100' : 'text-iron-500'}>
-            {selectedActivity?.label || 'Select activity...'}
-          </span>
-          <ChevronDown className="w-4 h-4 text-iron-500" />
-        </button>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-iron-300 mb-2">
+              Date
+            </label>
+            <input
+              type="date"
+              value={cardio.date}
+              onChange={(e) => setCardio(prev => ({ ...prev, date: e.target.value }))}
+              className="input-field w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-iron-300 mb-2">
+              Activity Type
+            </label>
+            <button
+              onClick={() => setShowActivityPicker(true)}
+              className="input-field w-full text-left flex items-center justify-between"
+            >
+              <span className={selectedActivity ? 'text-iron-100' : 'text-iron-500'}>
+                {selectedActivity?.label || 'Select...'}
+              </span>
+              <ChevronDown className="w-4 h-4 text-iron-500" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Duration & Distance */}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Activity,
   Loader2,
+  Search,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { workoutService } from '../services/firestore';
@@ -85,11 +86,13 @@ export default function NewWorkoutPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { id: editId } = useParams(); // For edit mode
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, updateProfile } = useAuth();
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!!editId);
   const [rpeModalOpen, setRpeModalOpen] = useState(false);
   const [workoutType, setWorkoutType] = useState('strength'); // 'strength' or 'cardio'
+  const [activeAutocomplete, setActiveAutocomplete] = useState(null); // exercise.id or null
+  const autocompleteRef = useRef(null);
   
   // Support admin creating workout for another user
   const targetUserId = searchParams.get('userId') || user?.uid;
@@ -277,6 +280,63 @@ export default function NewWorkoutPage() {
     }));
   };
 
+  // Autocomplete helpers
+  const getExerciseList = (type) => {
+    if (type === 'time') return allTimeExercises;
+    if (type === 'bodyweight') return allBodyweightExercises;
+    return allWeightExercises;
+  };
+
+  const getFilteredSuggestions = (query, type) => {
+    if (!query.trim()) return getExerciseList(type);
+    const q = query.toLowerCase();
+    return getExerciseList(type).filter(name => name.toLowerCase().includes(q));
+  };
+
+  const selectExerciseName = (exerciseId, name) => {
+    updateExercise(exerciseId, { name });
+    setActiveAutocomplete(null);
+  };
+
+  const saveNewExercises = async () => {
+    // Check all exercises for names not in any list
+    const newByType = { weight: [], bodyweight: [], time: [] };
+    for (const ex of workout.exercises) {
+      const name = ex.name?.trim();
+      if (!name) continue;
+      const list = getExerciseList(ex.type || 'weight');
+      if (!list.some(n => n.toLowerCase() === name.toLowerCase())) {
+        const type = ex.type || 'weight';
+        if (!newByType[type].includes(name)) newByType[type].push(name);
+      }
+    }
+    // Merge with existing custom exercises and save
+    const existing = userProfile?.customExercises || {};
+    const merged = {
+      weight: [...new Set([...(existing.weight || []), ...newByType.weight])],
+      bodyweight: [...new Set([...(existing.bodyweight || []), ...newByType.bodyweight])],
+      time: [...new Set([...(existing.time || []), ...newByType.time])],
+    };
+    if (newByType.weight.length || newByType.bodyweight.length || newByType.time.length) {
+      await updateProfile({ customExercises: merged });
+    }
+  };
+
+  // Close autocomplete on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target)) {
+        setActiveAutocomplete(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, []);
+
   const handleSave = async () => {
     if (!workout.name.trim()) {
       alert('Please enter a workout name');
@@ -285,6 +345,9 @@ export default function NewWorkoutPage() {
 
     setSaving(true);
     try {
+      // Save any new custom exercises
+      await saveNewExercises();
+
       const workoutData = {
         ...workout,
         date: parseLocalDate(workout.date),
@@ -432,23 +495,60 @@ export default function NewWorkoutPage() {
                     {exerciseIndex + 1}
                   </div>
                   
-                  <div className="flex-1">
+                  <div className="flex-1 relative" ref={activeAutocomplete === exercise.id ? autocompleteRef : null}>
                     <input
                       type="text"
                       value={exercise.name}
-                      onChange={(e) => updateExercise(exercise.id, { name: e.target.value })}
-                      placeholder="Exercise name"
-                      list={`exercises-${exercise.id}`}
+                      onChange={(e) => {
+                        updateExercise(exercise.id, { name: e.target.value });
+                        setActiveAutocomplete(exercise.id);
+                      }}
+                      onFocus={() => setActiveAutocomplete(exercise.id)}
+                      placeholder="Search or type exercise..."
                       className="w-full bg-transparent text-iron-100 font-medium
                         border-none focus:outline-none placeholder:text-iron-500"
                     />
-                    <datalist id={`exercises-${exercise.id}`}>
-                      {(exercise.type === 'time' ? allTimeExercises : 
-                        exercise.type === 'bodyweight' ? allBodyweightExercises : 
-                        allWeightExercises).map((name) => (
-                        <option key={name} value={name} />
-                      ))}
-                    </datalist>
+                    {/* Autocomplete dropdown */}
+                    {activeAutocomplete === exercise.id && (
+                      <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-iron-900 border border-iron-700 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                        {(() => {
+                          const filtered = getFilteredSuggestions(exercise.name, exercise.type || 'weight');
+                          const query = exercise.name?.trim().toLowerCase();
+                          const exactMatch = filtered.some(n => n.toLowerCase() === query);
+                          return (
+                            <>
+                              {filtered.length > 0 ? (
+                                filtered.map(name => (
+                                  <button
+                                    key={name}
+                                    type="button"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => selectExerciseName(exercise.id, name)}
+                                    className="w-full text-left px-4 py-3 text-sm text-iron-200 hover:bg-iron-800 active:bg-iron-700 transition-colors border-b border-iron-800/50 last:border-b-0"
+                                  >
+                                    {name}
+                                  </button>
+                                ))
+                              ) : null}
+                              {query && !exactMatch && (
+                                <button
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => selectExerciseName(exercise.id, exercise.name.trim())}
+                                  className="w-full text-left px-4 py-3 text-sm text-flame-400 hover:bg-iron-800 active:bg-iron-700 transition-colors flex items-center gap-2"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                  Add "{exercise.name.trim()}"
+                                </button>
+                              )}
+                              {!query && filtered.length === 0 && (
+                                <p className="px-4 py-3 text-sm text-iron-500">Type to search...</p>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
 
                   <button
