@@ -20,6 +20,7 @@ import {
   MessageCircle,
   ArrowRight,
   Layers,
+  Megaphone,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -61,6 +62,54 @@ export default function TodayPage() {
   const [calcWeight, setCalcWeight] = useState('')
   const [calcReps, setCalcReps] = useState('')
   const [calcFormula, setCalcFormula] = useState('epley')
+
+  // News & Updates state
+  const [newsOpen, setNewsOpen] = useState(false)
+
+  const APP_UPDATES = [
+    {
+      date: 'Feb 2025',
+      title: 'Oura Ring Integration',
+      description: 'Connect your Oura Ring to feed sleep, readiness, and recovery scores into AI workout generation.',
+      tag: 'Integration',
+    },
+    {
+      date: 'Feb 2025',
+      title: 'Gift Credits to Friends',
+      description: 'Send credits to friends from Settings. Search your friends list and pick an amount.',
+      tag: 'Social',
+    },
+    {
+      date: 'Feb 2025',
+      title: 'Premium Model for Everyone',
+      description: 'GPT-4o is now available to all users at 100 credits per use. Better workout and program generation.',
+      tag: 'AI',
+    },
+    {
+      date: 'Feb 2025',
+      title: 'Smarter Exercise Input',
+      description: 'New autocomplete when creating workouts. Type to search, and new exercises are saved for next time.',
+      tag: 'UX',
+    },
+    {
+      date: 'Feb 2025',
+      title: 'Pain Tracking & Recovery',
+      description: 'Log pain per set. AI tracks your pain history with time-aware decay and adjusts recommendations.',
+      tag: 'AI',
+    },
+    {
+      date: 'Jan 2025',
+      title: 'Programs & Scheduling',
+      description: 'Generate multi-week training programs. Calendar scheduling with daily workout targets.',
+      tag: 'Core',
+    },
+    {
+      date: 'Jan 2025',
+      title: 'Friends System',
+      description: 'Add friends, see their activity in your feed, and control who sees your workouts.',
+      tag: 'Social',
+    },
+  ]
 
   const FORMULAS = {
     epley: { name: 'Epley', calc: (w, r) => w * (1 + r / 30) },
@@ -832,12 +881,55 @@ export default function TodayPage() {
         </motion.div>
       )}
 
+      {/* News & Updates */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+        className={feedItems.length > 0 ? 'mt-6' : ''}
+      >
+        <button
+          onClick={() => setNewsOpen(!newsOpen)}
+          className="card-steel p-4 w-full flex items-center gap-3 hover:border-iron-600 transition-colors"
+        >
+          <div className="w-9 h-9 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+            <Megaphone className="w-5 h-5 text-purple-400" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-medium text-iron-200">What's New</p>
+            <p className="text-xs text-iron-500">Latest features and updates</p>
+          </div>
+          <ChevronDown className={`w-4 h-4 text-iron-500 transition-transform ${newsOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {newsOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="card-steel mt-1 p-4 border-purple-500/10 max-h-80 overflow-y-auto"
+          >
+            <div className="space-y-3">
+              {APP_UPDATES.map((update, i) => (
+                <div key={i} className={`${i > 0 ? 'pt-3 border-t border-iron-800/50' : ''}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-iron-800 text-iron-400">{update.tag}</span>
+                    <span className="text-xs text-iron-600">{update.date}</span>
+                  </div>
+                  <p className="text-sm font-medium text-iron-200">{update.title}</p>
+                  <p className="text-xs text-iron-500 mt-0.5">{update.description}</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </motion.div>
+
       {/* 1RM Calculator */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className={feedItems.length > 0 ? 'mt-6' : ''}
+        className="mt-2"
       >
         <button
           onClick={() => setCalcOpen(!calcOpen)}
