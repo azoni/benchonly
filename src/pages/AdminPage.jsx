@@ -1401,6 +1401,59 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
+
+          {/* Dev Tools */}
+          <div className="card-steel p-6 mt-6">
+            <h2 className="text-xl font-display text-iron-100 mb-4 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-purple-500" />
+              Dev Tools
+            </h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-iron-800/50 rounded-lg">
+                <div>
+                  <p className="text-sm text-iron-200">Reset onboarding checklist</p>
+                  <p className="text-xs text-iron-500">Clears claimed tasks so the checklist shows again on Today</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      const { updateDoc, doc } = await import('firebase/firestore')
+                      const { db } = await import('../services/firebase')
+                      await updateDoc(doc(db, 'users', user.uid), { onboardingChecklist: {} })
+                      alert('Checklist reset! Go to Today to see it.')
+                    } catch (e) { alert('Error: ' + e.message) }
+                  }}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-colors"
+                >
+                  Reset
+                </button>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-iron-800/50 rounded-lg">
+                <div>
+                  <p className="text-sm text-iron-200">Preview login page</p>
+                  <p className="text-xs text-iron-500">View the landing page without logging out</p>
+                </div>
+                <a
+                  href="/login?preview"
+                  className="px-3 py-1.5 text-xs rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-colors"
+                >
+                  Preview
+                </a>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-iron-800/50 rounded-lg">
+                <div>
+                  <p className="text-sm text-iron-200">Preview onboarding flow</p>
+                  <p className="text-xs text-iron-500">View the new-user onboarding without resetting your profile</p>
+                </div>
+                <a
+                  href="/onboarding?preview"
+                  className="px-3 py-1.5 text-xs rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-colors"
+                >
+                  Preview
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

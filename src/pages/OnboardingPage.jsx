@@ -45,6 +45,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [direction, setDirection] = useState(1)
+  const isPreview = new URLSearchParams(window.location.search).has('preview')
 
   const [profile, setProfile] = useState({
     weight: '',
@@ -84,6 +85,12 @@ export default function OnboardingPage() {
   }
 
   const handleFinish = async () => {
+    // In preview mode, just navigate back without saving
+    if (isPreview) {
+      navigate('/today', { replace: true })
+      return
+    }
+
     setSaving(true)
     try {
       const heightTotal = profile.heightFeet && profile.heightInches

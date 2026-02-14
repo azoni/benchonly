@@ -56,6 +56,7 @@ function ProtectedRoute({ children }) {
 
 function OnboardingRoute({ children }) {
   const { user, userProfile, loading, isGuest } = useAuth()
+  const preview = new URLSearchParams(window.location.search).has('preview')
   
   if (loading) {
     return (
@@ -67,8 +68,8 @@ function OnboardingRoute({ children }) {
   
   if (!user) return <Navigate to="/login" replace />
   
-  // Already onboarded? Go to today
-  if (isGuest || userProfile?.onboardingComplete !== false) {
+  // Already onboarded? Go to today (unless previewing)
+  if (!preview && (isGuest || userProfile?.onboardingComplete !== false)) {
     return <Navigate to="/today" replace />
   }
   
@@ -77,6 +78,7 @@ function OnboardingRoute({ children }) {
 
 function PublicRoute({ children }) {
   const { user, loading } = useAuth()
+  const preview = new URLSearchParams(window.location.search).has('preview')
   
   if (loading) {
     return (
@@ -86,7 +88,7 @@ function PublicRoute({ children }) {
     )
   }
   
-  if (user) {
+  if (user && !preview) {
     return <Navigate to="/" replace />
   }
   
