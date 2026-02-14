@@ -64,7 +64,7 @@ export default function FeedPage() {
 
   useEffect(() => {
     loadInitialData()
-  }, [])
+  }, [user?.uid])
 
   const loadInitialData = async () => {
     setLoading(true)

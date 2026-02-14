@@ -20,7 +20,16 @@ import {
 import { db } from './firebase';
 import { analyticsService, ACTIONS } from './analyticsService';
 import { feedService, FEED_TYPES } from './feedService';
-import { buildExerciseSummary } from '../utils/workoutUtils';
+import { buildExerciseSummary as _buildExerciseSummary } from '../utils/workoutUtils';
+
+// Safe wrapper — feed items still get created even if summary building fails
+function safeBuildSummary(exercises) {
+  try {
+    return _buildExerciseSummary(exercises);
+  } catch {
+    return { exerciseSummary: [], totalSets: 0 };
+  }
+}
 
 // ============ USERS ============
 export const userService = {
@@ -181,7 +190,7 @@ export const workoutService = {
     if (isComplete) {
       try {
         const feedType = workoutData.workoutType === 'cardio' ? FEED_TYPES.CARDIO : FEED_TYPES.WORKOUT;
-        const { exerciseSummary, totalSets } = buildExerciseSummary(workoutData.exercises);
+        const { exerciseSummary, totalSets } = safeBuildSummary(workoutData.exercises);
         await feedService.createFeedItem(userId, feedType, {
           workoutId: docRef.id,
           name: workoutData.name,
@@ -244,7 +253,7 @@ export const workoutService = {
     
     // Create feed item
     try {
-      const { exerciseSummary, totalSets } = buildExerciseSummary(exercisesWithActuals);
+      const { exerciseSummary, totalSets } = safeBuildSummary(exercisesWithActuals);
       await feedService.createFeedItem(userId, FEED_TYPES.WORKOUT, {
         workoutId,
         name: workoutName,
@@ -288,7 +297,7 @@ export const workoutService = {
     // Create feed item
     try {
       if (userId) {
-        const { exerciseSummary, totalSets } = buildExerciseSummary(payload.exercises);
+        const { exerciseSummary, totalSets } = safeBuildSummary(payload.exercises);
         await feedService.createFeedItem(userId, FEED_TYPES.WORKOUT, {
           workoutId,
           name: workoutData?.name || 'Workout',
@@ -1361,7 +1370,7 @@ export const groupWorkoutService = {
           const groupDoc = await getDoc(doc(db, 'groups', workoutData.groupId));
           groupName = groupDoc.data()?.name || '';
         }
-        const { exerciseSummary, totalSets } = buildExerciseSummary(actualData?.exercises);
+        const { exerciseSummary, totalSets } = safeBuildSummary(actualData?.exercises);
         await feedService.createFeedItem(targetUserId, FEED_TYPES.GROUP_WORKOUT, {
           workoutId,
           name: workoutData?.name || actualData?.name || 'Group Workout',
