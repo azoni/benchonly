@@ -57,6 +57,9 @@ export default function AdminPage() {
     painThresholdMin: 3,
     painThresholdCount: 2,
     defaultModel: 'standard',
+    rateLimitHourly: 8,
+    rateLimitDaily: 25,
+    overageCreditMultiplier: 3,
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsSaved, setSettingsSaved] = useState(false)
@@ -227,6 +230,9 @@ export default function AdminPage() {
           painThresholdMin: settingsDoc.data().painThresholdMin ?? 3,
           painThresholdCount: settingsDoc.data().painThresholdCount ?? 2,
           defaultModel: settingsDoc.data().defaultModel ?? 'standard',
+          rateLimitHourly: settingsDoc.data().rateLimitHourly ?? 8,
+          rateLimitDaily: settingsDoc.data().rateLimitDaily ?? 25,
+          overageCreditMultiplier: settingsDoc.data().overageCreditMultiplier ?? 3,
         })
       }
     } catch (error) {
@@ -242,6 +248,9 @@ export default function AdminPage() {
         painThresholdMin: aiSettings.painThresholdMin,
         painThresholdCount: aiSettings.painThresholdCount,
         defaultModel: aiSettings.defaultModel,
+        rateLimitHourly: aiSettings.rateLimitHourly,
+        rateLimitDaily: aiSettings.rateLimitDaily,
+        overageCreditMultiplier: aiSettings.overageCreditMultiplier,
         updatedAt: new Date(),
         updatedBy: user.uid,
       })
@@ -1298,6 +1307,68 @@ export default function AdminPage() {
                     <div className="font-semibold">Premium</div>
                     <div className="text-xs opacity-75 mt-1">GPT-4o (~$0.02/workout)</div>
                   </button>
+                </div>
+              </div>
+
+              {/* Rate Limit Settings */}
+              <div className="p-4 bg-iron-800/50 rounded-xl">
+                <h3 className="font-medium text-iron-200 mb-4">Chat Rate Limits</h3>
+                <p className="text-sm text-iron-500 mb-4">
+                  Users can keep messaging after hitting the limit, but each message costs {aiSettings.overageCreditMultiplier}x credits.
+                </p>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm text-iron-400 mb-1.5">Hourly Limit</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={aiSettings.rateLimitHourly}
+                      onChange={(e) => setAiSettings(prev => ({
+                        ...prev,
+                        rateLimitHourly: parseInt(e.target.value) || 8
+                      }))}
+                      className="input-field w-full"
+                    />
+                    <p className="text-[10px] text-iron-600 mt-1">msgs/hour</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-iron-400 mb-1.5">Daily Limit</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="500"
+                      value={aiSettings.rateLimitDaily}
+                      onChange={(e) => setAiSettings(prev => ({
+                        ...prev,
+                        rateLimitDaily: parseInt(e.target.value) || 25
+                      }))}
+                      className="input-field w-full"
+                    />
+                    <p className="text-[10px] text-iron-600 mt-1">msgs/day</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-iron-400 mb-1.5">Overage Multiplier</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={aiSettings.overageCreditMultiplier}
+                      onChange={(e) => setAiSettings(prev => ({
+                        ...prev,
+                        overageCreditMultiplier: parseInt(e.target.value) || 3
+                      }))}
+                      className="input-field w-full"
+                    />
+                    <p className="text-[10px] text-iron-600 mt-1">x credit cost</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 p-2 bg-iron-900/50 rounded-lg">
+                  <p className="text-xs text-iron-500">
+                    After {aiSettings.rateLimitHourly}/hr or {aiSettings.rateLimitDaily}/day, each message costs {aiSettings.overageCreditMultiplier} credits instead of 1
+                  </p>
                 </div>
               </div>
 

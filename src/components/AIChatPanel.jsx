@@ -6,7 +6,7 @@ import { useUIStore } from '../store';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { workoutService, goalService, healthService, userService, scheduleService, recurringActivityService, creditService, CREDIT_COSTS } from '../services/firestore';
-import { collection, query, where, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, limit, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 export default function AIChatPanel() {
@@ -23,6 +23,7 @@ export default function AIChatPanel() {
   const [quickActions, setQuickActions] = useState([]);
   const [greetingFetched, setGreetingFetched] = useState(false);
   const lastPersonalityRef = useRef(null);
+  const [aiSettings, setAiSettings] = useState(null);
   const [rateLimitInfo, setRateLimitInfo] = useState(() => {
     const now = Date.now();
     const HOUR = 60 * 60 * 1000;
@@ -40,10 +41,12 @@ export default function AIChatPanel() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  const RATE_LIMIT = 8;
   const RATE_LIMIT_WINDOW = 60 * 60 * 1000;
-  const DAILY_LIMIT = 25;
   const DAILY_WINDOW = 24 * 60 * 60 * 1000;
+  // Dynamic limits from admin settings, with defaults
+  const RATE_LIMIT = aiSettings?.rateLimitHourly || 8;
+  const DAILY_LIMIT = aiSettings?.rateLimitDaily || 25;
+  const OVERAGE_MULTIPLIER = aiSettings?.overageCreditMultiplier || 3;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -59,8 +62,21 @@ export default function AIChatPanel() {
       if (!context && !contextLoading) {
         loadUserContext();
       }
+      if (!aiSettings) {
+        loadAiSettings();
+      }
     }
   }, [chatOpen]);
+
+  // Load admin-configured rate limit settings
+  const loadAiSettings = async () => {
+    try {
+      const snap = await getDoc(doc(db, 'settings', 'ai'));
+      if (snap.exists()) {
+        setAiSettings(snap.data());
+      }
+    } catch { /* defaults will be used */ }
+  };
 
   // Fetch greeting once context is ready
   useEffect(() => {
@@ -314,6 +330,7 @@ export default function AIChatPanel() {
     }
   };
 
+  // Returns null (under limit), 'overage' (past limit but can continue), or cost multiplier info
   const checkRateLimit = () => {
     const now = Date.now();
     try {
@@ -338,10 +355,26 @@ export default function AIChatPanel() {
       let dailyData = dailyStored ? JSON.parse(dailyStored) : { count: 0, resetTime: now + DAILY_WINDOW };
       if (now > dailyData.resetTime) dailyData = { count: 0, resetTime: now + DAILY_WINDOW };
       setRateLimitInfo({ ...rateData, dailyCount: dailyData.count, dailyResetTime: dailyData.resetTime });
-      if (dailyData.count >= DAILY_LIMIT) return 'daily';
-      if (rateData.count >= RATE_LIMIT) return 'hourly';
+      if (dailyData.count >= DAILY_LIMIT || rateData.count >= RATE_LIMIT) return 'overage';
       return null;
     } catch { return null; }
+  };
+
+  // Get current credit cost per message (1 normally, Nx during overage)
+  const getCurrentCreditCost = () => {
+    const now = Date.now();
+    try {
+      const stored = localStorage.getItem('ai_rate_limit');
+      let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
+      if (now > rateData.resetTime) rateData = { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
+      const dailyStored = localStorage.getItem('ai_daily_limit');
+      let dailyData = dailyStored ? JSON.parse(dailyStored) : { count: 0, resetTime: now + DAILY_WINDOW };
+      if (now > dailyData.resetTime) dailyData = { count: 0, resetTime: now + DAILY_WINDOW };
+      if (dailyData.count >= DAILY_LIMIT || rateData.count >= RATE_LIMIT) {
+        return OVERAGE_MULTIPLIER;
+      }
+      return 1;
+    } catch { return 1; }
   };
 
   const incrementRateLimit = () => {
@@ -382,33 +415,23 @@ export default function AIChatPanel() {
 
     const isAdmin = isAppAdmin;
     const credits = userProfile?.credits ?? 0;
-    if (!isAdmin && credits < CREDIT_COSTS['ask-assistant']) {
+    const creditCost = getCurrentCreditCost(); // 1 normally, Nx during overage
+    const isOverage = creditCost > 1;
+
+    if (!isAdmin && credits < creditCost) {
+      const overageMsg = isOverage
+        ? `You've hit the rate limit and overage messages cost ${OVERAGE_MULTIPLIER} credits each. You only have ${credits}. Resets soon.`
+        : "You're out of AI credits. More credits coming soon — check Settings for your usage.";
       setMessages((prev) => [
         ...prev,
         { role: 'user', content: messageText },
-        { role: 'assistant', content: "You're out of AI credits. More credits coming soon — check Settings for your usage." },
+        { role: 'assistant', content: overageMsg },
       ]);
       return;
     }
 
-    const limitHit = checkRateLimit();
-    if (limitHit) {
-      const minutesLeft = limitHit === 'daily'
-        ? Math.ceil((rateLimitInfo.dailyResetTime - Date.now()) / 1000 / 60)
-        : Math.ceil((rateLimitInfo.resetTime - Date.now()) / 1000 / 60);
-      const hoursLeft = Math.ceil(minutesLeft / 60);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'user', content: messageText },
-        {
-          role: 'assistant',
-          content: limitHit === 'daily'
-            ? `You've reached the daily limit of ${DAILY_LIMIT} messages. Resets in ${hoursLeft > 1 ? `${hoursLeft} hours` : `${minutesLeft} minutes`}.`
-            : `You've reached the limit of ${RATE_LIMIT} messages per hour. Try again in ${minutesLeft} minutes.`,
-        },
-      ]);
-      return;
-    }
+    // Just track — don't block
+    checkRateLimit();
 
     setMessages((prev) => [...prev, { role: 'user', content: messageText }]);
     setLoading(true);
@@ -417,8 +440,11 @@ export default function AIChatPanel() {
       incrementRateLimit();
 
       if (user?.uid && !isAdmin) {
-        await creditService.deduct(user.uid, 'ask-assistant');
-        updateProfile({ credits: credits - CREDIT_COSTS['ask-assistant'] });
+        // Deduct Nx credits during overage, 1x normally
+        for (let i = 0; i < creditCost; i++) {
+          await creditService.deduct(user.uid, 'ask-assistant');
+        }
+        updateProfile({ credits: credits - creditCost });
       }
 
       const response = await api.askAssistant(messageText, {
@@ -433,7 +459,7 @@ export default function AIChatPanel() {
       ]);
     } catch (error) {
       if (user?.uid && !isAdmin) {
-        await creditService.add(user.uid, CREDIT_COSTS['ask-assistant']).catch(() => {});
+        await creditService.add(user.uid, creditCost).catch(() => {});
         updateProfile({ credits: credits });
       }
       setMessages((prev) => [
@@ -701,9 +727,16 @@ export default function AIChatPanel() {
 
             {/* Input */}
             <div className="border-t border-iron-800">
+              {getCurrentCreditCost() > 1 && (
+                <div className="mx-4 mt-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <p className="text-[11px] text-yellow-400">
+                    Rate limit reached — messages now cost {OVERAGE_MULTIPLIER} credits each until reset
+                  </p>
+                </div>
+              )}
               <div className="px-4 pt-2 flex justify-between text-[10px] text-iron-600">
                 <span>{userProfile?.credits ?? 0} credits left</span>
-                <span>1 credit / msg</span>
+                <span>{getCurrentCreditCost()} credit{getCurrentCreditCost() > 1 ? 's' : ''} / msg</span>
               </div>
               <form
                 onSubmit={handleSubmit}
