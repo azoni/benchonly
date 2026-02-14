@@ -37,6 +37,8 @@ import {
   Unlink,
   Bot,
   ClipboardList,
+  Smile,
+  FlaskConical,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
@@ -361,11 +363,11 @@ export default function SettingsPage() {
 
   // AI Coach personality options
   const PERSONALITIES = [
-    { key: 'coach', label: 'Coach', description: 'Direct and knowledgeable. References your data, gives clear advice.', icon: '🏋️' },
-    { key: 'drill-sergeant', label: 'Drill Sergeant', description: 'No excuses. Pushes you hard, calls out weak points. Not for the faint-hearted.', icon: '🪖' },
-    { key: 'bro', label: 'Gym Bro', description: 'Hype energy. Calls everything "sick" and "gains". Always pumped for you.', icon: '💪' },
-    { key: 'scientist', label: 'Sports Scientist', description: 'Data-driven. Explains the biomechanics and periodization science behind everything.', icon: '🔬' },
-    { key: 'comedian', label: 'Comedy Coach', description: 'Roasts your lifts (lovingly). Makes training fun with jokes and one-liners.', icon: '😂' },
+    { key: 'coach', label: 'Coach', description: 'Direct and knowledgeable. References your data, gives clear advice.', Icon: Dumbbell },
+    { key: 'drill-sergeant', label: 'Drill Sergeant', description: 'No excuses. Pushes you hard, calls out weak points. Not for the faint-hearted.', Icon: Shield },
+    { key: 'bro', label: 'Gym Bro', description: 'Hype energy. Calls everything "sick" and "gains". Always pumped for you.', Icon: Zap },
+    { key: 'scientist', label: 'Sports Scientist', description: 'Data-driven. Explains the biomechanics and periodization science behind everything.', Icon: FlaskConical },
+    { key: 'comedian', label: 'Comedy Coach', description: 'Roasts your lifts (lovingly). Makes training fun with jokes and one-liners.', Icon: Smile },
   ]
 
   const handlePersonalityChange = async (key) => {
@@ -1562,11 +1564,11 @@ export default function SettingsPage() {
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-base">{p.icon}</span>
+                      <p.Icon className={`w-4 h-4 ${isActive ? 'text-flame-400' : 'text-iron-400'}`} />
                       <span className={`text-sm font-medium ${isActive ? 'text-flame-400' : 'text-iron-200'}`}>{p.label}</span>
                       {isActive && <Check className="w-3.5 h-3.5 text-flame-400 ml-auto" />}
                     </div>
-                    <p className="text-xs text-iron-500 ml-7">{p.description}</p>
+                    <p className="text-xs text-iron-500 ml-6">{p.description}</p>
                   </button>
                 )
               })}
