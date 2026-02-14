@@ -206,7 +206,17 @@ export default function TodayPage() {
       setTodaySchedules(todayScheds)
 
       setPendingReviews(reviews)
-      setGoals(goalsData.filter(g => g.status === 'active'))
+      setGoals(
+        Object.values(
+          goalsData
+            .filter(g => g.status === 'active')
+            .sort((a, b) => (a.targetDate || '').localeCompare(b.targetDate || ''))
+            .reduce((acc, g) => {
+              if (!acc[g.lift]) acc[g.lift] = g
+              return acc
+            }, {})
+        )
+      )
 
       // Load feed + users + notifications + friends in background (doesn't block page render)
       Promise.all([
