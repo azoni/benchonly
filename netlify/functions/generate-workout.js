@@ -3,7 +3,7 @@ import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE, admin } from 
 import { logActivity, logError } from './utils/logger.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 24000 });
 
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
@@ -16,7 +16,7 @@ export async function handler(event) {
   if (!auth) return UNAUTHORIZED;
 
   try {
-    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId } = JSON.parse(event.body);
+    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId, duration, exerciseCount } = JSON.parse(event.body);
     // Use targetUserId only if caller is admin (for impersonation)
     const userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
     // Enforce admin-only premium model
@@ -36,7 +36,7 @@ export async function handler(event) {
       painThresholdCount: 2,
     };
 
-    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings);
+    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings, duration, exerciseCount);
 
     const systemPrompt = `You are an expert strength coach. Create a personalized workout.
 
@@ -50,6 +50,19 @@ If the user asks to "repeat", "same as", "copy", or reference a previous workout
    - Was RPE very high (9-10)? → Keep same or decrease slightly
    - Any pain reported? → Add warning in notes but DON'T substitute unless user allows
 4. If user says "no substitutions" - NEVER substitute, only add warnings in notes
+
+WARM-UP GUIDANCE:
+For the first compound lift of the workout (e.g. bench press, squat, OHP), include warm-up ramp sets in the exercise "notes" field. Example format:
+"Warm-up: Bar x10, 95x8, 135x5, 185x3 → working sets"
+Scale the warm-up to the working weight. Skip warm-up notes for isolation/accessory exercises.
+
+DURATION & EXERCISE COUNT:
+If a target duration or exercise count is specified, respect it:
+- Fewer exercises = more sets per exercise. More exercises = fewer sets each.
+- Short workouts (15-20 min): 2-3 exercises, 2-3 sets each, minimal rest.
+- Medium workouts (30-45 min): 4-5 exercises, 3-4 sets each.
+- Long workouts (60-90 min): 5-8 exercises, 3-5 sets each.
+- Adjust total volume so the workout fits the requested time.
 
 STANDARD WORKOUT RULES:
 - Max lifts (use 70-85% of e1RM for working sets)
@@ -278,19 +291,30 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
   } catch (error) {
     console.error('Error:', error);
     logError('generate-workout', error, 'high', { action: 'generate' });
+    const isTimeout = error?.code === 'ETIMEDOUT' || error?.message?.includes('timeout') || error?.message?.includes('timed out');
     return {
-      statusCode: 500,
+      statusCode: isTimeout ? 504 : 500,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ error: error.message }),
+      body: JSON.stringify({ error: isTimeout ? 'AI took too long to respond. Try again or use standard model.' : error.message }),
     };
   }
 }
 
-function buildContext(ctx, focus, intensity, settings = {}) {
+function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null) {
   const painThresholdMin = settings.painThresholdMin || 3;
   const painThresholdCount = settings.painThresholdCount || 2;
   
   let s = '';
+
+  // Duration and exercise count constraints
+  if (duration) {
+    s += `TARGET DURATION: ${duration} minutes. Fit the workout within this time.\n`;
+  }
+  if (exerciseCount) {
+    s += `TARGET EXERCISES: ${exerciseCount} exercises. Use exactly this many.\n`;
+  }
+  if (duration || exerciseCount) s += '\n';
+
   if (focus === 'no-equipment') {
     s += `FOCUS: Bodyweight only — NO equipment whatsoever. Use exercises like push-ups, pull-ups (if available), squats, lunges, planks, burpees, dips, glute bridges, mountain climbers, etc. Set type to 'bodyweight' or 'time' for all exercises.\n`;
   } else if (focus === 'vacation') {

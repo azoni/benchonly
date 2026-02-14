@@ -103,6 +103,8 @@ export default function GenerateWorkoutPage() {
     programContext?.dayType === 'speed' ? 'light' : 'moderate'
   );
   const [model, setModel] = useState('standard');
+  const [duration, setDuration] = useState('auto');
+  const [exerciseCount, setExerciseCount] = useState('auto');
   const [workoutDate, setWorkoutDate] = useState(() => {
     const dateParam = searchParams.get('date')
     if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return dateParam
@@ -378,9 +380,11 @@ export default function GenerateWorkoutPage() {
         body: JSON.stringify({
           prompt, workoutFocus, intensity,
           model,
+          duration: duration !== 'auto' ? parseInt(duration) : null,
+          exerciseCount: exerciseCount !== 'auto' ? parseInt(exerciseCount) : null,
           draftMode: true,
           context: {
-            recentWorkouts: userContext.recentWorkouts.slice(0, 10),
+            recentWorkouts: userContext.recentWorkouts.slice(0, 5),
             goals: userContext.goals, maxLifts: userContext.maxLifts,
             painHistory: userContext.painHistory, rpeAverages: userContext.rpeAverages,
             cardioHistory: userContext.cardioHistory,
@@ -777,7 +781,7 @@ export default function GenerateWorkoutPage() {
                   </div>
                   <div>
                     <h3 className="text-sm font-medium text-iron-200">AI is generating your workout...</h3>
-                    <p className="text-xs text-iron-500">{workoutFocus !== 'auto' ? workoutFocus : 'Auto'} · {intensity} intensity{prompt ? ` · "${prompt.slice(0, 40)}${prompt.length > 40 ? '...' : ''}"` : ''}</p>
+                    <p className="text-xs text-iron-500">{workoutFocus !== 'auto' ? workoutFocus : 'Auto'} · {intensity} intensity{duration !== 'auto' ? ` · ${duration}min` : ''}{exerciseCount !== 'auto' ? ` · ${exerciseCount} exercises` : ''}{prompt ? ` · "${prompt.slice(0, 40)}${prompt.length > 40 ? '...' : ''}"` : ''}</p>
                   </div>
                   <Loader2 className="w-5 h-5 text-flame-400 animate-spin ml-auto" />
                 </div>
@@ -840,7 +844,7 @@ export default function GenerateWorkoutPage() {
                 </div>
               </div>
               
-              <div className="mb-6">
+              <div className="mb-4">
                 <label className="block text-sm text-iron-400 mb-2">Intensity</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {intensityOptions.map(opt => (
@@ -859,44 +863,97 @@ export default function GenerateWorkoutPage() {
                   ))}
                 </div>
               </div>
-              
-              <div className="mb-6">
-                <label className="block text-sm text-iron-400 mb-2">Workout Date</label>
-                <input
-                  type="date"
-                  value={workoutDate}
-                  onChange={(e) => setWorkoutDate(e.target.value)}
-                  className="input-field w-full sm:w-auto"
-                />
-              </div>
 
-              <div className="mb-6">
-                <label className="block text-sm text-iron-400 mb-2">AI Model</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setModel('standard')}
-                    className={`px-4 py-3 text-sm rounded-lg border transition-colors text-left
-                      ${model === 'standard'
-                        ? 'border-flame-500 bg-flame-500/10 text-flame-400'
-                        : 'border-iron-700 text-iron-400 hover:border-iron-600'
-                      }`}
-                  >
-                    <div className="font-medium flex items-center gap-2"><Zap className="w-4 h-4" />Standard</div>
-                    <div className="text-xs text-iron-500 mt-1">{CREDIT_COSTS['generate-workout']} credits</div>
-                  </button>
-                  <button
-                    onClick={() => setModel('premium')}
-                    className={`px-4 py-3 text-sm rounded-lg border transition-colors text-left relative
-                      ${model === 'premium'
-                        ? 'border-purple-500 bg-purple-500/10 text-purple-400'
-                        : 'border-iron-700 text-iron-400 hover:border-iron-600'
-                      }`}
-                  >
-                    <div className="font-medium flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" />Premium
-                    </div>
-                    <div className="text-xs text-iron-500 mt-1">{PREMIUM_CREDIT_COST} credits</div>
-                  </button>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm text-iron-400 mb-2">Duration</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { value: 'auto', label: 'Auto' },
+                      { value: '15', label: '15m' },
+                      { value: '20', label: '20m' },
+                      { value: '30', label: '30m' },
+                      { value: '45', label: '45m' },
+                      { value: '60', label: '60m' },
+                      { value: '90', label: '90m' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setDuration(opt.value)}
+                        className={`px-2.5 py-1 text-xs rounded-lg border transition-colors
+                          ${duration === opt.value
+                            ? 'border-flame-500 bg-flame-500/10 text-flame-400'
+                            : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                          }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-iron-400 mb-2">Exercises</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { value: 'auto', label: 'Auto' },
+                      { value: '3', label: '3' },
+                      { value: '4', label: '4' },
+                      { value: '5', label: '5' },
+                      { value: '6', label: '6' },
+                      { value: '8', label: '8' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setExerciseCount(opt.value)}
+                        className={`px-2.5 py-1 text-xs rounded-lg border transition-colors
+                          ${exerciseCount === opt.value
+                            ? 'border-flame-500 bg-flame-500/10 text-flame-400'
+                            : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                          }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                  <label className="block text-sm text-iron-400 mb-2">Workout Date</label>
+                  <input
+                    type="date"
+                    value={workoutDate}
+                    onChange={(e) => setWorkoutDate(e.target.value)}
+                    className="input-field w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-iron-400 mb-2">AI Model</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setModel('standard')}
+                      className={`px-3 py-2 text-xs rounded-lg border transition-colors text-center
+                        ${model === 'standard'
+                          ? 'border-flame-500 bg-flame-500/10 text-flame-400'
+                          : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                        }`}
+                    >
+                      <div className="font-medium flex items-center justify-center gap-1"><Zap className="w-3 h-3" />Standard</div>
+                      <div className="text-[10px] text-iron-500">{CREDIT_COSTS['generate-workout']} cr</div>
+                    </button>
+                    <button
+                      onClick={() => setModel('premium')}
+                      className={`px-3 py-2 text-xs rounded-lg border transition-colors text-center
+                        ${model === 'premium'
+                          ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                          : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                        }`}
+                    >
+                      <div className="font-medium flex items-center justify-center gap-1"><Sparkles className="w-3 h-3" />Premium</div>
+                      <div className="text-[10px] text-iron-500">{PREMIUM_CREDIT_COST} cr</div>
+                    </button>
+                  </div>
                 </div>
               </div>
               
