@@ -52,102 +52,94 @@ export const SPECIAL_EVENTS = [
           advanced: { pushups: 25, squats: 30, lunges: 16, burpees: 12, plank: 60, mountainClimbers: 30 },
         }[tier]
   
-        return {
-          name: "Valentine's Day Challenge ❤️",
-          notes: `Happy Valentine's Day! A quick bodyweight circuit — 3 rounds, no equipment needed. Scaled for your level (${tier}). Rest 30–60s between rounds.`,
-          eventId: 'valentines-2026',
-          workoutType: 'strength',
-          exercises: [
-            {
-              id: 'ex-1',
-              name: 'Push-ups',
-              type: 'bodyweight',
-              notes: 'Hands shoulder-width apart, body in a straight line from head to heels. Lower until chest nearly touches the floor, then push back up. Keep core tight throughout. Too hard? Do knee push-ups or incline push-ups with hands on a chair/counter.',
-              sets: [1, 2, 3].map((n, i) => ({
-                id: `set-1-${i}`,
-                prescribedReps: String(scale.pushups),
-                actualWeight: '',
-                actualReps: '',
+        const CIRCUIT = [
+          {
+            name: 'Push-ups',
+            type: 'bodyweight',
+            notes: 'Hands shoulder-width apart, body in a straight line from head to heels. Lower until chest nearly touches the floor, then push back up. Keep core tight throughout. Too hard? Do knee push-ups or incline push-ups with hands on a chair/counter.',
+            reps: scale.pushups,
+          },
+          {
+            name: 'Bodyweight Squats',
+            type: 'bodyweight',
+            notes: 'Feet shoulder-width apart, toes slightly out. Sit back and down like sitting into a chair — hips below parallel if possible. Drive through your heels to stand. Too hard? Squat to a chair (sit down lightly, then stand back up) or do half squats.',
+            reps: scale.squats,
+          },
+          {
+            name: 'Alternating Lunges',
+            type: 'bodyweight',
+            notes: 'Step forward with one leg, lower until both knees are at ~90°. Front knee stays over the ankle, not past your toes. Push back to standing and alternate legs. Too hard? Do reverse lunges (step backward instead) or hold onto a wall for balance.',
+            reps: `${scale.lunges} total`,
+          },
+          {
+            name: 'Burpees',
+            type: 'bodyweight',
+            notes: 'From standing: squat down, place hands on the floor, jump feet back into a plank, do a push-up, jump feet forward, then jump up with hands overhead. That\'s one rep. Too hard? Skip the push-up and/or the jump — just step feet back and forward instead.',
+            reps: scale.burpees,
+          },
+          {
+            name: 'Mountain Climbers',
+            type: 'bodyweight',
+            notes: 'Start in a high plank position. Drive one knee toward your chest, then quickly switch legs — like running in place horizontally. Keep hips level and core braced. Too hard? Slow it down — step feet in one at a time instead of jumping.',
+            reps: `${scale.mountainClimbers} total`,
+          },
+          {
+            name: 'Plank',
+            type: 'time',
+            notes: `Hold for ${scale.plank} seconds. Forearms on the ground, elbows under shoulders, body in a straight line. Squeeze your glutes and brace your abs — don't let your hips sag or pike up. Too hard? Drop to your knees or do the plank from your hands instead of forearms.`,
+            time: scale.plank,
+          },
+        ]
+  
+        // Build exercises in circuit order: all 6 for round 1, then round 2, then round 3
+        const exercises = []
+        for (let round = 1; round <= 3; round++) {
+          CIRCUIT.forEach((ex, j) => {
+            const setId = `set-r${round}-${j}`
+            const isTime = ex.type === 'time'
+            exercises.push({
+              id: `ex-r${round}-${j}`,
+              name: `Round ${round} — ${ex.name}`,
+              type: ex.type,
+              notes: round === 1 ? ex.notes : '', // only show notes on round 1
+              sets: [{
+                id: setId,
+                ...(isTime
+                  ? { prescribedTime: String(ex.time), actualTime: '' }
+                  : { prescribedReps: String(ex.reps), actualWeight: '', actualReps: '' }
+                ),
                 rpe: '',
                 painLevel: 0,
                 completed: false,
-              })),
-            },
-            {
-              id: 'ex-2',
-              name: 'Bodyweight Squats',
-              type: 'bodyweight',
-              notes: 'Feet shoulder-width apart, toes slightly out. Sit back and down like sitting into a chair — hips below parallel if possible. Drive through your heels to stand. Too hard? Squat to a chair (sit down lightly, then stand back up) or do half squats.',
-              sets: [1, 2, 3].map((n, i) => ({
-                id: `set-2-${i}`,
-                prescribedReps: String(scale.squats),
-                actualWeight: '',
-                actualReps: '',
-                rpe: '',
-                painLevel: 0,
-                completed: false,
-              })),
-            },
-            {
-              id: 'ex-3',
-              name: 'Alternating Lunges',
-              type: 'bodyweight',
-              notes: 'Step forward with one leg, lower until both knees are at ~90°. Front knee stays over the ankle, not past your toes. Push back to standing and alternate legs. Too hard? Do reverse lunges (step backward instead) or hold onto a wall for balance.',
-              sets: [1, 2, 3].map((n, i) => ({
-                id: `set-3-${i}`,
-                prescribedReps: `${scale.lunges} total`,
-                actualWeight: '',
-                actualReps: '',
-                rpe: '',
-                painLevel: 0,
-                completed: false,
-              })),
-            },
-            {
-              id: 'ex-4',
-              name: 'Burpees',
-              type: 'bodyweight',
-              notes: 'From standing: squat down, place hands on the floor, jump feet back into a plank, do a push-up, jump feet forward, then jump up with hands overhead. That\'s one rep. Too hard? Skip the push-up and/or the jump — just step feet back and forward instead.',
-              sets: [1, 2, 3].map((n, i) => ({
-                id: `set-4-${i}`,
-                prescribedReps: String(scale.burpees),
-                actualWeight: '',
-                actualReps: '',
-                rpe: '',
-                painLevel: 0,
-                completed: false,
-              })),
-            },
-            {
-              id: 'ex-5',
-              name: 'Mountain Climbers',
-              type: 'bodyweight',
-              notes: 'Start in a high plank position. Drive one knee toward your chest, then quickly switch legs — like running in place horizontally. Keep hips level and core braced. Too hard? Slow it down — step feet in one at a time instead of jumping.',
-              sets: [1, 2, 3].map((n, i) => ({
-                id: `set-5-${i}`,
-                prescribedReps: `${scale.mountainClimbers} total`,
-                actualWeight: '',
-                actualReps: '',
-                rpe: '',
-                painLevel: 0,
-                completed: false,
-              })),
-            },
-            {
-              id: 'ex-6',
-              name: 'Plank',
-              type: 'time',
-              notes: `Hold for ${scale.plank} seconds per round. Forearms on the ground, elbows under shoulders, body in a straight line. Squeeze your glutes and brace your abs — don't let your hips sag or pike up. Too hard? Drop to your knees or do the plank from your hands instead of forearms.`,
-              sets: [1, 2, 3].map((n, i) => ({
-                id: `set-6-${i}`,
-                prescribedTime: String(scale.plank),
+              }],
+            })
+          })
+          // Add rest between rounds (not after the last)
+          if (round < 3) {
+            exercises.push({
+              id: `ex-rest-${round}`,
+              name: `Rest 30–60s`,
+              type: 'rest',
+              notes: 'Catch your breath. Shake it out. Get ready for the next round.',
+              sets: [{
+                id: `set-rest-${round}`,
+                prescribedTime: '60',
                 actualTime: '',
                 rpe: '',
                 painLevel: 0,
                 completed: false,
-              })),
-            },
-          ],
+              }],
+            })
+          }
+        }
+  
+        return {
+          name: "Valentine's Day Challenge ❤️",
+          notes: `Happy Valentine's Day! This is a circuit workout — do all 6 exercises in order to complete 1 round, then rest and repeat. 3 rounds total, no equipment needed. Scaled for your level (${tier}).`,
+          eventId: 'valentines-2026',
+          workoutType: 'strength',
+          circuitExercises: CIRCUIT, // for preview modal
+          exercises,
         }
       },
     },
