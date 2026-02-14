@@ -189,11 +189,6 @@ export default function NewWorkoutPage() {
     };
   }
 
-  // If cardio is selected, render the CardioForm instead
-  if (workoutType === 'cardio') {
-    return <CardioForm onBack={() => setWorkoutType('strength')} />;
-  }
-
   const addExercise = () => {
     setWorkout((prev) => ({
       ...prev,
@@ -338,6 +333,12 @@ export default function NewWorkoutPage() {
       document.removeEventListener('touchstart', handleClickOutside);
     };
   }, []);
+
+  // If cardio is selected, render the CardioForm instead
+  // (placed after all hooks to avoid hooks ordering violation)
+  if (workoutType === 'cardio') {
+    return <CardioForm onBack={() => setWorkoutType('strength')} />;
+  }
 
   const handleSave = async () => {
     if (!workout.name.trim()) {

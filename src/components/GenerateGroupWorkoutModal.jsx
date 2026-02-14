@@ -633,6 +633,7 @@ export default function GenerateGroupWorkoutModal({
                               }`}
                           >
                             {opt.label}
+                            {opt.value === '1rm-test' && <span className="ml-1 text-[9px] px-1 py-0.5 rounded-full bg-green-500/20 text-green-400 font-medium leading-none">New</span>}
                           </button>
                         ))}
                       </div>
