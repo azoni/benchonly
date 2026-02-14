@@ -20,6 +20,7 @@ import {
 import { db } from './firebase';
 import { analyticsService, ACTIONS } from './analyticsService';
 import { feedService, FEED_TYPES } from './feedService';
+import { buildExerciseSummary } from '../utils/workoutUtils';
 
 // ============ USERS ============
 export const userService = {
@@ -180,12 +181,15 @@ export const workoutService = {
     if (isComplete) {
       try {
         const feedType = workoutData.workoutType === 'cardio' ? FEED_TYPES.CARDIO : FEED_TYPES.WORKOUT;
+        const { exerciseSummary, totalSets } = buildExerciseSummary(workoutData.exercises);
         await feedService.createFeedItem(userId, feedType, {
           workoutId: docRef.id,
           name: workoutData.name,
           exerciseCount: workoutData.exercises?.length || 0,
           duration: workoutData.duration,
-          activityType: workoutData.activityType
+          activityType: workoutData.activityType,
+          exerciseSummary,
+          totalSets,
         });
       } catch (e) {
         console.error('Feed error:', e);
@@ -240,10 +244,13 @@ export const workoutService = {
     
     // Create feed item
     try {
+      const { exerciseSummary, totalSets } = buildExerciseSummary(exercisesWithActuals);
       await feedService.createFeedItem(userId, FEED_TYPES.WORKOUT, {
         workoutId,
         name: workoutName,
-        exerciseCount: exercisesWithActuals?.length || 0
+        exerciseCount: exercisesWithActuals?.length || 0,
+        exerciseSummary,
+        totalSets,
       });
     } catch (e) {
       console.error('Feed error:', e);
@@ -281,10 +288,13 @@ export const workoutService = {
     // Create feed item
     try {
       if (userId) {
+        const { exerciseSummary, totalSets } = buildExerciseSummary(payload.exercises);
         await feedService.createFeedItem(userId, FEED_TYPES.WORKOUT, {
           workoutId,
           name: workoutData?.name || 'Workout',
-          exerciseCount: payload.exercises?.length || 0
+          exerciseCount: payload.exercises?.length || 0,
+          exerciseSummary,
+          totalSets,
         });
       }
     } catch (e) {
@@ -1351,12 +1361,15 @@ export const groupWorkoutService = {
           const groupDoc = await getDoc(doc(db, 'groups', workoutData.groupId));
           groupName = groupDoc.data()?.name || '';
         }
+        const { exerciseSummary, totalSets } = buildExerciseSummary(actualData?.exercises);
         await feedService.createFeedItem(targetUserId, FEED_TYPES.GROUP_WORKOUT, {
           workoutId,
           name: workoutData?.name || actualData?.name || 'Group Workout',
           groupName,
           groupId: workoutData?.groupId,
           exerciseCount: actualData?.exercises?.length || 0,
+          exerciseSummary,
+          totalSets,
         }, 'group');
       } catch (e) {
         console.error('Feed error:', e);

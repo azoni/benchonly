@@ -36,6 +36,7 @@ import { notificationService } from '../services/feedService'
 import { friendService } from '../services/friendService'
 import { format, startOfWeek, endOfWeek, subDays, addDays, isToday, startOfDay } from 'date-fns'
 import { toDateString } from '../utils/dateUtils'
+import { formatDuration } from '../utils/workoutUtils'
 
 export default function TodayPage() {
   const { user, userProfile, isGuest, isRealAdmin, impersonating, realUser } = useAuth()
@@ -861,6 +862,7 @@ export default function TodayPage() {
 
       {/* Recent Activity */}
       {(() => {
+        const userGroupIds = new Set(userProfile?.groups || [])
         const visibleItems = feedItems.filter(item => {
           // Admin: hide own items and impersonated user items
           if (isRealAdmin) {
@@ -871,7 +873,7 @@ export default function TodayPage() {
           const visibility = item.visibility || 'public'
           if (visibility === 'private') return false
           if (visibility === 'friends') return friendSet.has(item.userId)
-          if (visibility === 'group') return false
+          if (visibility === 'group') return item.groupId && userGroupIds.has(item.groupId)
           return true // public
         })
         return visibleItems.length > 0 ? (
@@ -891,8 +893,14 @@ export default function TodayPage() {
             {visibleItems.slice(0, 4).map(item => {
               const feedUser = feedUsers[item.userId]
               const userName = feedUser?.displayName || 'Someone'
+              const isOwnWorkout = item.userId === user?.uid && item.data?.workoutId
+              const workoutLink = isOwnWorkout
+                ? (item.type === 'group_workout' ? `/workouts/group/${item.data.workoutId}` : `/workouts/${item.data.workoutId}`)
+                : null
+              const Wrapper = workoutLink ? Link : 'div'
+              const wrapperProps = workoutLink ? { to: workoutLink } : {}
               return (
-                <div key={item.id} className="flex items-center gap-3 p-3">
+                <Wrapper key={item.id} {...wrapperProps} className={`flex items-center gap-3 p-3${workoutLink ? ' hover:bg-iron-800/50 transition-colors' : ''}`}>
                   <Link to={`/profile/${item.userId}`} className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 text-xs flex-shrink-0 overflow-hidden">
                     {feedUser?.photoURL ? (
                       <img src={feedUser.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" />
@@ -912,9 +920,16 @@ export default function TodayPage() {
                     </p>
                     <p className="text-xs text-iron-600">
                       {item.createdAt?.toDate && format(item.createdAt.toDate(), 'EEE, h:mm a')}
+                      {(item.type === 'workout' || item.type === 'group_workout') && (() => {
+                        const dur = formatDuration(item.data?.totalSets, item.data?.duration)
+                        return dur ? ` · ${dur}` : ''
+                      })()}
                     </p>
                   </div>
-                </div>
+                  {workoutLink && (
+                    <ChevronRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
+                  )}
+                </Wrapper>
               )
             })}
           </div>

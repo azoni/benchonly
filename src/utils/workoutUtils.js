@@ -59,3 +59,58 @@ export function getMaxReps(input) {
   const match = str.match(/(\d+)$/)
   return match ? parseInt(match[1], 10) : 0
 }
+
+/**
+ * Estimate workout duration in minutes from total sets.
+ * Uses ~2.5 min/set (working time + rest). Returns explicit duration if available.
+ */
+export function estimateDuration(totalSets, explicitDuration) {
+  if (explicitDuration && explicitDuration > 0) return Math.round(explicitDuration)
+  if (!totalSets || totalSets <= 0) return null
+  return Math.round(totalSets * 2.5)
+}
+
+/**
+ * Format duration for display: "~30 min"
+ */
+export function formatDuration(totalSets, explicitDuration) {
+  const mins = estimateDuration(totalSets, explicitDuration)
+  if (!mins) return null
+  if (explicitDuration && explicitDuration > 0) return `${mins} min`
+  return `~${mins} min`
+}
+
+/**
+ * Build a compact exercise summary array for feed items.
+ * Returns: [{ name, sets, topWeight, topReps }, ...]
+ * Also returns totalSets count.
+ */
+export function buildExerciseSummary(exercises) {
+  if (!exercises || !exercises.length) return { exerciseSummary: [], totalSets: 0 }
+  
+  let totalSets = 0
+  const exerciseSummary = exercises.map(ex => {
+    const sets = ex.sets || []
+    totalSets += sets.length
+    
+    // Find the heaviest set (by actual or prescribed weight)
+    let topWeight = 0
+    let topReps = 0
+    sets.forEach(s => {
+      const w = parseFloat(s.actualWeight || s.prescribedWeight) || 0
+      if (w > topWeight) {
+        topWeight = w
+        topReps = parseInt(s.actualReps || s.prescribedReps) || 0
+      }
+    })
+    
+    return {
+      name: ex.name || 'Exercise',
+      sets: sets.length,
+      topWeight: topWeight || null,
+      topReps: topReps || null,
+    }
+  })
+  
+  return { exerciseSummary, totalSets }
+}

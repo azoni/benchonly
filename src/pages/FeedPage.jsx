@@ -9,6 +9,7 @@ import {
   MessageCircle, 
   Search,
   ChevronDown,
+  ChevronRight,
   Send,
   X,
   Trophy,
@@ -17,6 +18,7 @@ import {
   Users,
   Globe,
   Trash2,
+  Clock,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { feedService } from '../services/feedService'
@@ -24,6 +26,7 @@ import { friendService } from '../services/friendService'
 import { groupService } from '../services/firestore'
 import { collection, getDocs, query } from 'firebase/firestore'
 import { db } from '../services/firebase'
+import { formatDuration } from '../utils/workoutUtils'
 
 export default function FeedPage() {
   const { user, isGuest, isAppAdmin, isRealAdmin, impersonating, realUser } = useAuth()
@@ -41,6 +44,7 @@ export default function FeedPage() {
   const [friendSet, setFriendSet] = useState(new Set())
   const [userGroupIds, setUserGroupIds] = useState(new Set())
   const [feedFilter, setFeedFilter] = useState('all') // 'all' | 'friends' | 'mine'
+  const [expandedItems, setExpandedItems] = useState(new Set())
 
   // Visibility check — determines if current user can see a feed item
   const canSeeItem = (item) => {
@@ -372,13 +376,60 @@ export default function FeedPage() {
                 </div>
               </div>
 
-              {/* Workout/Activity Details Link — only for own workouts (Firestore rules block reading others') */}
+              {/* Duration estimate */}
+              {(item.type === 'workout' || item.type === 'group_workout') && (() => {
+                const dur = formatDuration(item.data?.totalSets, item.data?.duration)
+                return dur ? (
+                  <div className="mt-2 ml-[52px] flex items-center gap-1.5 text-xs text-iron-500">
+                    <Clock className="w-3 h-3" />
+                    {dur}
+                    {item.data?.exerciseCount ? ` · ${item.data.exerciseCount} exercises` : ''}
+                    {item.data?.totalSets ? ` · ${item.data.totalSets} sets` : ''}
+                  </div>
+                ) : item.data?.exerciseCount ? (
+                  <div className="mt-2 ml-[52px] flex items-center gap-1.5 text-xs text-iron-500">
+                    <Dumbbell className="w-3 h-3" />
+                    {item.data.exerciseCount} exercises
+                  </div>
+                ) : null
+              })()}
+
+              {/* Expandable exercise summary */}
+              {(item.type === 'workout' || item.type === 'group_workout') && item.data?.exerciseSummary?.length > 0 && (
+                <div className="mt-2 ml-[52px]">
+                  <button
+                    onClick={() => setExpandedItems(prev => {
+                      const next = new Set(prev)
+                      next.has(item.id) ? next.delete(item.id) : next.add(item.id)
+                      return next
+                    })}
+                    className="text-xs text-iron-500 hover:text-iron-300 transition-colors flex items-center gap-1"
+                  >
+                    {expandedItems.has(item.id) ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    {expandedItems.has(item.id) ? 'Hide exercises' : 'Show exercises'}
+                  </button>
+                  {expandedItems.has(item.id) && (
+                    <div className="mt-2 space-y-1">
+                      {item.data.exerciseSummary.map((ex, i) => (
+                        <div key={i} className="flex items-center justify-between py-1.5 px-3 bg-iron-800/40 rounded-lg">
+                          <span className="text-xs text-iron-300">{ex.name}</span>
+                          <span className="text-xs text-iron-500">
+                            {ex.sets}×{ex.topWeight ? `${ex.topReps}@${ex.topWeight}lbs` : ex.topReps ? `${ex.topReps} reps` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* View full details — own workouts only */}
               {item.data?.workoutId && item.userId === user?.uid && (
                 <Link 
                   to={item.type === 'group_workout' ? `/workouts/group/${item.data.workoutId}` : `/workouts/${item.data.workoutId}`}
-                  className="mt-3 block p-3 bg-iron-800/50 rounded-lg text-sm text-iron-400 hover:text-iron-200 hover:bg-iron-800 transition-colors"
+                  className="mt-2 ml-[52px] block p-2.5 bg-iron-800/50 rounded-lg text-xs text-iron-400 hover:text-iron-200 hover:bg-iron-800 transition-colors"
                 >
-                  View {item.type === 'cardio' ? 'activity' : 'workout'} details →
+                  View full workout details →
                 </Link>
               )}
 
