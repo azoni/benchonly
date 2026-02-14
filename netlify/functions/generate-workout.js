@@ -87,6 +87,9 @@ WEIGHT PROGRESSION LOGIC:
 - Missed reps or RPE 9+: Keep same weight or reduce 5%
 - Pain reported on exercise: DO NOT increase weight, add note about monitoring
 
+NO TRAINING DATA:
+If the user has NO max lift data at all, set weights very conservatively: bar weight (45 lbs) to 65 lbs for upper body pressing, 95-135 lbs for lower body compounds. Add a prominent note in the workout "notes" field: "No training history available — all weights are set conservatively. Log this workout so future sessions can be personalized to your actual strength." For the 1RM test with no data, start the warm-up at the bar and increase in small increments.
+
 EXERCISE TYPES:
 - "weight": Standard weighted exercises (bench press, squat, rows). Sets have prescribedWeight and prescribedReps.
 - "bodyweight": No external weight (pull-ups, push-ups, dips). Sets have prescribedReps only (NO prescribedWeight).

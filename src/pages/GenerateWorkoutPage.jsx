@@ -817,6 +817,16 @@ export default function GenerateWorkoutPage() {
             <div className="card-steel rounded-xl p-6">
               <h3 className="font-medium text-iron-200 mb-4">Workout Options</h3>
               
+              {!loadingContext && Object.keys(userContext.maxLifts).length === 0 && (
+                <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm text-amber-300">No training data yet</p>
+                    <p className="text-xs text-iron-500">Weights will be set conservatively. Log a workout first for personalized loads.</p>
+                  </div>
+                </div>
+              )}
+              
               <div className="mb-4">
                 <label className="block text-sm text-iron-400 mb-2">Describe your workout (optional)</label>
                 <textarea

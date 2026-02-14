@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { format, differenceInDays, isPast } from 'date-fns'
+import { format, differenceInDays, isPast, subDays } from 'date-fns'
 import { 
   Target, 
   Plus, 
@@ -11,10 +11,16 @@ import {
   X,
   ChevronRight,
   Flame,
-  Award
+  Award,
+  Sparkles,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react'
-import { goalService } from '../services/firestore'
+import { goalService, workoutService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
+import { getAuthHeaders } from '../services/api'
+import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore'
+import { db } from '../services/firebase'
 
 const COMMON_LIFTS = [
   'Bench Press',
@@ -44,6 +50,10 @@ export default function GoalsPage() {
     notes: ''
   })
   const [saving, setSaving] = useState(false)
+  const [suggestions, setSuggestions] = useState([])
+  const [suggestLoading, setSuggestLoading] = useState(false)
+  const [suggestError, setSuggestError] = useState(null)
+  const [suggestNoData, setSuggestNoData] = useState(false)
 
   const METRIC_LABELS = {
     weight: { label: 'Weight', unit: 'lbs', placeholder: '225' },
@@ -227,6 +237,98 @@ export default function GoalsPage() {
     return `${days} days left`
   }
 
+  const suggestGoals = async () => {
+    setSuggestLoading(true)
+    setSuggestError(null)
+    setSuggestNoData(false)
+    setSuggestions([])
+
+    try {
+      // Load user's max lifts from recent workouts
+      const maxLifts = {}
+      const snap = await getDocs(query(
+        collection(db, 'workouts'),
+        where('userId', '==', user.uid),
+        where('status', '==', 'completed'),
+        orderBy('completedAt', 'desc'),
+        limit(20)
+      ))
+      snap.docs.forEach(doc => {
+        const w = doc.data()
+        ;(w.exercises || []).forEach(ex => {
+          if (!ex.name) return
+          ;(ex.sets || []).forEach(s => {
+            const weight = parseFloat(s.actualWeight) || parseFloat(s.prescribedWeight) || 0
+            const reps = parseInt(s.actualReps) || parseInt(s.prescribedReps) || 0
+            if (weight > 0 && reps > 0 && reps <= 12) {
+              const e1rm = Math.round(weight * (1 + reps / 30))
+              if (!maxLifts[ex.name] || e1rm > maxLifts[ex.name].e1rm) {
+                maxLifts[ex.name] = { weight, reps, e1rm }
+              }
+            }
+          })
+        })
+      })
+
+      const authHeaders = await getAuthHeaders()
+      const response = await fetch('/.netlify/functions/suggest-goals', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          maxLifts,
+          currentGoals: goals.filter(g => g.status === 'active'),
+          recentWorkouts: snap.docs.map(() => ({})), // just count
+        }),
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to get suggestions')
+      }
+
+      const data = await response.json()
+      if (data.noData) {
+        setSuggestNoData(true)
+        setSuggestError(data.message)
+      } else {
+        setSuggestions(data.suggestions || [])
+      }
+    } catch (err) {
+      console.error('Suggest error:', err)
+      setSuggestError(err.message)
+    } finally {
+      setSuggestLoading(false)
+    }
+  }
+
+  const addSuggestion = async (suggestion) => {
+    const targetDate = format(new Date(Date.now() + 8 * 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd')
+    const goalData = {
+      lift: suggestion.lift,
+      metricType: suggestion.metricType || 'weight',
+      currentValue: String(suggestion.currentValue),
+      targetValue: String(suggestion.targetValue),
+      startValue: String(suggestion.currentValue),
+      targetDate,
+      notes: suggestion.reason || '',
+      status: 'active',
+    }
+    // Add legacy weight fields for weight-type goals
+    if (suggestion.metricType === 'weight' || !suggestion.metricType) {
+      goalData.currentWeight = goalData.currentValue
+      goalData.targetWeight = goalData.targetValue
+      goalData.startWeight = goalData.startValue
+    }
+
+    if (isGuest) {
+      setGoals(prev => [...prev, { id: `guest-${Date.now()}`, ...goalData }])
+    } else {
+      const newGoal = await goalService.create(user.uid, goalData)
+      setGoals(prev => [...prev, { ...newGoal, status: 'active', progress: 0 }])
+    }
+    setSuggestions(prev => prev.filter(s => s.lift !== suggestion.lift))
+  }
+
   const activeGoals = goals.filter(g => g.status === 'active')
   const completedGoals = goals.filter(g => g.status === 'completed')
 
@@ -240,14 +342,75 @@ export default function GoalsPage() {
             Track your strength milestones
           </p>
         </div>
-        <button
-          onClick={() => openModal()}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          New Goal
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={suggestGoals}
+            disabled={suggestLoading}
+            className="btn-secondary flex items-center gap-2"
+          >
+            {suggestLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            <span className="hidden sm:inline">Suggest</span>
+          </button>
+          <button
+            onClick={() => openModal()}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            New Goal
+          </button>
+        </div>
       </div>
+
+      {/* AI Suggestions */}
+      {(suggestions.length > 0 || suggestNoData || suggestError) && (
+        <div className="mb-6">
+          {suggestNoData || suggestError ? (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm text-amber-300">Can't suggest goals yet</p>
+                <p className="text-xs text-iron-500 mt-1">{suggestError || 'Log a few workouts first so we can analyze your lifts.'}</p>
+              </div>
+              <button onClick={() => { setSuggestError(null); setSuggestNoData(false) }} className="ml-auto text-iron-500 hover:text-iron-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="card-steel rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-iron-800">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-flame-400" />
+                  <h3 className="text-sm font-medium text-iron-200">Suggested Goals</h3>
+                </div>
+                <button onClick={() => setSuggestions([])} className="text-iron-500 hover:text-iron-300">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="divide-y divide-iron-800">
+                {suggestions.map((s, i) => (
+                  <div key={i} className="p-4 flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-iron-200">{s.lift}</p>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-iron-800 text-iron-500">
+                          {s.currentValue} → {s.targetValue} {s.metricType === 'weight' ? 'lbs' : s.metricType === 'reps' ? 'reps' : 's'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-iron-500 mt-1">{s.reason}</p>
+                    </div>
+                    <button
+                      onClick={() => addSuggestion(s)}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-flame-500/10 text-flame-400 border border-flame-500/30 hover:bg-flame-500/20 transition-colors flex-shrink-0"
+                    >
+                      Add
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Summary Stats */}
       {goals.length > 0 && (

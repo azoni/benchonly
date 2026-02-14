@@ -16,7 +16,7 @@ export async function handler(event) {
   if (!auth) return UNAUTHORIZED;
 
   try {
-    const { groupId, athletes, prompt, workoutDate, model, settings } = JSON.parse(event.body);
+    const { groupId, athletes, prompt, workoutDate, model, settings, workoutFocus, intensity, duration, exerciseCount, maxExercise } = JSON.parse(event.body);
     const coachId = auth.uid;
 
     if (!groupId || !athletes?.length) {
@@ -42,7 +42,7 @@ export async function handler(event) {
     };
 
     // Model selection - enforce admin-only premium
-    const selectedModel = (model === 'premium' && auth.isAdmin) ? 'gpt-4o' : 'gpt-4o-mini';
+    const selectedModel = (model === 'premium' && auth.isAdmin) ? 'gpt-4.1-mini' : 'gpt-4o-mini';
 
     // Fetch group data for Firestore rules compliance
     let groupAdmins = [coachId];
@@ -58,7 +58,7 @@ export async function handler(event) {
       console.error('Failed to fetch group:', e);
     }
 
-    const contextStr = buildGroupContext(athletes, adminSettings);
+    const contextStr = buildGroupContext(athletes, adminSettings, workoutFocus, intensity, duration, exerciseCount, maxExercise);
 
     const systemPrompt = `You are an expert strength coach creating personalized workouts for a group.
 
@@ -81,6 +81,22 @@ STANDARD WORKOUT RULES:
 4. Consider RPE patterns when setting weights
 5. Factor in cardio/activity load when considering recovery
 6. Include coaching notes explaining your reasoning
+
+NO TRAINING DATA:
+If an athlete has NO max lift data, set weights very conservatively (bar weight or 50-65 lbs for upper body, 95-135 lbs for lower body). Add a note: "No training history — weights set conservatively. Track this session to enable personalized loads next time."
+
+WARM-UP GUIDANCE:
+For the first compound lift, include warm-up ramp sets in the exercise "notes" field for each athlete. Scale warm-up to their working weight. Skip warm-up notes for isolation/accessory exercises.
+
+DURATION & EXERCISE COUNT:
+If a target duration or exercise count is specified, respect it. Adjust total volume so the workout fits.
+
+1RM TEST PROTOCOL:
+If the focus is "1rm-test", generate a max-attempt session for the specified exercise per athlete:
+1. The target lift with progressive warm-up sets ramping from ~40% to ~90% of each athlete's e1RM, then 2-3 max attempt singles. Include detailed attempt plan in exercise notes with real weights.
+2. 1-2 light accessory exercises as cooldown (2 sets each).
+3. Name the workout "1RM Test: [Exercise Name]".
+For athletes with no e1RM data, use conservative warm-up and let them work up by feel.
 
 WEIGHT PROGRESSION LOGIC:
 - Completed all reps at target RPE 7-8: Add 5 lbs (upper) or 5-10 lbs (lower)
@@ -273,10 +289,10 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
       createdWorkouts.push({ athleteId, workoutId: docRef.id, athleteName: aw.athleteName });
     }
 
-    // Cost calculation - GPT-4o: $2.50/$10.00 per 1M, GPT-4o-mini: $0.15/$0.60 per 1M
-    const isPremium = selectedModel === 'gpt-4o';
-    const inputRate = isPremium ? 2.50 : 0.15;
-    const outputRate = isPremium ? 10.00 : 0.60;
+    // Cost calculation - GPT-4.1-mini: $0.40/$1.60 per 1M, GPT-4o-mini: $0.15/$0.60 per 1M
+    const isPremium = selectedModel === 'gpt-4.1-mini';
+    const inputRate = isPremium ? 0.40 : 0.15;
+    const outputRate = isPremium ? 1.60 : 0.60;
     const cost = (usage.prompt_tokens / 1e6) * inputRate + (usage.completion_tokens / 1e6) * outputRate;
 
     // Log AI usage for tracking
@@ -340,11 +356,29 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
   }
 }
 
-function buildGroupContext(athletes, settings = {}) {
+function buildGroupContext(athletes, settings = {}, focus = 'auto', intensity = 'moderate', duration = null, exerciseCount = null, maxExercise = null) {
   const painThresholdMin = settings.painThresholdMin || 3;
   const painThresholdCount = settings.painThresholdCount || 2;
   
-  let s = `GROUP: ${athletes.length} athletes\n\n`;
+  let s = `GROUP: ${athletes.length} athletes\n`;
+
+  // 1RM test mode
+  if (focus === '1rm-test' && maxExercise) {
+    s += `\nFOCUS: 1RM TEST for ${maxExercise}\nGenerate a max-attempt session following the 1RM TEST PROTOCOL.\n`;
+  } else {
+    if (focus && focus !== 'auto') {
+      if (focus === 'no-equipment') {
+        s += `\nFOCUS: Bodyweight only — NO equipment.\n`;
+      } else {
+        s += `\nFOCUS: ${focus}\n`;
+      }
+    }
+    const intMap = { light: 'Light (RPE 5-6)', moderate: 'Moderate (RPE 7-8)', heavy: 'Heavy (RPE 8-9)', max: 'Max (RPE 9-10)' };
+    s += `INTENSITY: ${intMap[intensity] || 'Moderate'}\n`;
+    if (duration) s += `TARGET DURATION: ${duration} minutes.\n`;
+    if (exerciseCount) s += `TARGET EXERCISES: ${exerciseCount} exercises.\n`;
+  }
+  s += '\n';
 
   athletes.forEach((a) => {
     s += `--- ${a.name} (ID: ${a.id}) ---\n`;
