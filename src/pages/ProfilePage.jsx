@@ -462,6 +462,20 @@ export default function ProfilePage() {
                 )}
               </p>
             )}
+            {/* Badges */}
+            {profile.badges?.length > 0 && (
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                {profile.badges.map(badge => (
+                  <span
+                    key={badge.id}
+                    title={badge.name}
+                    className="w-7 h-7 flex items-center justify-center bg-iron-800 border border-iron-700 rounded-lg text-sm cursor-default hover:bg-iron-700 transition-colors"
+                  >
+                    {badge.icon}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {isOwnProfile ? (

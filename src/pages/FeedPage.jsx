@@ -19,6 +19,7 @@ import {
   Globe,
   Trash2,
   Clock,
+  Heart,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { feedService } from '../services/feedService'
@@ -185,7 +186,11 @@ export default function FeedPage() {
     }
   }
 
-  const getActivityIcon = (type) => {
+  const getActivityIcon = (type, item) => {
+    // Event workouts get a special heart icon
+    if (item?.data?.eventId) {
+      return <Heart className="w-5 h-5 text-pink-400 fill-pink-400" />
+    }
     switch (type) {
       case 'workout':
         return <Dumbbell className="w-5 h-5 text-green-400" />
@@ -347,7 +352,7 @@ export default function FeedPage() {
                 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    {getActivityIcon(item.type)}
+                    {getActivityIcon(item.type, item)}
                     <p className="text-sm text-iron-200">
                       {getActivityText(item)}
                     </p>
@@ -496,7 +501,7 @@ export default function FeedPage() {
             {/* Original post summary */}
             <div className="p-4 bg-iron-800/50 border-b border-iron-800">
               <div className="flex items-center gap-2 text-sm text-iron-300">
-                {getActivityIcon(selectedItem.type)}
+                {getActivityIcon(selectedItem.type, selectedItem)}
                 {getActivityText(selectedItem)}
               </div>
             </div>

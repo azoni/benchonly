@@ -199,6 +199,7 @@ export const workoutService = {
           activityType: workoutData.activityType,
           exerciseSummary,
           totalSets,
+          ...(workoutData.eventId ? { eventId: workoutData.eventId } : {}),
         });
       } catch (e) {
         console.error('Feed error:', e);
@@ -260,9 +261,38 @@ export const workoutService = {
         exerciseCount: exercisesWithActuals?.length || 0,
         exerciseSummary,
         totalSets,
+        ...(workoutData?.eventId ? { eventId: workoutData.eventId } : {}),
       });
     } catch (e) {
       console.error('Feed error:', e);
+    }
+
+    // Award event rewards (credits + badge)
+    if (userId && workoutData?.eventId) {
+      try {
+        const { getEventForWorkout } = await import('../config/specialEvents.js');
+        const event = getEventForWorkout(workoutData);
+        if (event) {
+          if (event.creditReward) {
+            await creditService.add(userId, event.creditReward);
+          }
+          const userRef = doc(db, 'users', userId);
+          const userSnap = await getDoc(userRef);
+          const badges = userSnap.data()?.badges || [];
+          if (!badges.some(b => b.id === event.id)) {
+            await updateDoc(userRef, {
+              badges: [...badges, {
+                id: event.id,
+                name: event.badgeName,
+                icon: event.badgeIcon,
+                earnedAt: new Date().toISOString(),
+              }],
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Event reward error:', e);
+      }
     }
     
     return { id: workoutId, status: 'completed' };
@@ -304,10 +334,41 @@ export const workoutService = {
           exerciseCount: payload.exercises?.length || 0,
           exerciseSummary,
           totalSets,
+          ...(workoutData?.eventId ? { eventId: workoutData.eventId } : {}),
         });
       }
     } catch (e) {
       console.error('Feed error:', e);
+    }
+
+    // Award event rewards (credits + badge)
+    if (userId && workoutData?.eventId) {
+      try {
+        const { getEventForWorkout } = await import('../config/specialEvents.js');
+        const event = getEventForWorkout(workoutData);
+        if (event) {
+          // Award credits
+          if (event.creditReward) {
+            await creditService.add(userId, event.creditReward);
+          }
+          // Award badge
+          const userRef = doc(db, 'users', userId);
+          const userSnap = await getDoc(userRef);
+          const badges = userSnap.data()?.badges || [];
+          if (!badges.some(b => b.id === event.id)) {
+            await updateDoc(userRef, {
+              badges: [...badges, {
+                id: event.id,
+                name: event.badgeName,
+                icon: event.badgeIcon,
+                earnedAt: new Date().toISOString(),
+              }],
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Event reward error:', e);
+      }
     }
 
     // Auto-complete linked trainer request

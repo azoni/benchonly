@@ -21,6 +21,7 @@ import {
   ArrowRight,
   Layers,
   Megaphone,
+  Heart,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -38,6 +39,8 @@ import { format, startOfWeek, endOfWeek, subDays, addDays, isToday, startOfDay }
 import { toDateString } from '../utils/dateUtils'
 import { formatDuration } from '../utils/workoutUtils'
 import OnboardingChecklist from '../components/OnboardingChecklist'
+import SpecialEventModal from '../components/SpecialEventModal'
+import { getActiveEvent } from '../config/specialEvents'
 
 export default function TodayPage() {
   const { user, userProfile, isGuest, isRealAdmin, impersonating, realUser } = useAuth()
@@ -60,6 +63,12 @@ export default function TodayPage() {
   const [nextWorkout, setNextWorkout] = useState(null) // next upcoming personal or group workout
   const [hasActiveProgram, setHasActiveProgram] = useState(true) // default true to avoid flash
   const [loading, setLoading] = useState(true)
+  
+  // Special event state
+  const [activeEvent, setActiveEvent] = useState(null)
+  const [eventWorkout, setEventWorkout] = useState(null) // existing workout for active event
+  const [showEventModal, setShowEventModal] = useState(false)
+  const [eventUserContext, setEventUserContext] = useState(null)
 
   // 1RM Calculator state
   const [calcOpen, setCalcOpen] = useState(false)
@@ -358,6 +367,61 @@ export default function TodayPage() {
     }
   }
 
+  // Special event check
+  useEffect(() => {
+    if (!user || isGuest) return
+    const event = getActiveEvent()
+    if (!event) return
+    setActiveEvent(event)
+
+    // Check if user already has this event's workout
+    const checkEvent = async () => {
+      try {
+        const { collection, query, where, getDocs, limit } = await import('firebase/firestore')
+        const { db } = await import('../services/firebase')
+        const q = query(
+          collection(db, 'workouts'),
+          where('userId', '==', user.uid),
+          where('eventId', '==', event.id),
+          limit(1)
+        )
+        const snap = await getDocs(q)
+        if (snap.size > 0) {
+          const doc = snap.docs[0]
+          setEventWorkout({ id: doc.id, ...doc.data() })
+        } else {
+          // Show modal if they haven't seen it this session
+          const dismissed = sessionStorage.getItem(`event_dismissed_${event.id}`)
+          if (!dismissed) {
+            setShowEventModal(true)
+          }
+        }
+
+        // Build user context for workout scaling
+        const allWorkouts = await workoutService.getByUser(user.uid, 20).catch(() => [])
+        const maxLifts = {}
+        allWorkouts.filter(w => w.status === 'completed').forEach(w => {
+          w.exercises?.forEach(ex => {
+            ex.sets?.forEach(set => {
+              const weight = parseFloat(set.actualWeight || set.prescribedWeight)
+              const reps = parseInt(set.actualReps || set.prescribedReps)
+              if (weight > 0 && reps > 0 && reps <= 30) {
+                const e1rm = reps === 1 ? weight : weight * (1 + reps / 30)
+                if (!maxLifts[ex.name] || e1rm > maxLifts[ex.name].weight) {
+                  maxLifts[ex.name] = { weight: Math.round(e1rm) }
+                }
+              }
+            })
+          })
+        })
+        setEventUserContext({ maxLifts })
+      } catch (e) {
+        console.error('Event check error:', e)
+      }
+    }
+    checkEvent()
+  }, [user])
+
   const hasTodayWorkout = todayWorkouts.length > 0 || todayGroupWorkouts.length > 0 || todaySchedules.length > 0 || todayProgramDay
   const allCompleted = todayWorkouts.length > 0 && todayWorkouts.every(w => w.status === 'completed' || w.status !== 'scheduled')
 
@@ -389,6 +453,53 @@ export default function TodayPage() {
 
       {/* Onboarding Checklist */}
       <OnboardingChecklist />
+
+      {/* Special Event Card */}
+      {activeEvent && (() => {
+        const theme = activeEvent.theme || {}
+        const isCompleted = eventWorkout?.status === 'completed'
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <div className={`card-steel p-4 rounded-xl border ${theme.border || 'border-flame-500/20'} ${theme.bg || 'bg-flame-500/5'}`}>
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">{activeEvent.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-iron-100">{activeEvent.name}</h3>
+                  <p className="text-xs text-iron-500">
+                    {isCompleted
+                      ? 'Completed! Badge earned + 200 credits'
+                      : eventWorkout
+                        ? 'In progress — tap to continue'
+                        : `${activeEvent.creditReward} credits + profile badge`
+                    }
+                  </p>
+                </div>
+                {isCompleted ? (
+                  <span className="text-2xl">✅</span>
+                ) : eventWorkout ? (
+                  <Link
+                    to={`/workouts/${eventWorkout.id}`}
+                    className={`px-3 py-1.5 text-xs rounded-lg font-medium text-white ${theme.buttonBg || 'bg-flame-500'} ${theme.buttonHover || 'hover:bg-flame-600'} transition-colors`}
+                  >
+                    Continue
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => setShowEventModal(true)}
+                    className={`px-3 py-1.5 text-xs rounded-lg font-medium text-white ${theme.buttonBg || 'bg-flame-500'} ${theme.buttonHover || 'hover:bg-flame-600'} transition-colors`}
+                  >
+                    Start
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )
+      })()}
 
       {/* Pending Reviews */}
       {pendingReviews.length > 0 && (
@@ -1035,6 +1146,9 @@ export default function TodayPage() {
                        item.type === 'cardio' ? `logged ${item.data?.duration}min ${item.data?.name || 'cardio'}` :
                        item.type === 'personal_record' ? `hit a new PR on ${item.data?.exercise}` :
                        'was active'}
+                      {item.data?.eventId && (
+                        <Heart className="w-3.5 h-3.5 text-pink-400 fill-pink-400 inline ml-1 -mt-0.5" />
+                      )}
                     </p>
                     <p className="text-xs text-iron-600">
                       {item.createdAt?.toDate && format(item.createdAt.toDate(), 'EEE, h:mm a')}
@@ -1054,6 +1168,18 @@ export default function TodayPage() {
         </motion.div>
       ) : null
       })()}
+
+      {/* Special Event Modal */}
+      {showEventModal && activeEvent && (
+        <SpecialEventModal
+          event={activeEvent}
+          userContext={eventUserContext}
+          onClose={() => {
+            setShowEventModal(false)
+            sessionStorage.setItem(`event_dismissed_${activeEvent.id}`, '1')
+          }}
+        />
+      )}
     </div>
   )
 }
