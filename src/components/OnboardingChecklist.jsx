@@ -84,13 +84,14 @@ const colorMap = {
   cyan: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20',
 }
 
-export default function OnboardingChecklist() {
+export default function OnboardingChecklist({ embedded = false }) {
   const { user, userProfile, updateProfile, isGuest } = useAuth()
   const [checklist, setChecklist] = useState(null)
   const [taskStatus, setTaskStatus] = useState({})
   const [claiming, setClaiming] = useState(null)
   const [collapsed, setCollapsed] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [dismissToast, setDismissToast] = useState(false)
 
   useEffect(() => {
     if (!user || isGuest) return
@@ -171,18 +172,39 @@ export default function OnboardingChecklist() {
         onboardingChecklist: { ...(userProfile?.onboardingChecklist || {}), dismissed: true }
       })
       setChecklist(prev => ({ ...prev, dismissed: true }))
+      setDismissToast(true)
+      setTimeout(() => setDismissToast(false), 4000)
     } catch (err) {
       console.error('Dismiss error:', err)
     }
   }
 
-  // Don't show for guests, or if profile not loaded, or if dismissed
+  // Don't show for guests or if profile not loaded
   if (isGuest || !userProfile || !loaded) return null
-  if (checklist?.dismissed) return null
   
   // Don't show if all tasks are claimed
   const allClaimed = CHECKLIST_TASKS.every(t => taskStatus[t.id] === 'claimed')
   if (allClaimed) return null
+
+  // On TodayPage: hide if dismissed (but show toast briefly)
+  // In Settings (embedded): always show if not all claimed
+  if (!embedded && checklist?.dismissed) {
+    if (!dismissToast) return null
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className="mb-6 p-3 bg-iron-800/80 border border-iron-700 rounded-xl flex items-center gap-3"
+      >
+        <Gift className="w-4 h-4 text-flame-400 flex-shrink-0" />
+        <p className="text-sm text-iron-300 flex-1">You can find the getting started checklist in <Link to="/settings" className="text-flame-400 hover:underline">Settings</Link>.</p>
+        <button onClick={() => setDismissToast(false)} className="text-iron-500 hover:text-iron-300">
+          <X className="w-4 h-4" />
+        </button>
+      </motion.div>
+    )
+  }
 
   const claimedCount = CHECKLIST_TASKS.filter(t => taskStatus[t.id] === 'claimed').length
   const earnedCredits = CHECKLIST_TASKS.filter(t => taskStatus[t.id] === 'claimed').reduce((s, t) => s + t.credits, 0)
@@ -303,12 +325,14 @@ export default function OnboardingChecklist() {
                 })}
                 
                 {/* Dismiss */}
-                <button
-                  onClick={dismissChecklist}
-                  className="w-full text-center text-xs text-iron-600 hover:text-iron-400 py-2 transition-colors"
-                >
-                  Dismiss checklist
-                </button>
+                {!embedded && (
+                  <button
+                    onClick={dismissChecklist}
+                    className="w-full text-center text-xs text-iron-600 hover:text-iron-400 py-2 transition-colors"
+                  >
+                    Dismiss checklist
+                  </button>
+                )}
               </div>
             </motion.div>
           )}

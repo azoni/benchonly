@@ -47,6 +47,7 @@ import { ACTIVITY_LEVELS } from '../services/calorieService'
 import { userService, tokenUsageService, creditService, trainerService } from '../services/firestore'
 import { friendService } from '../services/friendService'
 import { ouraService } from '../services/ouraService'
+import OnboardingChecklist from '../components/OnboardingChecklist'
 
 export default function SettingsPage() {
   const { user, userProfile, updateProfile, isGuest } = useAuth()
@@ -633,6 +634,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Getting Started Checklist */}
+      <OnboardingChecklist embedded />
 
       {/* Username Section */}
       <div className="space-y-3 mb-6">
