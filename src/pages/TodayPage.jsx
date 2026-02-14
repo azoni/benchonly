@@ -38,7 +38,7 @@ import { format, startOfWeek, endOfWeek, subDays, addDays, isToday, startOfDay }
 import { toDateString } from '../utils/dateUtils'
 
 export default function TodayPage() {
-  const { user, userProfile, isGuest } = useAuth()
+  const { user, userProfile, isGuest, isRealAdmin, impersonating, realUser } = useAuth()
   const navigate = useNavigate()
   const [todayWorkouts, setTodayWorkouts] = useState([])
   const [todayGroupWorkouts, setTodayGroupWorkouts] = useState([])
@@ -852,11 +852,16 @@ export default function TodayPage() {
       {/* Recent Activity */}
       {(() => {
         const visibleItems = feedItems.filter(item => {
+          // Admin: hide own items and impersonated user items
+          if (isRealAdmin) {
+            if (item.userId === realUser?.uid) return false
+            if (impersonating && item.userId === impersonating.uid) return false
+          }
           if (item.userId === user?.uid) return true
           const visibility = item.visibility || 'public'
           if (visibility === 'private') return false
           if (visibility === 'friends') return friendSet.has(item.userId)
-          if (visibility === 'group') return false // group items need group membership check
+          if (visibility === 'group') return false
           return true // public
         })
         return visibleItems.length > 0 ? (

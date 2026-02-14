@@ -58,7 +58,7 @@ function FriendButton({ friendStatus, loading, onAction }) {
 
 export default function ProfilePage() {
   const { userId: handle } = useParams() // Can be username or uid
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, isRealAdmin } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [profile, setProfile] = useState(null)
@@ -161,6 +161,7 @@ export default function ProfilePage() {
       const defaultVis = userData.defaultVisibility || (userData.isPrivate ? 'private' : 'public')
       const isFriend = currentFriendStatus.status === FRIEND_STATUS.FRIENDS
       const canView = targetUserId === currentUser?.uid || 
+                       isRealAdmin ||
                        defaultVis === 'public' || 
                        (defaultVis === 'friends' && isFriend)
       
@@ -437,6 +438,15 @@ export default function ProfilePage() {
           <div className="flex-1">
             <h1 className="text-2xl font-display text-iron-100">
               {profile.displayName || 'User'}
+              {isRealAdmin && !isOwnProfile && (
+                <span className={`ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle ${
+                  (profile.defaultVisibility || 'public') === 'public' ? 'bg-green-500/10 text-green-400' :
+                  (profile.defaultVisibility) === 'friends' ? 'bg-blue-500/10 text-blue-400' :
+                  'bg-red-500/10 text-red-400'
+                }`}>
+                  {(profile.defaultVisibility || 'public')}
+                </span>
+              )}
             </h1>
             {profile.username && (
               <p className="text-sm text-flame-400">@{profile.username}</p>

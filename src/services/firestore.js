@@ -211,9 +211,10 @@ export const workoutService = {
   async completeWorkout(workoutId, exercisesWithActuals, userId) {
     const docRef = doc(db, 'workouts', workoutId);
     
-    // Get workout name for feed
+    // Get workout name and trainer request link for feed
     const workoutDoc = await getDoc(docRef);
-    const workoutName = workoutDoc.data()?.name || 'Workout';
+    const workoutData = workoutDoc.data();
+    const workoutName = workoutData?.name || 'Workout';
     
     await updateDoc(docRef, {
       exercises: exercisesWithActuals,
@@ -222,9 +223,15 @@ export const workoutService = {
       updatedAt: serverTimestamp(),
     });
     
+    // Auto-complete linked trainer request
+    if (workoutData?.trainerRequestId) {
+      try {
+        await trainerRequestService.complete(workoutData.trainerRequestId, workoutId, '');
+      } catch (e) { console.error('Trainer request auto-complete error:', e); }
+    }
+    
     // Check goals
-    const workoutData = { exercises: exercisesWithActuals };
-    await this.checkAndUpdateGoals(userId, workoutData);
+    await this.checkAndUpdateGoals(userId, { exercises: exercisesWithActuals });
     
     // Track analytics
     analyticsService.logAction(userId, ACTIONS.WORKOUT_COMPLETED, {
@@ -282,6 +289,13 @@ export const workoutService = {
       }
     } catch (e) {
       console.error('Feed error:', e);
+    }
+
+    // Auto-complete linked trainer request
+    if (workoutData?.trainerRequestId) {
+      try {
+        await trainerRequestService.complete(workoutData.trainerRequestId, workoutId, '');
+      } catch (e) { console.error('Trainer request auto-complete error:', e); }
     }
 
     return { id: workoutId, status: 'completed' };
@@ -1589,6 +1603,28 @@ export const trainerRequestService = {
     );
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  // Get all requests (including completed/denied)
+  async getAll() {
+    const q = query(collection(db, 'trainerRequests'));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  // Deny a request (refunds handled by caller)
+  async deny(requestId, reason) {
+    const ref = doc(db, 'trainerRequests', requestId);
+    await updateDoc(ref, {
+      status: 'denied',
+      denyReason: reason || '',
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  // Delete a request permanently
+  async delete(requestId) {
+    await deleteDoc(doc(db, 'trainerRequests', requestId));
   },
 
   // Claim a request (trainer starts working on it)

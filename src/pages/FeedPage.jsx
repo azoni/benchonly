@@ -26,7 +26,7 @@ import { collection, getDocs, query } from 'firebase/firestore'
 import { db } from '../services/firebase'
 
 export default function FeedPage() {
-  const { user, isGuest, isAppAdmin } = useAuth()
+  const { user, isGuest, isAppAdmin, isRealAdmin, impersonating, realUser } = useAuth()
   const [feedItems, setFeedItems] = useState([])
   const [users, setUsers] = useState({})
   const [loading, setLoading] = useState(true)
@@ -45,6 +45,13 @@ export default function FeedPage() {
   // Visibility check — determines if current user can see a feed item
   const canSeeItem = (item) => {
     if (!user) return item.visibility === 'public' || !item.visibility
+
+    // Admin: hide own items and impersonated user items from feed
+    if (isRealAdmin) {
+      if (item.userId === realUser?.uid) return false
+      if (impersonating && item.userId === impersonating.uid) return false
+    }
+
     if (item.userId === user.uid) return true
 
     const visibility = item.visibility || 'public'

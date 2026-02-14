@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
@@ -29,6 +29,7 @@ import { getDisplayDate, toDateString } from '../utils/dateUtils'
 
 export default function WorkoutsPage() {
   const { user, userProfile, updateProfile, isGuest, isAppAdmin } = useAuth()
+  const navigate = useNavigate()
   const [workouts, setWorkouts] = useState([])
   const [pendingReviews, setPendingReviews] = useState([])
   const [loading, setLoading] = useState(true)
@@ -553,7 +554,9 @@ export default function WorkoutsPage() {
 
                 {/* Actions Menu - not for recurring */}
                 {!isRecurring && (
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+                  >
                     <button
                       onClick={(e) => {
                         e.preventDefault()
@@ -573,21 +576,27 @@ export default function WorkoutsPage() {
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.95 }}
                           className="absolute right-0 top-full mt-1 bg-iron-800 border border-iron-700
-                            rounded-lg shadow-xl z-20 py-1 min-w-[140px]"
+                            rounded-lg shadow-xl z-50 py-1 min-w-[140px]"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {!workout.isGroupWorkout && (
-                            <Link
-                              to={`/workouts/${workout.id}/edit`}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setActiveMenu(null)
+                                navigate(`/workouts/${workout.id}/edit`)
+                              }}
                               className="flex items-center gap-2 px-4 py-2 text-sm text-iron-300
-                                hover:bg-iron-700 transition-colors"
+                                hover:bg-iron-700 transition-colors w-full"
                             >
                               <Edit2 className="w-4 h-4" />
                               Edit
-                            </Link>
+                            </button>
                           )}
                           {!workout.isGroupWorkout && workout.status === 'scheduled' && (
                             <button
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation()
                                 setActiveMenu(null)
                                 openTrainerRequest('review', workout.id)
                               }}
@@ -599,7 +608,10 @@ export default function WorkoutsPage() {
                             </button>
                           )}
                           <button
-                            onClick={() => handleDelete(workout)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDelete(workout)
+                            }}
                             className={`flex items-center gap-2 px-4 py-2 text-sm w-full transition-colors ${
                               pendingDeleteId === workout.id
                                 ? 'text-white bg-red-500 hover:bg-red-600'
@@ -611,7 +623,11 @@ export default function WorkoutsPage() {
                           </button>
                           {pendingDeleteId === workout.id && (
                             <button
-                              onClick={() => { setPendingDeleteId(null); setActiveMenu(null) }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setPendingDeleteId(null)
+                                setActiveMenu(null)
+                              }}
                               className="flex items-center gap-2 px-4 py-2 text-sm text-iron-400 hover:bg-iron-700 transition-colors w-full"
                             >
                               Cancel
