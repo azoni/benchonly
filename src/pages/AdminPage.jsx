@@ -726,7 +726,7 @@ export default function AdminPage() {
                       <option value="drill-sergeant">Drill Sergeant</option>
                       <option value="bro">Gym Bro</option>
                       <option value="scientist">Scientist</option>
-                      <option value="comedian">Comedy</option>
+                      <option value="comedian">Trash Talk</option>
                     </select>
                   </div>
                   {/* Trainer status */}

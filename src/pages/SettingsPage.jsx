@@ -363,11 +363,11 @@ export default function SettingsPage() {
 
   // AI Coach personality options
   const PERSONALITIES = [
-    { key: 'coach', label: 'Coach', description: 'Direct and knowledgeable. References your data, gives clear advice.', Icon: Dumbbell },
-    { key: 'drill-sergeant', label: 'Drill Sergeant', description: 'No excuses. Pushes you hard, calls out weak points. Not for the faint-hearted.', Icon: Shield },
-    { key: 'bro', label: 'Gym Bro', description: 'Hype energy. Calls everything "sick" and "gains". Always pumped for you.', Icon: Zap },
-    { key: 'scientist', label: 'Sports Scientist', description: 'Data-driven. Explains the biomechanics and periodization science behind everything.', Icon: FlaskConical },
-    { key: 'comedian', label: 'Comedy Coach', description: 'Roasts your lifts (lovingly). Makes training fun with jokes and one-liners.', Icon: Smile },
+    { key: 'coach', label: 'Coach', description: 'Direct and knowledgeable. Clear, actionable advice.', Icon: Dumbbell },
+    { key: 'drill-sergeant', label: 'Drill Sergeant', description: 'Tough love. Blunt feedback, holds you accountable.', Icon: Shield },
+    { key: 'bro', label: 'Gym Bro', description: 'Casual gym buddy energy. Encouraging, keeps it real.', Icon: Zap },
+    { key: 'scientist', label: 'Sports Scientist', description: 'Evidence-based. Explains the science behind the programming.', Icon: FlaskConical },
+    { key: 'comedian', label: 'Trash Talk', description: 'Real advice with dry wit and a sarcastic edge.', Icon: Smile },
   ]
 
   const handlePersonalityChange = async (key) => {

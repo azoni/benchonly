@@ -33,6 +33,7 @@ import {
 } from '../services/firestore'
 import { feedService } from '../services/feedService'
 import { notificationService } from '../services/feedService'
+import { friendService } from '../services/friendService'
 import { format, startOfWeek, endOfWeek, subDays, addDays, isToday, startOfDay } from 'date-fns'
 import { toDateString } from '../utils/dateUtils'
 
@@ -50,6 +51,7 @@ export default function TodayPage() {
   const [weekDayWorkouts, setWeekDayWorkouts] = useState({}) // dateStr -> { type, id }
   const [feedItems, setFeedItems] = useState([])
   const [feedUsers, setFeedUsers] = useState({})
+  const [friendSet, setFriendSet] = useState(new Set())
   const [goals, setGoals] = useState([])
   const [todayProgramDay, setTodayProgramDay] = useState(null)
   const [nextProgramDay, setNextProgramDay] = useState(null)
@@ -206,17 +208,19 @@ export default function TodayPage() {
       setPendingReviews(reviews)
       setGoals(goalsData.filter(g => g.status === 'active'))
 
-      // Load feed + users + notifications in background (doesn't block page render)
+      // Load feed + users + notifications + friends in background (doesn't block page render)
       Promise.all([
         feedService.getFeed(5),
         userService.getAll(),
         notificationService.getUnread(user.uid),
-      ]).then(([feedRes, allUsers, notifs]) => {
+        friendService.getFriendSet(user.uid),
+      ]).then(([feedRes, allUsers, notifs, friends]) => {
         setFeedItems(feedRes?.items || [])
         const usersMap = {}
         ;(allUsers || []).forEach(u => { usersMap[u.uid] = u })
         setFeedUsers(usersMap)
         setNotifications(notifs || [])
+        setFriendSet(friends || new Set())
       }).catch(() => {})
 
       // This week's stats
@@ -846,7 +850,16 @@ export default function TodayPage() {
       )}
 
       {/* Recent Activity */}
-      {feedItems.length > 0 && (
+      {(() => {
+        const visibleItems = feedItems.filter(item => {
+          if (item.userId === user?.uid) return true
+          const visibility = item.visibility || 'public'
+          if (visibility === 'private') return false
+          if (visibility === 'friends') return friendSet.has(item.userId)
+          if (visibility === 'group') return false // group items need group membership check
+          return true // public
+        })
+        return visibleItems.length > 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -860,7 +873,7 @@ export default function TodayPage() {
             <Link to="/feed" className="text-xs text-flame-400 hover:text-flame-300">View all →</Link>
           </div>
           <div className="card-steel divide-y divide-iron-800">
-            {feedItems.slice(0, 4).map(item => {
+            {visibleItems.slice(0, 4).map(item => {
               const feedUser = feedUsers[item.userId]
               const userName = feedUser?.displayName || 'Someone'
               return (
@@ -891,7 +904,8 @@ export default function TodayPage() {
             })}
           </div>
         </motion.div>
-      )}
+      ) : null
+      })()}
 
       {/* News & Updates */}
       <motion.div
