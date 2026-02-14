@@ -19,6 +19,7 @@ import {
   Zap,
   Layers,
   BookOpen,
+  ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
@@ -26,7 +27,7 @@ import AIChatPanel from './AIChatPanel';
 import InstallPrompt from './InstallPrompt';
 import ErrorBoundary from './ErrorBoundary';
 import { analyticsService } from '../services/analyticsService';
-import { groupWorkoutService } from '../services/firestore';
+import { groupWorkoutService, trainerService } from '../services/firestore';
 import { notificationService } from '../services/feedService';
 
 const ADMIN_EMAILS = ['charltonuw@gmail.com'];
@@ -77,11 +78,19 @@ export default function Layout() {
   }, [location.pathname, user, isGuest])
 
   const isAdmin = isRealAdmin;
+  const isTrainer = trainerService.isTrainer(userProfile, user?.email);
   
-  // Add admin nav item if user is admin
-  const navItems = isAdmin 
-    ? [...baseNavItems, { path: '/admin', icon: Settings, label: 'Admin', isAdmin: true }]
-    : baseNavItems;
+  // Build nav items based on roles
+  const navItems = (() => {
+    let items = [...baseNavItems];
+    if (isTrainer) {
+      items.push({ path: '/trainer', icon: ClipboardList, label: 'Trainer', isTrainer: true });
+    }
+    if (isAdmin) {
+      items.push({ path: '/admin', icon: Settings, label: 'Admin', isAdmin: true });
+    }
+    return items;
+  })();
 
   const handleSignOut = async () => {
     await signOut();

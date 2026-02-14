@@ -26,6 +26,7 @@ import ProgramsPage from './pages/ProgramsPage'
 import ProgramDetailPage from './pages/ProgramDetailPage'
 import DocsPage from './pages/DocsPage'
 import OnboardingPage from './pages/OnboardingPage'
+import TrainerPage from './pages/TrainerPage'
 
 function ProtectedRoute({ children }) {
   const { user, userProfile, loading, isGuest } = useAuth()
@@ -172,6 +173,7 @@ export default function App() {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="usage" element={<UsagePage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="trainer" element={<TrainerPage />} />
         <Route path="admin" element={<AdminPage />} />
       </Route>
       

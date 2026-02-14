@@ -20,10 +20,11 @@ import {
   Save,
   Zap
 } from 'lucide-react'
+import { ClipboardList, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { collection, getDocs, query, orderBy, limit, doc, setDoc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../services/firebase'
-import { workoutService, goalService, creditService } from '../services/firestore'
+import { workoutService, goalService, creditService, trainerService } from '../services/firestore'
 import { analyticsService } from '../services/analyticsService'
 import { format, formatDistanceToNow } from 'date-fns'
 
@@ -42,8 +43,13 @@ export default function AdminPage() {
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [showWorkoutModal, setShowWorkoutModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
-  const [activeTab, setActiveTab] = useState('users') // 'users', 'activity', 'usage', or 'settings'
+  const [activeTab, setActiveTab] = useState('users') // 'users', 'activity', 'usage', 'settings', or 'trainers'
   const [activityData, setActivityData] = useState(null)
+
+  // Trainer management state
+  const [trainerApplications, setTrainerApplications] = useState([])
+  const [trainerAppsLoading, setTrainerAppsLoading] = useState(false)
+  const [trainerActionLoading, setTrainerActionLoading] = useState(null)
   
   // AI Settings state
   const [aiSettings, setAiSettings] = useState({
@@ -169,7 +175,47 @@ export default function AdminPage() {
     if (activeTab === 'settings') {
       loadSettings()
     }
+    if (activeTab === 'trainers' && trainerApplications.length === 0) {
+      loadTrainerApplications()
+    }
   }, [activeTab])
+
+  const loadTrainerApplications = async () => {
+    setTrainerAppsLoading(true)
+    try {
+      const apps = await trainerService.getPendingApplications()
+      setTrainerApplications(apps)
+    } catch (err) {
+      console.error('Error loading trainer applications:', err)
+    } finally {
+      setTrainerAppsLoading(false)
+    }
+  }
+
+  const handleTrainerAppReview = async (appId, status) => {
+    setTrainerActionLoading(appId)
+    try {
+      await trainerService.reviewApplication(appId, status)
+      setTrainerApplications(prev => prev.filter(a => a.id !== appId))
+    } catch (err) {
+      console.error('Error reviewing application:', err)
+      alert('Failed to process application')
+    } finally {
+      setTrainerActionLoading(null)
+    }
+  }
+
+  const handleToggleTrainer = async (userId, currentStatus) => {
+    try {
+      const userRef = doc(db, 'users', userId)
+      await updateDoc(userRef, { isTrainer: !currentStatus })
+      setUsers(prev => prev.map(u =>
+        u.id === userId ? { ...u, isTrainer: !currentStatus } : u
+      ))
+    } catch (err) {
+      console.error('Error toggling trainer status:', err)
+    }
+  }
 
   const loadSettings = async () => {
     try {
@@ -388,6 +434,17 @@ export default function AdminPage() {
         >
           <Settings className="w-4 h-4" />
           Settings
+        </button>
+        <button
+          onClick={() => setActiveTab('trainers')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
+            activeTab === 'trainers'
+              ? 'bg-flame-500 text-white'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <ClipboardList className="w-4 h-4" />
+          Trainers
         </button>
       </div>
 
@@ -1170,6 +1227,99 @@ export default function AdminPage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Trainers Tab */}
+      {activeTab === 'trainers' && (
+        <div className="max-w-2xl space-y-6">
+          {/* Pending Applications */}
+          <div className="card-steel p-6">
+            <h2 className="font-display text-lg text-iron-100 mb-4">Pending Applications</h2>
+            {trainerAppsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-iron-500 py-4">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading applications...
+              </div>
+            ) : trainerApplications.length === 0 ? (
+              <p className="text-sm text-iron-500 py-4">No pending applications.</p>
+            ) : (
+              <div className="space-y-3">
+                {trainerApplications.map(app => (
+                  <div key={app.id} className="p-4 bg-iron-800/50 rounded-xl border border-iron-700/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-medium text-iron-200">{app.displayName || app.email}</p>
+                        <p className="text-xs text-iron-500">{app.email}</p>
+                      </div>
+                      <span className="text-xs text-iron-600">
+                        {app.createdAt?.toDate ? format(app.createdAt?.toDate?.(), 'MMM d') : ''}
+                      </span>
+                    </div>
+                    {app.notes && (
+                      <p className="text-sm text-iron-400 mb-3 p-2 bg-iron-900/50 rounded">{app.notes}</p>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleTrainerAppReview(app.id, 'approved')}
+                        disabled={trainerActionLoading === app.id}
+                        className="flex-1 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-medium
+                          hover:bg-green-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
+                        {trainerActionLoading === app.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => handleTrainerAppReview(app.id, 'denied')}
+                        disabled={trainerActionLoading === app.id}
+                        className="flex-1 py-2 bg-red-500/10 text-red-400 rounded-lg text-sm font-medium
+                          hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Current Trainers */}
+          <div className="card-steel p-6">
+            <h2 className="font-display text-lg text-iron-100 mb-4">Active Trainers</h2>
+            <div className="space-y-2">
+              {users.filter(u => u.isTrainer || u.email === 'charltonuw@gmail.com').map(u => (
+                <div key={u.id} className="flex items-center justify-between p-3 bg-iron-800/50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-iron-700 flex items-center justify-center overflow-hidden">
+                      {u.photoURL ? (
+                        <img src={u.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" />
+                      ) : (
+                        <Users className="w-4 h-4 text-iron-400" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm text-iron-200">{u.displayName || u.email}</p>
+                      <p className="text-xs text-iron-500">
+                        {u.email === 'charltonuw@gmail.com' ? 'Admin (always trainer)' : 'Approved trainer'}
+                      </p>
+                    </div>
+                  </div>
+                  {u.email !== 'charltonuw@gmail.com' && (
+                    <button
+                      onClick={() => handleToggleTrainer(u.id, u.isTrainer)}
+                      className="text-xs px-3 py-1 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+              {users.filter(u => u.isTrainer || u.email === 'charltonuw@gmail.com').length === 0 && (
+                <p className="text-sm text-iron-500">No active trainers besides admin.</p>
+              )}
             </div>
           </div>
         </div>

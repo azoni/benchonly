@@ -1099,6 +1099,8 @@ export const CREDIT_COSTS = {
   'generate-workout': 5,
   'generate-group-workout': 5, // per athlete
   'generate-program': 10,
+  'trainer-custom-workout': 100,
+  'trainer-review': 50,
 };
 
 export const PREMIUM_CREDIT_COST = 100;
@@ -1471,4 +1473,219 @@ export const recurringActivityService = {
     await deleteDoc(skipRef);
     return { activityId, date: dateStr, skipped: false };
   }
+};
+
+// ============ TRAINER SYSTEM ============
+
+const ADMIN_EMAIL = 'charltonuw@gmail.com';
+
+export const trainerService = {
+  // Apply to become a trainer
+  async apply(userId, applicationData) {
+    const docRef = await addDoc(collection(db, 'trainerApplications'), {
+      userId,
+      ...applicationData,
+      status: 'pending', // pending | approved | denied
+      createdAt: serverTimestamp(),
+    });
+    return { id: docRef.id };
+  },
+
+  // Get user's application status
+  async getApplication(userId) {
+    const q = query(
+      collection(db, 'trainerApplications'),
+      where('userId', '==', userId),
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    // Return the most recent
+    const apps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    apps.sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0));
+    return apps[0];
+  },
+
+  // Get all pending applications (admin)
+  async getPendingApplications() {
+    const q = query(
+      collection(db, 'trainerApplications'),
+      where('status', '==', 'pending'),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  // Approve/deny application (admin)
+  async reviewApplication(applicationId, status) {
+    const ref = doc(db, 'trainerApplications', applicationId);
+    const appSnap = await getDoc(ref);
+    if (!appSnap.exists()) throw new Error('Application not found');
+    const appData = appSnap.data();
+
+    await updateDoc(ref, { status, reviewedAt: serverTimestamp() });
+
+    // If approved, set the user's isTrainer flag
+    if (status === 'approved') {
+      const userRef = doc(db, 'users', appData.userId);
+      await updateDoc(userRef, { isTrainer: true });
+    }
+    return { success: true };
+  },
+
+  // Check if user is trainer (admin always is)
+  isTrainer(userProfile, userEmail) {
+    if (userEmail === ADMIN_EMAIL) return true;
+    return userProfile?.isTrainer === true;
+  },
+};
+
+export const trainerRequestService = {
+  // Create a new request (custom workout or review)
+  async create(userId, requestData) {
+    const docRef = await addDoc(collection(db, 'trainerRequests'), {
+      userId,
+      ...requestData,
+      status: 'pending', // pending | in_progress | completed | cancelled
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return { id: docRef.id };
+  },
+
+  // Get requests by user
+  async getByUser(userId) {
+    const q = query(
+      collection(db, 'trainerRequests'),
+      where('userId', '==', userId),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  // Get all pending/in-progress requests (trainer view)
+  async getPending() {
+    const q = query(
+      collection(db, 'trainerRequests'),
+      where('status', 'in', ['pending', 'in_progress']),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  // Claim a request (trainer starts working on it)
+  async claim(requestId, trainerId) {
+    const ref = doc(db, 'trainerRequests', requestId);
+    await updateDoc(ref, {
+      status: 'in_progress',
+      trainerId,
+      claimedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  // Complete a request with workout data
+  async complete(requestId, workoutId, trainerNotes) {
+    const ref = doc(db, 'trainerRequests', requestId);
+    await updateDoc(ref, {
+      status: 'completed',
+      workoutId,
+      trainerNotes: trainerNotes || '',
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  // Cancel a request (user or admin)
+  async cancel(requestId) {
+    const ref = doc(db, 'trainerRequests', requestId);
+    await updateDoc(ref, {
+      status: 'cancelled',
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  // Get single request
+  async get(requestId) {
+    const ref = doc(db, 'trainerRequests', requestId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() };
+  },
+
+  // Get user context summary for trainer to view
+  async getUserSummary(userId) {
+    // Fetch workouts, goals, profile
+    const [userSnap, goalDocs, workoutDocs] = await Promise.all([
+      getDoc(doc(db, 'users', userId)),
+      getDocs(query(collection(db, 'workouts'), where('userId', '==', userId), limit(30))),
+      getDocs(query(collection(db, 'goals'), where('userId', '==', userId))),
+    ]);
+
+    const profile = userSnap.exists() ? userSnap.data() : {};
+    const workouts = workoutDocs.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(w => w.status === 'completed')
+      .sort((a, b) => {
+        const da = a.date?.toDate?.() || new Date(a.date || 0);
+        const db2 = b.date?.toDate?.() || new Date(b.date || 0);
+        return db2 - da;
+      });
+
+    const goals = goalDocs.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Build max lifts + pain from workouts
+    const maxLifts = {};
+    const painHistory = {};
+    workouts.slice(0, 20).forEach(w => {
+      (w.exercises || []).forEach(ex => {
+        if (!ex.name) return;
+        (ex.sets || []).forEach(s => {
+          const weight = parseFloat(s.actualWeight) || parseFloat(s.prescribedWeight) || 0;
+          const reps = parseInt(s.actualReps) || parseInt(s.prescribedReps) || 0;
+          const pain = parseInt(s.painLevel) || 0;
+          if (weight > 0 && reps > 0 && reps <= 12) {
+            const e1rm = Math.round(weight * (1 + reps / 30));
+            if (!maxLifts[ex.name] || e1rm > maxLifts[ex.name].e1rm) {
+              maxLifts[ex.name] = { weight, reps, e1rm };
+            }
+          }
+          if (pain > 0) {
+            if (!painHistory[ex.name]) painHistory[ex.name] = { maxPain: 0, count: 0 };
+            painHistory[ex.name].count++;
+            painHistory[ex.name].maxPain = Math.max(painHistory[ex.name].maxPain, pain);
+          }
+        });
+      });
+    });
+
+    return {
+      profile: {
+        displayName: profile.displayName,
+        weight: profile.weight,
+        height: profile.height,
+        age: profile.age,
+        activityLevel: profile.activityLevel,
+      },
+      recentWorkouts: workouts.slice(0, 5).map(w => ({
+        name: w.name,
+        date: w.date?.toDate?.()?.toISOString?.()?.split('T')[0] || w.date,
+        exercises: (w.exercises || []).map(e => ({
+          name: e.name,
+          type: e.type || 'weight',
+          sets: (e.sets || []).map(s => ({
+            prescribedWeight: s.prescribedWeight, prescribedReps: s.prescribedReps,
+            actualWeight: s.actualWeight, actualReps: s.actualReps,
+            rpe: s.rpe, painLevel: s.painLevel,
+          })),
+        })),
+      })),
+      maxLifts,
+      painHistory,
+      goals: goals.filter(g => g.status === 'active').map(g => ({
+        lift: g.lift, metricType: g.metricType,
+        currentWeight: g.currentWeight || g.currentValue,
+        targetWeight: g.targetWeight || g.targetValue,
+      })),
+    };
+  },
 };

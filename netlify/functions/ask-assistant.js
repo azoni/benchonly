@@ -6,9 +6,148 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
+/**
+ * Build the full user context string from the context object.
+ */
+function buildContextString(context) {
+  const userContext = []
+
+  // Profile info
+  if (context?.profile) {
+    const p = context.profile
+    const bits = []
+    if (p.displayName) bits.push(`Name: ${p.displayName}`)
+    if (p.weight) bits.push(`Weight: ${p.weight}lbs`)
+    if (p.height) bits.push(`Height: ${p.height}`)
+    if (p.age) bits.push(`Age: ${p.age}`)
+    if (p.activityLevel) bits.push(`Activity level: ${p.activityLevel}`)
+    if (bits.length) userContext.push(bits.join(' | '))
+  }
+
+  // Max lifts
+  if (context?.maxLifts && Object.keys(context.maxLifts).length > 0) {
+    const lifts = Object.entries(context.maxLifts)
+      .sort((a, b) => b[1].e1rm - a[1].e1rm)
+      .slice(0, 8)
+      .map(([name, d]) => `${name}: ${d.e1rm}lb e1RM (${d.weight}x${d.reps})`)
+    userContext.push(`MAX LIFTS:\n${lifts.join('\n')}`)
+  }
+
+  // Pain history
+  if (context?.painHistory && Object.keys(context.painHistory).length > 0) {
+    const pains = Object.entries(context.painHistory)
+      .map(([name, d]) => {
+        let s = `${name}: ${d.maxPain}/10 pain (${d.count}x`
+        if (d.lastDaysAgo != null) s += `, last ${d.lastDaysAgo}d ago`
+        if (d.recentCount) s += `, ${d.recentCount}x in 30d`
+        s += ')'
+        return s
+      })
+    userContext.push(`PAIN HISTORY:\n${pains.join('\n')}`)
+  }
+
+  // RPE averages
+  if (context?.rpeAverages && Object.keys(context.rpeAverages).length > 0) {
+    const rpes = Object.entries(context.rpeAverages)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, avg]) => `${name}: avg RPE ${avg}`)
+    userContext.push(`RPE AVERAGES:\n${rpes.join('\n')}`)
+  }
+
+  // Full recent workout details (set-by-set) — last 3
+  if (context?.recentWorkoutsFull?.length) {
+    const details = context.recentWorkoutsFull.slice(0, 3).map(w => {
+      let s = `--- ${w.name || 'Workout'} (${w.date}) ---`
+      ;(w.exercises || []).forEach(ex => {
+        s += `\n  ${ex.name} [${ex.type || 'weight'}]:`
+        ;(ex.sets || []).forEach((set, i) => {
+          const parts = []
+          if (set.prescribedWeight) parts.push(`target: ${set.prescribedWeight}lbs x ${set.prescribedReps || '?'}`)
+          if (set.actualWeight) parts.push(`actual: ${set.actualWeight}lbs x ${set.actualReps || '?'}`)
+          else if (set.actualReps) parts.push(`actual: ${set.actualReps} reps`)
+          if (set.prescribedTime) parts.push(`target: ${set.prescribedTime}s`)
+          if (set.actualTime) parts.push(`actual: ${set.actualTime}s`)
+          if (set.rpe) parts.push(`RPE ${set.rpe}`)
+          if (set.painLevel > 0) parts.push(`pain ${set.painLevel}/10`)
+          s += `\n    Set ${i + 1}: ${parts.join(' | ')}`
+        })
+      })
+      return s
+    }).join('\n\n')
+    userContext.push(`RECENT WORKOUTS (FULL DETAIL):\n${details}`)
+  }
+
+  // Workout summaries (older workouts beyond the 3 detailed ones)
+  if (context?.recentWorkouts?.length) {
+    const summary = context.recentWorkouts.slice(0, 5).map(w => {
+      const exNames = w.exercises?.map(e => e.name).join(', ') || ''
+      return `${w.date}: ${w.name}${exNames ? ` [${exNames}]` : ''}`
+    }).join('\n')
+    userContext.push(`OLDER WORKOUTS (SUMMARY):\n${summary}`)
+  }
+
+  // Recent cardio
+  if (context?.cardioWorkouts?.length) {
+    const cardioSummary = context.cardioWorkouts.slice(0, 5).map(w =>
+      `${w.date}: ${w.name || w.cardioType || 'Cardio'} (${w.duration}min${w.distance ? `, ${w.distance}mi` : ''}${w.calories ? `, ${w.calories}cal` : ''})`
+    ).join('\n')
+    userContext.push(`RECENT CARDIO:\n${cardioSummary}`)
+  }
+
+  // Goals
+  if (context?.goals?.length) {
+    const goalsSummary = context.goals.map(g => {
+      const current = g.currentWeight || g.currentValue || '?'
+      const target = g.targetWeight || g.targetValue || '?'
+      return `${g.lift || g.metricType}: ${current} -> ${target}${g.targetDate ? ` by ${g.targetDate}` : ''}`
+    }).join('\n')
+    userContext.push(`ACTIVE GOALS:\n${goalsSummary}`)
+  }
+
+  // Health data
+  if (context?.health && Object.keys(context.health).length > 0) {
+    const h = context.health
+    const info = []
+    if (h.recentWeight) info.push(`Current weight: ${h.recentWeight}lbs`)
+    if (h.avgSleep) info.push(`Avg sleep: ${h.avgSleep}hrs`)
+    if (h.avgProtein) info.push(`Avg protein: ${h.avgProtein}g`)
+    if (h.avgCalories) info.push(`Avg calories: ${h.avgCalories}`)
+    if (info.length) userContext.push(`HEALTH METRICS:\n${info.join('\n')}`)
+  }
+
+  // Oura data
+  if (context?.ouraData) {
+    const { latest, averages } = context.ouraData
+    const info = []
+    if (latest?.readiness?.score) info.push(`Today readiness: ${latest.readiness.score}/100`)
+    if (latest?.sleep?.score) info.push(`Last sleep: ${latest.sleep.score}/100`)
+    if (latest?.activity?.score) info.push(`Activity score: ${latest.activity.score}/100`)
+    if (averages?.readinessScore) info.push(`7-day avg readiness: ${averages.readinessScore}`)
+    if (info.length) userContext.push(`OURA RING:\n${info.join('\n')}`)
+  }
+
+  // Schedules
+  if (context?.schedules?.length) {
+    const s = context.schedules.map(s =>
+      `${s.name}${s.days ? ` (${Array.isArray(s.days) ? s.days.join(', ') : s.days})` : ''}${s.duration ? ` ${s.duration}min` : ''}`
+    ).join(', ')
+    userContext.push(`SCHEDULED ACTIVITIES: ${s}`)
+  }
+
+  // Recurring
+  if (context?.recurringActivities?.length) {
+    const r = context.recurringActivities.map(r =>
+      `${r.name} (${r.type || 'activity'}${r.days ? `, ${Array.isArray(r.days) ? r.days.join(', ') : r.days}` : ''})`
+    ).join(', ')
+    userContext.push(`RECURRING HABITS: ${r}`)
+  }
+
+  return userContext.length ? `\n\nUser data:\n${userContext.join('\n\n')}` : ''
+}
+
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
-
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, headers: CORS_HEADERS, body: 'Method Not Allowed' }
   }
@@ -17,116 +156,100 @@ export async function handler(event) {
   if (!auth) return UNAUTHORIZED;
 
   try {
-    const { message, context } = JSON.parse(event.body)
+    const { message, context, mode } = JSON.parse(event.body)
     const userId = auth.uid;
+    const contextString = buildContextString(context)
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    const personality = context?.personality || 'coach'
 
-    // Build rich user context summary
-    const userContext = []
-    
-    // Profile info
-    if (context?.profile) {
-      const p = context.profile
-      const profileBits = []
-      if (p.displayName) profileBits.push(`Name: ${p.displayName}`)
-      if (p.weight) profileBits.push(`Weight: ${p.weight}lbs`)
-      if (p.height) profileBits.push(`Height: ${p.height}`)
-      if (p.age) profileBits.push(`Age: ${p.age}`)
-      if (p.activityLevel) profileBits.push(`Activity level: ${p.activityLevel}`)
-      if (profileBits.length) userContext.push(profileBits.join(' | '))
-    }
-    
-    // Max lifts (most useful for the AI)
-    if (context?.maxLifts && Object.keys(context.maxLifts).length > 0) {
-      const lifts = Object.entries(context.maxLifts)
-        .sort((a, b) => b[1].e1rm - a[1].e1rm)
-        .slice(0, 8)
-        .map(([name, d]) => `${name}: ${d.e1rm}lb e1RM (${d.weight}x${d.reps})`)
-      userContext.push(`MAX LIFTS:\n${lifts.join('\n')}`)
-    }
-    
-    // Pain history
-    if (context?.painHistory && Object.keys(context.painHistory).length > 0) {
-      const pains = Object.entries(context.painHistory)
-        .map(([name, d]) => `${name}: ${d.maxPain}/10 pain (${d.count} occurrences)`)
-      userContext.push(`PAIN HISTORY:\n${pains.join('\n')}`)
-    }
-    
-    // RPE averages
-    if (context?.rpeAverages && Object.keys(context.rpeAverages).length > 0) {
-      const rpes = Object.entries(context.rpeAverages)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
-        .map(([name, avg]) => `${name}: avg RPE ${avg}`)
-      userContext.push(`RPE AVERAGES:\n${rpes.join('\n')}`)
-    }
-    
-    // Recent strength workouts
-    const strengthWorkouts = context?.recentWorkouts || []
-    if (strengthWorkouts.length) {
-      const summary = strengthWorkouts.slice(0, 5).map(w => {
-        const exNames = w.exercises?.map(e => e.name).join(', ') || ''
-        return `${w.date}: ${w.name}${exNames ? ` [${exNames}]` : ''}`
-      }).join('\n')
-      userContext.push(`RECENT WORKOUTS:\n${summary}`)
-    }
-    
-    // Recent cardio
-    const cardioWorkouts = context?.cardioWorkouts || context?.recentWorkouts?.filter(w => w.workoutType === 'cardio') || []
-    if (cardioWorkouts.length) {
-      const cardioSummary = cardioWorkouts.slice(0, 5).map(w => 
-        `${w.date}: ${w.name || w.cardioType || 'Cardio'} (${w.duration}min${w.distance ? `, ${w.distance}mi` : ''}${w.calories ? `, ${w.calories}cal` : ''})`
-      ).join('\n')
-      userContext.push(`RECENT CARDIO:\n${cardioSummary}`)
-    }
-    
-    // Goals
-    if (context?.goals?.length) {
-      const goalsSummary = context.goals.map(g => {
-        const current = g.currentWeight || g.currentValue || '?'
-        const target = g.targetWeight || g.targetValue || '?'
-        return `${g.lift || g.metricType}: ${current} → ${target}${g.targetDate ? ` by ${g.targetDate}` : ''}`
-      }).join('\n')
-      userContext.push(`ACTIVE GOALS:\n${goalsSummary}`)
-    }
-    
-    // Health data
-    if (context?.health && Object.keys(context.health).length > 0) {
-      const h = context.health
-      const healthInfo = []
-      if (h.recentWeight) healthInfo.push(`Current weight: ${h.recentWeight}lbs`)
-      if (h.avgSleep) healthInfo.push(`Avg sleep: ${h.avgSleep}hrs`)
-      if (h.avgProtein) healthInfo.push(`Avg protein: ${h.avgProtein}g`)
-      if (h.avgCalories) healthInfo.push(`Avg calories: ${h.avgCalories}`)
-      if (healthInfo.length) userContext.push(`HEALTH METRICS:\n${healthInfo.join('\n')}`)
-    }
-    
-    // Scheduled activities
-    if (context?.schedules?.length) {
-      const schedSummary = context.schedules.map(s => 
-        `${s.name}${s.days ? ` (${Array.isArray(s.days) ? s.days.join(', ') : s.days})` : ''}${s.duration ? ` ${s.duration}min` : ''}`
-      ).join(', ')
-      userContext.push(`SCHEDULED ACTIVITIES: ${schedSummary}`)
-    }
-    
-    // Recurring activities
-    if (context?.recurringActivities?.length) {
-      const recurSummary = context.recurringActivities.map(r => 
-        `${r.name} (${r.type || 'activity'}${r.days ? `, ${Array.isArray(r.days) ? r.days.join(', ') : r.days}` : ''})`
-      ).join(', ')
-      userContext.push(`RECURRING HABITS: ${recurSummary}`)
+    // Personality modifiers
+    const PERSONALITY_PROMPTS = {
+      'coach': 'You are a knowledgeable, direct strength training coach. Warm but professional. Give clear, actionable advice.',
+      'drill-sergeant': 'You are an intense drill sergeant-style coach. No excuses, no sugar-coating. Push hard, demand accountability. Call out laziness. Use phrases like "Drop and give me 20" style energy. Still reference data accurately but with military intensity.',
+      'bro': 'You are the ultimate gym bro coach. Everything is "sick", "gains", "let\'s go king/queen". Super hyped and encouraging. Use gym slang naturally. Still reference real data but with maximum hype energy. End messages with pump-up one-liners.',
+      'scientist': 'You are a sports scientist and exercise physiologist. Explain the biomechanics, periodization science, and research behind your recommendations. Reference muscle groups, force vectors, volume landmarks, and recovery science. Still be personable but lead with data and evidence.',
+      'comedian': 'You are a comedy coach who roasts the user\'s lifts lovingly. Make training fun with jokes, puns, and one-liners about their data. Self-deprecating humor welcome. Still give solid advice but wrapped in humor. If they report pain, be funny but also actually helpful.',
     }
 
-    const contextString = userContext.length ? `\n\nUser data:\n${userContext.join('\n\n')}` : ''
+    const personalityPrompt = PERSONALITY_PROMPTS[personality] || PERSONALITY_PROMPTS['coach']
 
-    // Check if user is asking for a workout suggestion/generation
-    const isWorkoutRequest = /generate|create|make|suggest|give me|plan|recommend/i.test(message) && 
+    // ─── GREETING MODE ───
+    if (mode === 'greeting') {
+      const greetingPrompt = `${personalityPrompt} You know this athlete intimately. Today is ${today}.
+
+Based on the user's data below, generate a personalized greeting and 4 suggested quick actions.
+
+Respond with ONLY valid JSON (no markdown, no backticks, no extra text):
+{
+  "greeting": "A 1-2 sentence personalized greeting matching your personality. Reference something specific from their data — their last workout, a pain concern, a goal they're close to, how many days since they trained, their readiness score, or a recent PR. Use their first name if available.",
+  "quickActions": ["action1", "action2", "action3", "action4"]
+}
+
+Quick actions rules:
+- Each must be under 8 words
+- All 4 must be specific to THIS user's current situation
+- Reference their actual exercises, pain areas, goals, or recent data
+- Examples: "Why does my elbow hurt?", "Am I on track for 315 squat?", "Light session after yesterday's push day", "Review my deadlift progression"
+${contextString}`
+
+      const startTime = Date.now()
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: greetingPrompt },
+          { role: 'user', content: 'Generate my greeting and quick actions.' }
+        ],
+        temperature: 0.8,
+        max_tokens: 300
+      })
+
+      const responseTime = Date.now() - startTime
+      const usage = completion.usage
+      const raw = completion.choices[0].message.content
+
+      // Defaults
+      let greeting = "Hey! Ready to train? I've got your full history — ask me anything."
+      let quickActions = ["What should I do today?", "How's my progress?", "Generate a workout", "Review my last session"]
+
+      try {
+        const cleaned = raw.replace(/```json|```/g, '').trim()
+        const parsed = JSON.parse(cleaned)
+        if (parsed.greeting) greeting = parsed.greeting
+        if (parsed.quickActions?.length) quickActions = parsed.quickActions.slice(0, 5)
+      } catch (e) {
+        console.error('[ask-assistant] Failed to parse greeting:', e, raw)
+      }
+
+      const cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60
+      logActivity({
+        type: 'assistant_greeting',
+        title: 'AI Coach Greeting',
+        model: 'gpt-4o-mini',
+        tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
+        cost,
+      })
+
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        body: JSON.stringify({ greeting, quickActions, usage: {
+          userId, feature: 'ask-assistant-greeting', model: 'gpt-4o-mini',
+          promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens,
+          totalTokens: usage.total_tokens, estimatedCost: cost, responseTimeMs: responseTime,
+          createdAt: new Date().toISOString()
+        }})
+      }
+    }
+
+    // ─── REGULAR CHAT / WORKOUT GENERATION ───
+    const isWorkoutRequest = /generate|create|make|suggest|give me|plan|recommend/i.test(message) &&
                              /workout|routine|session|exercises|program/i.test(message)
 
-    const systemPrompt = isWorkoutRequest 
-      ? `You are a knowledgeable strength training coach. You have full access to the user's training data.
+    const systemPrompt = isWorkoutRequest
+      ? `${personalityPrompt} Today is ${today}. You have full access to the user's training data including set-by-set detail from recent sessions.
 
 Generate a workout and respond with BOTH:
-1. A brief explanation (2-3 sentences) referencing their specific data
+1. A brief explanation (2-3 sentences in your personality style) referencing their specific data — mention actual numbers, recent performance, pain to avoid, recovery status
 2. A JSON workout block in this exact format:
 
 \`\`\`workout
@@ -147,14 +270,17 @@ Generate a workout and respond with BOTH:
 \`\`\`
 
 Each exercise MUST have 3-5 set objects. Use e1RM data for working weights (70-85%). Avoid exercises with pain. Consider recent training to avoid overtraining.
-${contextString}
+${contextString}`
+      : `${personalityPrompt} Today is ${today}. You know this athlete well and have full access to their training data including set-by-set performance from recent workouts.
 
-${context?.recentWorkouts?.length ? `\nRecent workout details: ${JSON.stringify((context.recentWorkouts || []).slice(0, 2).map(w => ({ name: w.name, date: w.date, exercises: w.exercises?.slice(0, 4) })))}` : ''}`
-      : `You are a strength training assistant with access to the user's training data. Answer using their real numbers. Be direct — 2-3 sentences unless asked for detail.
+When they mention pain, discomfort, or soreness: analyze their recent workout data to identify likely causes. Look at weight jumps, high RPE sets, exercises they haven't done in a while, or volume spikes. Be specific — cite actual weights, reps, and RPE from their sessions.
+
+When they ask about progress: reference actual numbers and trends.
+
+Answer using their real data. Be direct — 2-3 sentences unless they ask for detail. Stay in character.
 ${contextString}`
 
     const startTime = Date.now()
-
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -162,43 +288,22 @@ ${contextString}`
         { role: 'user', content: message }
       ],
       temperature: 0.7,
-      max_tokens: isWorkoutRequest ? 1200 : 400
+      max_tokens: isWorkoutRequest ? 1200 : 500
     })
 
     const responseTime = Date.now() - startTime
     const usage = completion.usage
     const responseText = completion.choices[0].message.content
 
-    // Parse workout from response if present
     let workout = null
     const workoutMatch = responseText.match(/```workout\s*([\s\S]*?)\s*```/)
     if (workoutMatch) {
-      try {
-        workout = JSON.parse(workoutMatch[1])
-      } catch (e) {
-        console.error('Failed to parse workout JSON:', e)
-      }
+      try { workout = JSON.parse(workoutMatch[1]) } catch (e) { console.error('Failed to parse workout JSON:', e) }
     }
 
-    // Clean up the message (remove the JSON block for display)
     const cleanMessage = responseText.replace(/```workout[\s\S]*?```/g, '').trim()
-
-    // GPT-4o-mini: $0.15/$0.60 per 1M tokens
     const cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60
 
-    const tokenLog = {
-      userId,
-      feature: 'ask-assistant',
-      model: 'gpt-4o-mini',
-      promptTokens: usage.prompt_tokens,
-      completionTokens: usage.completion_tokens,
-      totalTokens: usage.total_tokens,
-      estimatedCost: cost,
-      responseTimeMs: responseTime,
-      createdAt: new Date().toISOString()
-    }
-
-    // Log to portfolio activity feed
     logActivity({
       type: 'assistant_chat',
       title: workout ? 'Assistant Generated Workout' : 'Assistant Answered Question',
@@ -210,14 +315,15 @@ ${contextString}`
 
     return {
       statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       body: JSON.stringify({
-        message: cleanMessage,
-        workout,
-        usage: tokenLog
+        message: cleanMessage, workout,
+        usage: {
+          userId, feature: 'ask-assistant', model: 'gpt-4o-mini',
+          promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens,
+          totalTokens: usage.total_tokens, estimatedCost: cost, responseTimeMs: responseTime,
+          createdAt: new Date().toISOString()
+        }
       })
     }
   } catch (error) {
@@ -225,10 +331,7 @@ ${contextString}`
     logError('ask-assistant', error, 'high', { action: 'chat' });
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       body: JSON.stringify({ error: 'Failed to get response', detail: error.message })
     }
   }

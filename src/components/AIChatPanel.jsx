@@ -13,17 +13,16 @@ export default function AIChatPanel() {
   const navigate = useNavigate();
   const { chatOpen, setChatOpen } = useUIStore();
   const { user, userProfile, updateProfile, isAppAdmin } = useAuth();
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: "Hey! I'm your workout assistant. I have access to your full training data — ask me about your lifts, pain history, goals, or say 'generate a workout' and I'll create one you can save.",
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [savingWorkout, setSavingWorkout] = useState(null);
   const [context, setContext] = useState(null);
   const [contextLoading, setContextLoading] = useState(false);
+  const [greetingLoading, setGreetingLoading] = useState(false);
+  const [quickActions, setQuickActions] = useState([]);
+  const [greetingFetched, setGreetingFetched] = useState(false);
+  const lastPersonalityRef = useRef(null);
   const [rateLimitInfo, setRateLimitInfo] = useState(() => {
     const now = Date.now();
     const HOUR = 60 * 60 * 1000;
@@ -41,8 +40,8 @@ export default function AIChatPanel() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  const RATE_LIMIT = 8; // requests per hour
-  const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour in ms
+  const RATE_LIMIT = 8;
+  const RATE_LIMIT_WINDOW = 60 * 60 * 1000;
   const DAILY_LIMIT = 25;
   const DAILY_WINDOW = 24 * 60 * 60 * 1000;
 
@@ -63,11 +62,28 @@ export default function AIChatPanel() {
     }
   }, [chatOpen]);
 
+  // Fetch greeting once context is ready
+  useEffect(() => {
+    if (context && !greetingFetched && chatOpen) {
+      fetchGreeting();
+    }
+  }, [context, greetingFetched, chatOpen]);
+
+  // Reset greeting if personality changes
+  useEffect(() => {
+    const currentPersonality = userProfile?.chatPersonality || 'coach';
+    if (lastPersonalityRef.current && lastPersonalityRef.current !== currentPersonality && greetingFetched) {
+      setGreetingFetched(false);
+      setMessages([]);
+      setQuickActions([]);
+    }
+    lastPersonalityRef.current = currentPersonality;
+  }, [userProfile?.chatPersonality]);
+
   const loadUserContext = async () => {
     if (!user) return;
     setContextLoading(true);
     try {
-      // Load everything in parallel
       const [goals, healthEntries, schedules, recurring] = await Promise.all([
         goalService.getByUser(user.uid).catch(() => []),
         healthService.getByUser(user.uid, 14).catch(() => []),
@@ -75,7 +91,7 @@ export default function AIChatPanel() {
         recurringActivityService.getByUser(user.uid).catch(() => []),
       ]);
 
-      // Load workouts (strength + cardio together) — ONLY completed
+      // Load ALL workouts (strength + cardio) — ONLY completed
       let allWorkouts = [];
       try {
         const snap = await getDocs(query(
@@ -83,7 +99,7 @@ export default function AIChatPanel() {
         ));
         snap.docs.forEach(doc => {
           const d = doc.data();
-          if (d.status !== 'completed') return; // Skip scheduled/draft workouts
+          if (d.status !== 'completed') return;
           const workoutDate = d.date?.toDate?.() || new Date(d.date);
           allWorkouts.push({ ...d, date: workoutDate.toISOString().split('T')[0] });
         });
@@ -96,7 +112,7 @@ export default function AIChatPanel() {
         ));
         snap.docs.forEach(doc => {
           const d = doc.data();
-          if (d.status !== 'completed') return; // Skip unfinished group workouts
+          if (d.status !== 'completed') return;
           const workoutDate = d.date?.toDate?.() || new Date(d.date);
           allWorkouts.push({ ...d, date: workoutDate.toISOString().split('T')[0], isGroup: true });
         });
@@ -104,11 +120,10 @@ export default function AIChatPanel() {
 
       allWorkouts.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
-      // Separate cardio vs strength
       const cardioWorkouts = allWorkouts.filter(w => w.workoutType === 'cardio').slice(0, 10);
       const strengthWorkouts = allWorkouts.filter(w => w.workoutType !== 'cardio');
 
-      // Build max lifts, pain history, RPE data from strength workouts
+      // Build max lifts, pain history, RPE data
       const maxLifts = {};
       const painHistory = {};
       const rpeData = {};
@@ -120,13 +135,11 @@ export default function AIChatPanel() {
         (w.exercises || []).forEach(ex => {
           if (!ex.name) return;
           (ex.sets || []).forEach(s => {
-            // Prefer actual performance data; only fall back to prescribed for completed workouts
             const weight = parseFloat(s.actualWeight) || parseFloat(s.prescribedWeight) || 0;
             const reps = parseInt(s.actualReps) || parseInt(s.prescribedReps) || 0;
             const rpe = parseInt(s.rpe) || 0;
             const pain = parseInt(s.painLevel) || 0;
-            
-            // Skip sets with no actual data recorded (prescribed-only means not really performed)
+
             if (!s.actualWeight && !s.actualReps && s.prescribedWeight) return;
 
             if (weight > 0 && reps > 0 && reps <= 12) {
@@ -155,34 +168,25 @@ export default function AIChatPanel() {
         });
       });
 
-      // Build RPE averages
       const rpeAverages = {};
       Object.entries(rpeData).forEach(([name, d]) => {
         rpeAverages[name] = Math.round(d.total / d.count * 10) / 10;
       });
 
-      // Build health summary from recent entries
+      // Health summary
       const healthSummary = {};
       if (healthEntries.length > 0) {
         const sleepEntries = healthEntries.filter(h => h.sleep).slice(0, 7);
-        if (sleepEntries.length) {
-          healthSummary.avgSleep = Math.round(sleepEntries.reduce((sum, h) => sum + h.sleep, 0) / sleepEntries.length * 10) / 10;
-        }
+        if (sleepEntries.length) healthSummary.avgSleep = Math.round(sleepEntries.reduce((sum, h) => sum + h.sleep, 0) / sleepEntries.length * 10) / 10;
         const proteinEntries = healthEntries.filter(h => h.protein).slice(0, 7);
-        if (proteinEntries.length) {
-          healthSummary.avgProtein = Math.round(proteinEntries.reduce((sum, h) => sum + h.protein, 0) / proteinEntries.length);
-        }
+        if (proteinEntries.length) healthSummary.avgProtein = Math.round(proteinEntries.reduce((sum, h) => sum + h.protein, 0) / proteinEntries.length);
         const calorieEntries = healthEntries.filter(h => h.calories).slice(0, 7);
-        if (calorieEntries.length) {
-          healthSummary.avgCalories = Math.round(calorieEntries.reduce((sum, h) => sum + h.calories, 0) / calorieEntries.length);
-        }
+        if (calorieEntries.length) healthSummary.avgCalories = Math.round(calorieEntries.reduce((sum, h) => sum + h.calories, 0) / calorieEntries.length);
         const weightEntries = healthEntries.filter(h => h.weight).slice(0, 3);
-        if (weightEntries.length) {
-          healthSummary.recentWeight = weightEntries[0].weight;
-        }
+        if (weightEntries.length) healthSummary.recentWeight = weightEntries[0].weight;
       }
 
-      // Profile data
+      // Profile
       const profile = {};
       if (userProfile) {
         if (userProfile.weight) profile.weight = userProfile.weight;
@@ -191,105 +195,166 @@ export default function AIChatPanel() {
         if (userProfile.activityLevel) profile.activityLevel = userProfile.activityLevel;
         if (userProfile.displayName) profile.displayName = userProfile.displayName;
       }
-      // Override weight with latest health entry if available
       if (healthSummary.recentWeight) profile.weight = healthSummary.recentWeight;
+
+      // ─── FULL DETAIL for last 3 strength workouts ───
+      const recentWorkoutsFull = strengthWorkouts.slice(0, 3).map(w => ({
+        name: w.name,
+        date: w.date,
+        isGroup: w.isGroup || false,
+        groupName: w.groupName,
+        exercises: (w.exercises || []).map(ex => ({
+          name: ex.name,
+          type: ex.type || 'weight',
+          sets: (ex.sets || []).map(s => ({
+            prescribedWeight: s.prescribedWeight || '',
+            prescribedReps: s.prescribedReps || '',
+            actualWeight: s.actualWeight || '',
+            actualReps: s.actualReps || '',
+            prescribedTime: s.prescribedTime || '',
+            actualTime: s.actualTime || '',
+            rpe: s.rpe || '',
+            painLevel: parseInt(s.painLevel) || 0,
+          })),
+        })),
+      }));
+
+      // Older workout summaries (after the 3 detailed ones)
+      const olderSummaries = strengthWorkouts.slice(3, 8).map(w => ({
+        name: w.name,
+        date: w.date,
+        exerciseCount: w.exercises?.length || 0,
+        exercises: w.exercises?.slice(0, 4).map(e => ({ name: e.name, sets: e.sets?.length || 0 })),
+      }));
 
       const builtContext = {
         profile,
-        // Just names/dates/exercise counts - maxLifts/painHistory/rpeAverages cover the details
-        recentWorkouts: strengthWorkouts.slice(0, 5).map(w => ({
-          name: w.name,
-          date: w.date,
-          exerciseCount: w.exercises?.length || 0,
-          exercises: w.exercises?.slice(0, 4).map(e => ({ name: e.name, sets: e.sets?.length || 0 })),
-        })),
+        recentWorkoutsFull,
+        recentWorkouts: olderSummaries,
         cardioWorkouts: cardioWorkouts.slice(0, 5).map(w => ({
-          name: w.name,
-          date: w.date,
-          duration: w.duration,
-          cardioType: w.cardioType,
-          distance: w.distance,
+          name: w.name, date: w.date, duration: w.duration,
+          cardioType: w.cardioType, distance: w.distance,
         })),
         goals: goals.filter(g => g.status === 'active').map(g => ({
-          lift: g.lift,
-          metricType: g.metricType,
+          lift: g.lift, metricType: g.metricType,
           currentWeight: g.currentWeight || g.currentValue,
           targetWeight: g.targetWeight || g.targetValue,
           targetDate: g.targetDate,
         })),
-        maxLifts,
-        painHistory,
-        rpeAverages,
+        maxLifts, painHistory, rpeAverages,
         health: healthSummary,
         schedules: schedules.filter(s => s.active !== false).map(s => ({
-          name: s.name,
-          days: s.days,
-          duration: s.duration,
+          name: s.name, days: s.days, duration: s.duration,
         })),
         recurringActivities: recurring.filter(r => r.active).map(r => ({
-          name: r.name,
-          type: r.type,
-          days: r.days,
+          name: r.name, type: r.type, days: r.days,
         })),
       };
 
       setContext(builtContext);
     } catch (error) {
       console.error('Error loading user context:', error);
-      setContext({ recentWorkouts: [], goals: [] }); // fallback
+      setContext({ recentWorkouts: [], goals: [] });
     } finally {
       setContextLoading(false);
     }
   };
 
+  const fetchGreeting = async () => {
+    if (!context || !user) return;
+
+    // Check credits first
+    const credits = userProfile?.credits ?? 0;
+    if (!isAppAdmin && credits < CREDIT_COSTS['ask-assistant']) {
+      setMessages([{
+        role: 'assistant',
+        content: "Hey! I'm your training coach. You're low on credits right now, but feel free to ask when you get more."
+      }]);
+      setQuickActions(["What should I do today?", "How's my progress?", "Generate a workout", "Review my last session"]);
+      setGreetingFetched(true);
+      return;
+    }
+
+    setGreetingLoading(true);
+    try {
+      // Deduct credit for greeting
+      if (user?.uid && !isAppAdmin) {
+        await creditService.deduct(user.uid, 'ask-assistant');
+        updateProfile({ credits: credits - CREDIT_COSTS['ask-assistant'] });
+      }
+      incrementRateLimit();
+
+      const response = await api.askAssistant(null, { ...context, personality: userProfile?.chatPersonality || 'coach' }, 'greeting');
+
+      setMessages([{
+        role: 'assistant',
+        content: response.greeting || "Hey! Ready to train? I've got your full history — ask me anything."
+      }]);
+
+      if (response.quickActions?.length) {
+        setQuickActions(response.quickActions);
+      } else {
+        setQuickActions(["What should I do today?", "How's my progress?", "Generate a workout", "Review my last session"]);
+      }
+    } catch (error) {
+      console.error('Greeting fetch error:', error);
+      // Refund on failure
+      if (user?.uid && !isAppAdmin) {
+        await creditService.add(user.uid, CREDIT_COSTS['ask-assistant']).catch(() => {});
+        updateProfile({ credits });
+      }
+      setMessages([{
+        role: 'assistant',
+        content: "Hey! I'm your training coach — I've got your full workout history loaded. Ask me anything about your lifts, pain, goals, or say 'generate a workout'."
+      }]);
+      setQuickActions(["What should I do today?", "How's my progress?", "Generate a workout", "Review my last session"]);
+    } finally {
+      setGreetingLoading(false);
+      setGreetingFetched(true);
+    }
+  };
+
   const checkRateLimit = () => {
     const now = Date.now();
-    
-    // Hourly limit
-    const stored = localStorage.getItem('ai_rate_limit');
-    let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
-    if (now > rateData.resetTime) {
-      rateData = { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
-    }
-    
-    // Daily limit
-    const dailyStored = localStorage.getItem('ai_daily_limit');
-    let dailyData = dailyStored ? JSON.parse(dailyStored) : { count: 0, resetTime: now + DAILY_WINDOW };
-    if (now > dailyData.resetTime) {
-      dailyData = { count: 0, resetTime: now + DAILY_WINDOW };
-    }
-    
-    setRateLimitInfo({ ...rateData, dailyCount: dailyData.count, dailyResetTime: dailyData.resetTime });
-    
-    if (dailyData.count >= DAILY_LIMIT) return 'daily';
-    if (rateData.count >= RATE_LIMIT) return 'hourly';
-    return null;
+    try {
+      const stored = localStorage.getItem('ai_rate_limit');
+      let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
+      if (now > rateData.resetTime) rateData = { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
+      const dailyStored = localStorage.getItem('ai_daily_limit');
+      let dailyData = dailyStored ? JSON.parse(dailyStored) : { count: 0, resetTime: now + DAILY_WINDOW };
+      if (now > dailyData.resetTime) dailyData = { count: 0, resetTime: now + DAILY_WINDOW };
+      setRateLimitInfo({ ...rateData, dailyCount: dailyData.count, dailyResetTime: dailyData.resetTime });
+      if (dailyData.count >= DAILY_LIMIT) return 'daily';
+      if (rateData.count >= RATE_LIMIT) return 'hourly';
+      return null;
+    } catch { return null; }
   };
 
   const incrementRateLimit = () => {
     const now = Date.now();
-    
-    // Hourly
-    const stored = localStorage.getItem('ai_rate_limit');
-    let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
-    if (now > rateData.resetTime) {
-      rateData = { count: 1, resetTime: now + RATE_LIMIT_WINDOW };
-    } else {
-      rateData.count += 1;
+    try {
+      const stored = localStorage.getItem('ai_rate_limit');
+      let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
+      if (now > rateData.resetTime) {
+        rateData = { count: 1, resetTime: now + RATE_LIMIT_WINDOW };
+      } else {
+        rateData.count += 1;
+      }
+      localStorage.setItem('ai_rate_limit', JSON.stringify(rateData));
+
+      const dailyStored = localStorage.getItem('ai_daily_limit');
+      let dailyData = dailyStored ? JSON.parse(dailyStored) : { count: 0, resetTime: now + DAILY_WINDOW };
+      if (now > dailyData.resetTime) {
+        dailyData = { count: 1, resetTime: now + DAILY_WINDOW };
+      } else {
+        dailyData.count += 1;
+      }
+      localStorage.setItem('ai_daily_limit', JSON.stringify(dailyData));
+      setRateLimitInfo({ ...rateData, dailyCount: dailyData.count, dailyResetTime: dailyData.resetTime });
+    } catch {
+      localStorage.removeItem('ai_rate_limit');
+      localStorage.removeItem('ai_daily_limit');
     }
-    localStorage.setItem('ai_rate_limit', JSON.stringify(rateData));
-    
-    // Daily
-    const dailyStored = localStorage.getItem('ai_daily_limit');
-    let dailyData = dailyStored ? JSON.parse(dailyStored) : { count: 0, resetTime: now + DAILY_WINDOW };
-    if (now > dailyData.resetTime) {
-      dailyData = { count: 1, resetTime: now + DAILY_WINDOW };
-    } else {
-      dailyData.count += 1;
-    }
-    localStorage.setItem('ai_daily_limit', JSON.stringify(dailyData));
-    
-    setRateLimitInfo({ ...rateData, dailyCount: dailyData.count, dailyResetTime: dailyData.resetTime });
   };
 
   const getRemainingMessages = () => {
@@ -300,26 +365,21 @@ export default function AIChatPanel() {
 
   const sendMessage = async (messageText) => {
     if (!messageText.trim() || loading) return;
-    
-    // Check credits first (admin bypasses)
+
     const isAdmin = isAppAdmin;
     const credits = userProfile?.credits ?? 0;
     if (!isAdmin && credits < CREDIT_COSTS['ask-assistant']) {
       setMessages((prev) => [
         ...prev,
         { role: 'user', content: messageText },
-        {
-          role: 'assistant',
-          content: "You're out of AI credits. More credits coming soon — check Settings for your usage.",
-        },
+        { role: 'assistant', content: "You're out of AI credits. More credits coming soon — check Settings for your usage." },
       ]);
       return;
     }
 
-    // Secondary rate limit check (anti-abuse)
     const limitHit = checkRateLimit();
     if (limitHit) {
-      const minutesLeft = limitHit === 'daily' 
+      const minutesLeft = limitHit === 'daily'
         ? Math.ceil((rateLimitInfo.dailyResetTime - Date.now()) / 1000 / 60)
         : Math.ceil((rateLimitInfo.resetTime - Date.now()) / 1000 / 60);
       const hoursLeft = Math.ceil(minutesLeft / 60);
@@ -341,8 +401,7 @@ export default function AIChatPanel() {
 
     try {
       incrementRateLimit();
-      
-      // Deduct credit (admin bypasses)
+
       if (user?.uid && !isAdmin) {
         await creditService.deduct(user.uid, 'ask-assistant');
         updateProfile({ credits: credits - CREDIT_COSTS['ask-assistant'] });
@@ -350,29 +409,22 @@ export default function AIChatPanel() {
 
       const response = await api.askAssistant(messageText, {
         userId: user?.uid,
+        personality: userProfile?.chatPersonality || 'coach',
         ...(context || {}),
       });
 
       setMessages((prev) => [
         ...prev,
-        { 
-          role: 'assistant', 
-          content: response.message,
-          workout: response.workout
-        },
+        { role: 'assistant', content: response.message, workout: response.workout },
       ]);
     } catch (error) {
-      // Refund credit on failure
       if (user?.uid && !isAdmin) {
         await creditService.add(user.uid, CREDIT_COSTS['ask-assistant']).catch(() => {});
         updateProfile({ credits: credits });
       }
       setMessages((prev) => [
         ...prev,
-        {
-          role: 'assistant',
-          content: "Sorry, I couldn't process that. Please try again.",
-        },
+        { role: 'assistant', content: "Sorry, I couldn't process that. Please try again." },
       ]);
     } finally {
       setLoading(false);
@@ -393,10 +445,9 @@ export default function AIChatPanel() {
 
   const handleSaveWorkout = async (workout, messageIndex) => {
     if (!user || !workout) return;
-    
+
     setSavingWorkout(messageIndex);
     try {
-      // Format the workout for saving
       const workoutData = {
         name: workout.name || 'AI Generated Workout',
         date: new Date(),
@@ -414,15 +465,13 @@ export default function AIChatPanel() {
           })),
           notes: ex.notes || ''
         })),
-        notes: 'Generated by AI Assistant',
+        notes: 'Generated by AI Coach',
         status: 'scheduled'
       };
 
       const saved = await workoutService.create(user.uid, workoutData);
-      
-      // Update the message to show it was saved
-      setMessages(prev => prev.map((msg, idx) => 
-        idx === messageIndex 
+      setMessages(prev => prev.map((msg, idx) =>
+        idx === messageIndex
           ? { ...msg, workoutSaved: true, savedWorkoutId: saved.id }
           : msg
       ));
@@ -434,12 +483,7 @@ export default function AIChatPanel() {
     }
   };
 
-  const quickActions = [
-    "Generate a push workout",
-    "What should I do today?",
-    "Suggest weights for bench",
-    "How's my progress?",
-  ];
+  const isGreetingOrLoading = greetingLoading || (!greetingFetched && contextLoading);
 
   return (
     <AnimatePresence>
@@ -471,8 +515,10 @@ export default function AIChatPanel() {
                   <Sparkles className="w-4 h-4 text-flame-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-iron-100">AI Assistant</h3>
-                  <p className="text-xs text-iron-500">Always here to help</p>
+                  <h3 className="font-semibold text-iron-100">AI Coach</h3>
+                  <p className="text-xs text-iron-500">
+                    {contextLoading ? 'Loading your data...' : context ? 'Your data is loaded' : 'Ready to help'}
+                  </p>
                 </div>
               </div>
               <button
@@ -486,19 +532,21 @@ export default function AIChatPanel() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
-              {/* Context loading indicator */}
-              {contextLoading && (
-                <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-iron-500">
-                  <Loader2 className="w-3 h-3 animate-spin text-flame-400" />
-                  Loading your training data...
+              {/* Loading state before greeting */}
+              {isGreetingOrLoading && messages.length === 0 && (
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-iron-800 border border-iron-700 flex items-center justify-center flex-shrink-0">
+                    <Bot className="w-4 h-4 text-flame-400" />
+                  </div>
+                  <div className="bg-iron-800 px-4 py-3 rounded-2xl rounded-tl-md">
+                    <div className="flex items-center gap-2 text-sm text-iron-400">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-flame-400" />
+                      <span>{contextLoading ? 'Loading your training data...' : 'Getting your personalized greeting...'}</span>
+                    </div>
+                  </div>
                 </div>
               )}
-              {context && !contextLoading && (
-                <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-iron-600">
-                  <Sparkles className="w-3 h-3 text-green-500" />
-                  Connected to your workout data
-                </div>
-              )}
+
               {messages.map((message, index) => (
                 <motion.div
                   key={index}
@@ -529,7 +577,7 @@ export default function AIChatPanel() {
                     >
                       {message.content}
                     </div>
-                    
+
                     {/* Workout Card */}
                     {message.workout && (
                       <div className="bg-iron-800/50 border border-iron-700 rounded-xl p-3 space-y-2">
@@ -544,11 +592,11 @@ export default function AIChatPanel() {
                             {message.workout.exercises?.length} exercises
                           </span>
                         </div>
-                        
+
                         <div className="text-xs text-iron-400 space-y-1">
                           {message.workout.exercises?.slice(0, 3).map((ex, i) => (
                             <div key={i}>
-                              • {ex.name}: {ex.sets?.length} sets
+                              {ex.name}: {ex.sets?.length} sets
                             </div>
                           ))}
                           {message.workout.exercises?.length > 3 && (
@@ -557,7 +605,7 @@ export default function AIChatPanel() {
                             </div>
                           )}
                         </div>
-                        
+
                         {message.workoutSaved ? (
                           <button
                             onClick={() => {
@@ -566,7 +614,7 @@ export default function AIChatPanel() {
                             }}
                             className="w-full py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
                           >
-                            ✓ Saved - View Workout
+                            Saved - View Workout
                           </button>
                         ) : (
                           <button
@@ -617,9 +665,8 @@ export default function AIChatPanel() {
             </div>
 
             {/* Quick Actions */}
-            {messages.length <= 2 && !loading && (
+            {quickActions.length > 0 && messages.length <= 2 && !loading && !isGreetingOrLoading && (
               <div className="px-4 pb-2">
-                <p className="text-xs text-iron-500 mb-2">Quick actions</p>
                 <div className="flex flex-wrap gap-2">
                   {quickActions.map((action, index) => (
                     <button

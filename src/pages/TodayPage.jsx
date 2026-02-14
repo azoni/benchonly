@@ -69,6 +69,24 @@ export default function TodayPage() {
   const APP_UPDATES = [
     {
       date: 'Feb 2025',
+      title: 'Human Trainer Workouts',
+      description: 'Request a custom workout built by a real trainer, or send an existing workout for expert review.',
+      tag: 'New',
+    },
+    {
+      date: 'Feb 2025',
+      title: 'AI Coach Personalities',
+      description: 'Choose your coaching style in Settings — Coach, Drill Sergeant, Gym Bro, Sports Scientist, or Comedy Coach.',
+      tag: 'AI',
+    },
+    {
+      date: 'Feb 2025',
+      title: 'Smarter AI Chat',
+      description: 'Personalized greetings, full set-by-set workout data for pain diagnosis, and dynamic quick actions.',
+      tag: 'AI',
+    },
+    {
+      date: 'Feb 2025',
       title: 'Oura Ring Integration',
       description: 'Connect your Oura Ring to feed sleep, readiness, and recovery scores into AI workout generation.',
       tag: 'Integration',
@@ -82,7 +100,7 @@ export default function TodayPage() {
     {
       date: 'Feb 2025',
       title: 'Premium Model for Everyone',
-      description: 'GPT-4o is now available to all users at 100 credits per use. Better workout and program generation.',
+      description: 'GPT-4o is now available to all users at 100 credits per use.',
       tag: 'AI',
     },
     {
@@ -90,12 +108,6 @@ export default function TodayPage() {
       title: 'Smarter Exercise Input',
       description: 'New autocomplete when creating workouts. Type to search, and new exercises are saved for next time.',
       tag: 'UX',
-    },
-    {
-      date: 'Feb 2025',
-      title: 'Pain Tracking & Recovery',
-      description: 'Log pain per set. AI tracks your pain history with time-aware decay and adjusts recommendations.',
-      tag: 'AI',
     },
     {
       date: 'Jan 2025',

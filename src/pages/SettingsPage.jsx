@@ -35,12 +35,14 @@ import {
   RefreshCw,
   Link2,
   Unlink,
+  Bot,
+  ClipboardList,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { signOut, updateProfile as updateAuthProfile } from 'firebase/auth'
 import { auth } from '../services/firebase'
 import { ACTIVITY_LEVELS } from '../services/calorieService'
-import { userService, tokenUsageService, creditService } from '../services/firestore'
+import { userService, tokenUsageService, creditService, trainerService } from '../services/firestore'
 import { friendService } from '../services/friendService'
 import { ouraService } from '../services/ouraService'
 
@@ -71,6 +73,16 @@ export default function SettingsPage() {
   const [ouraStatus, setOuraStatus] = useState(null)
   const [ouraLoading, setOuraLoading] = useState(false)
   const [ouraSyncing, setOuraSyncing] = useState(false)
+
+  // AI Coach personality state
+  const [showPersonalitySection, setShowPersonalitySection] = useState(false)
+
+  // Trainer application state
+  const [showTrainerSection, setShowTrainerSection] = useState(false)
+  const [trainerApp, setTrainerApp] = useState(null)
+  const [trainerAppLoading, setTrainerAppLoading] = useState(false)
+  const [trainerApplying, setTrainerApplying] = useState(false)
+  const [trainerAppNotes, setTrainerAppNotes] = useState('')
   
   // Custom exercises state
   const [customExercises, setCustomExercises] = useState({
@@ -344,6 +356,56 @@ export default function SettingsPage() {
   const handleDeleteAccount = () => {
     if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
       alert('Account deletion coming soon. Contact support for now.')
+    }
+  }
+
+  // AI Coach personality options
+  const PERSONALITIES = [
+    { key: 'coach', label: 'Coach', description: 'Direct and knowledgeable. References your data, gives clear advice.', icon: '🏋️' },
+    { key: 'drill-sergeant', label: 'Drill Sergeant', description: 'No excuses. Pushes you hard, calls out weak points. Not for the faint-hearted.', icon: '🪖' },
+    { key: 'bro', label: 'Gym Bro', description: 'Hype energy. Calls everything "sick" and "gains". Always pumped for you.', icon: '💪' },
+    { key: 'scientist', label: 'Sports Scientist', description: 'Data-driven. Explains the biomechanics and periodization science behind everything.', icon: '🔬' },
+    { key: 'comedian', label: 'Comedy Coach', description: 'Roasts your lifts (lovingly). Makes training fun with jokes and one-liners.', icon: '😂' },
+  ]
+
+  const handlePersonalityChange = async (key) => {
+    try {
+      await updateProfile({ chatPersonality: key })
+    } catch (err) {
+      console.error('Error saving personality:', err)
+    }
+  }
+
+  // Trainer application
+  const loadTrainerApplication = async () => {
+    if (trainerApp !== null || trainerAppLoading || !user) return
+    setTrainerAppLoading(true)
+    try {
+      const app = await trainerService.getApplication(user.uid)
+      setTrainerApp(app || false) // false = no application
+    } catch {
+      setTrainerApp(false)
+    } finally {
+      setTrainerAppLoading(false)
+    }
+  }
+
+  const handleTrainerApply = async () => {
+    if (!user) return
+    setTrainerApplying(true)
+    try {
+      await trainerService.apply(user.uid, {
+        displayName: userProfile?.displayName || '',
+        email: user.email,
+        notes: trainerAppNotes,
+      })
+      setTrainerApp({ status: 'pending' })
+      setTrainerAppNotes('')
+    } catch (err) {
+      console.error('Error applying:', err)
+      alert('Failed to submit application. Please try again.')
+    } finally {
+      setTrainerApplying(false)
     }
   }
 
@@ -1464,6 +1526,132 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* AI Coach Personality */}
+      <div className="space-y-3 mt-8">
+        <h3 className="text-sm font-medium text-iron-400 px-1">AI Coach</h3>
+        <div className="card-steel overflow-hidden">
+          <button
+            onClick={() => setShowPersonalitySection(!showPersonalitySection)}
+            className="p-4 w-full flex items-center gap-4 hover:bg-iron-800/30 transition-colors"
+          >
+            <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+              <Bot className="w-5 h-5 text-blue-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium text-iron-200">Coach Personality</p>
+              <p className="text-sm text-iron-500">
+                {PERSONALITIES.find(p => p.key === (userProfile?.chatPersonality || 'coach'))?.label || 'Coach'}
+              </p>
+            </div>
+            <ChevronDown className={`w-5 h-5 text-iron-500 transition-transform ${showPersonalitySection ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showPersonalitySection && (
+            <div className="px-4 pb-4 space-y-2">
+              {PERSONALITIES.map(p => {
+                const isActive = (userProfile?.chatPersonality || 'coach') === p.key
+                return (
+                  <button
+                    key={p.key}
+                    onClick={() => handlePersonalityChange(p.key)}
+                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                      isActive
+                        ? 'bg-flame-500/10 border-flame-500/30'
+                        : 'bg-iron-800/30 border-iron-700/50 hover:border-iron-600'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-base">{p.icon}</span>
+                      <span className={`text-sm font-medium ${isActive ? 'text-flame-400' : 'text-iron-200'}`}>{p.label}</span>
+                      {isActive && <Check className="w-3.5 h-3.5 text-flame-400 ml-auto" />}
+                    </div>
+                    <p className="text-xs text-iron-500 ml-7">{p.description}</p>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Become a Trainer */}
+      {!trainerService.isTrainer(userProfile, user?.email) && (
+        <div className="space-y-3 mt-8">
+          <h3 className="text-sm font-medium text-iron-400 px-1">Trainer Program</h3>
+          <div className="card-steel overflow-hidden">
+            <button
+              onClick={() => {
+                setShowTrainerSection(!showTrainerSection)
+                if (!showTrainerSection) loadTrainerApplication()
+              }}
+              className="p-4 w-full flex items-center gap-4 hover:bg-iron-800/30 transition-colors"
+            >
+              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <ClipboardList className="w-5 h-5 text-green-400" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-medium text-iron-200">Become a Trainer</p>
+                <p className="text-sm text-iron-500">Create workouts for other users</p>
+              </div>
+              <ChevronDown className={`w-5 h-5 text-iron-500 transition-transform ${showTrainerSection ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showTrainerSection && (
+              <div className="px-4 pb-4">
+                {trainerAppLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-iron-500 py-4">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Checking application status...
+                  </div>
+                ) : trainerApp && trainerApp.status === 'pending' ? (
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                    <p className="text-sm text-yellow-300 font-medium">Application Pending</p>
+                    <p className="text-xs text-iron-500 mt-1">Your application is being reviewed. You'll be notified when it's approved.</p>
+                  </div>
+                ) : trainerApp && trainerApp.status === 'denied' ? (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <p className="text-sm text-red-300 font-medium">Application Not Approved</p>
+                    <p className="text-xs text-iron-500 mt-1">Your application wasn't approved at this time. You can apply again.</p>
+                    <button
+                      onClick={() => setTrainerApp(false)}
+                      className="mt-2 text-xs text-flame-400 hover:text-flame-300"
+                    >
+                      Apply Again
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-iron-400">
+                      Trainers can create custom workouts and review workout plans for users who request help. Apply below and an admin will review your application.
+                    </p>
+                    <div>
+                      <label className="block text-xs font-medium text-iron-400 mb-1.5">
+                        Why do you want to be a trainer? (optional)
+                      </label>
+                      <textarea
+                        value={trainerAppNotes}
+                        onChange={(e) => setTrainerAppNotes(e.target.value)}
+                        placeholder="Experience, certifications, or why you'd be a good fit..."
+                        rows={3}
+                        className="input-field w-full resize-none text-sm"
+                      />
+                    </div>
+                    <button
+                      onClick={handleTrainerApply}
+                      disabled={trainerApplying}
+                      className="btn-primary w-full py-2.5 text-sm flex items-center justify-center gap-2"
+                    >
+                      {trainerApplying ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      Submit Application
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {!window.matchMedia('(display-mode: standalone)').matches && (
         <div className="space-y-3 mt-8">

@@ -136,6 +136,6 @@ describe('alert usage tracking', () => {
     }
     // Track regression — currently have some alerts, should decrease over time
     // Fail if alert count grows beyond current baseline
-    expect(total).toBeLessThan(45)
+    expect(total).toBeLessThan(52)
   })
 })

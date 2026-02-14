@@ -50,16 +50,15 @@ class APIService {
     }
   }
 
-  async askAssistant(message, context = {}) {
+  async askAssistant(message, context = {}, mode = null) {
     try {
       const headers = await getAuthHeaders();
+      const body = { message, context };
+      if (mode) body.mode = mode;
       const response = await fetch(`${this.baseUrl}/ask-assistant`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ 
-          message, 
-          context,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

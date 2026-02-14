@@ -18,14 +18,17 @@ import {
   Eye,
   ThumbsUp,
   Repeat,
+  ClipboardList,
+  Loader2,
+  X,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { workoutService, groupWorkoutService, scheduleService } from '../services/firestore'
+import { workoutService, groupWorkoutService, scheduleService, trainerRequestService, creditService, CREDIT_COSTS } from '../services/firestore'
 import { format, isToday, isPast, isFuture, subDays, eachDayOfInterval, startOfDay } from 'date-fns'
 import { getDisplayDate, toDateString } from '../utils/dateUtils'
 
 export default function WorkoutsPage() {
-  const { user, isGuest } = useAuth()
+  const { user, userProfile, updateProfile, isGuest, isAppAdmin } = useAuth()
   const [workouts, setWorkouts] = useState([])
   const [pendingReviews, setPendingReviews] = useState([])
   const [loading, setLoading] = useState(true)
@@ -33,6 +36,14 @@ export default function WorkoutsPage() {
   const [activeMenu, setActiveMenu] = useState(null)
   const [pendingDeleteId, setPendingDeleteId] = useState(null)
   const [activeTab, setActiveTab] = useState('todo') // 'todo' or 'completed'
+
+  // Trainer request state
+  const [showRequestModal, setShowRequestModal] = useState(false)
+  const [requestType, setRequestType] = useState('custom_workout') // 'custom_workout' or 'review'
+  const [requestNotes, setRequestNotes] = useState('')
+  const [requestTargetDate, setRequestTargetDate] = useState('')
+  const [requestWorkoutId, setRequestWorkoutId] = useState(null)
+  const [requestSubmitting, setRequestSubmitting] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -208,6 +219,61 @@ export default function WorkoutsPage() {
     }
   }
 
+  const openTrainerRequest = (type, workoutId = null) => {
+    setRequestType(type)
+    setRequestWorkoutId(workoutId)
+    setRequestNotes('')
+    setRequestTargetDate('')
+    setShowRequestModal(true)
+  }
+
+  const handleTrainerRequest = async () => {
+    if (!user) return
+    const creditKey = requestType === 'custom_workout' ? 'trainer-custom-workout' : 'trainer-review'
+    const cost = CREDIT_COSTS[creditKey]
+    const credits = userProfile?.credits ?? 0
+
+    if (!isAppAdmin && credits < cost) {
+      alert(`Not enough credits. This costs ${cost} credits and you have ${credits}.`)
+      return
+    }
+
+    setRequestSubmitting(true)
+    try {
+      // Deduct credits
+      if (!isAppAdmin) {
+        await creditService.deduct(user.uid, creditKey)
+        updateProfile({ credits: credits - cost })
+      }
+
+      await trainerRequestService.create(user.uid, {
+        type: requestType,
+        notes: requestNotes,
+        targetDate: requestTargetDate || null,
+        workoutId: requestWorkoutId || null,
+        workoutName: requestWorkoutId
+          ? workouts.find(w => w.id === requestWorkoutId)?.name || ''
+          : null,
+        creditCost: cost,
+      })
+
+      setShowRequestModal(false)
+      alert(requestType === 'custom_workout'
+        ? 'Workout request submitted! A trainer will build your workout.'
+        : 'Review request submitted! A trainer will review your workout.')
+    } catch (err) {
+      console.error('Error submitting request:', err)
+      // Refund on failure
+      if (!isAppAdmin) {
+        await creditService.add(user.uid, cost).catch(() => {})
+        updateProfile({ credits })
+      }
+      alert('Failed to submit request. Please try again.')
+    } finally {
+      setRequestSubmitting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -232,9 +298,17 @@ export default function WorkoutsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-display text-iron-50">Workouts</h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => openTrainerRequest('custom_workout')}
+            className="btn-secondary flex items-center gap-2"
+            title="Request custom workout from a real trainer"
+          >
+            <ClipboardList className="w-4 h-4" />
+            <span className="hidden sm:inline">Trainer</span>
+          </button>
           <Link to="/workouts/generate" className="btn-secondary flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
-            <span className="hidden sm:inline">AI Generate</span>
+            <span className="hidden sm:inline">AI</span>
           </Link>
           <Link to="/workouts/new" className="btn-primary flex items-center gap-2">
             <Plus className="w-5 h-5" />
@@ -511,6 +585,19 @@ export default function WorkoutsPage() {
                               Edit
                             </Link>
                           )}
+                          {!workout.isGroupWorkout && workout.status === 'scheduled' && (
+                            <button
+                              onClick={() => {
+                                setActiveMenu(null)
+                                openTrainerRequest('review', workout.id)
+                              }}
+                              className="flex items-center gap-2 px-4 py-2 text-sm text-purple-300
+                                hover:bg-iron-700 transition-colors w-full"
+                            >
+                              <ClipboardList className="w-4 h-4" />
+                              Send for Review
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDelete(workout)}
                             className={`flex items-center gap-2 px-4 py-2 text-sm w-full transition-colors ${
@@ -573,6 +660,104 @@ export default function WorkoutsPage() {
           onClick={() => setActiveMenu(null)}
         />
       )}
+
+      {/* Trainer Request Modal */}
+      <AnimatePresence>
+        {showRequestModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowRequestModal(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-x-4 top-[15%] mx-auto max-w-md bg-iron-900 border border-iron-700 rounded-2xl z-50 overflow-hidden shadow-2xl"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-iron-800">
+                <h3 className="font-display text-lg text-iron-100">
+                  {requestType === 'custom_workout' ? 'Request Custom Workout' : 'Request Workout Review'}
+                </h3>
+                <button
+                  onClick={() => setShowRequestModal(false)}
+                  className="p-1.5 text-iron-400 hover:text-iron-200 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <p className="text-sm text-iron-400">
+                  {requestType === 'custom_workout'
+                    ? 'A real trainer will create a personalized workout based on your training data and goals.'
+                    : 'A trainer will review and optimize your existing workout plan.'
+                  }
+                </p>
+
+                {requestType === 'review' && requestWorkoutId && (
+                  <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg text-sm text-purple-300">
+                    Reviewing: {workouts.find(w => w.id === requestWorkoutId)?.name || 'Workout'}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-medium text-iron-400 mb-1.5">
+                    Notes for the trainer (optional)
+                  </label>
+                  <textarea
+                    value={requestNotes}
+                    onChange={(e) => setRequestNotes(e.target.value)}
+                    placeholder={requestType === 'custom_workout'
+                      ? 'What are you looking for? Focus areas, time constraints, equipment available...'
+                      : 'Any specific concerns? Areas you want changed or improved...'
+                    }
+                    rows={3}
+                    className="input-field w-full resize-none text-sm"
+                  />
+                </div>
+
+                {requestType === 'custom_workout' && (
+                  <div>
+                    <label className="block text-xs font-medium text-iron-400 mb-1.5">
+                      When do you need it by? (optional)
+                    </label>
+                    <input
+                      type="date"
+                      value={requestTargetDate}
+                      onChange={(e) => setRequestTargetDate(e.target.value)}
+                      className="input-field w-full text-sm"
+                    />
+                  </div>
+                )}
+
+                <div className="p-3 bg-iron-800/50 rounded-lg flex items-center justify-between">
+                  <span className="text-sm text-iron-400">Cost</span>
+                  <span className="text-sm font-medium text-flame-400">
+                    {CREDIT_COSTS[requestType === 'custom_workout' ? 'trainer-custom-workout' : 'trainer-review']} credits
+                  </span>
+                </div>
+
+                <button
+                  onClick={handleTrainerRequest}
+                  disabled={requestSubmitting}
+                  className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2"
+                >
+                  {requestSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ClipboardList className="w-4 h-4" />
+                  )}
+                  {requestSubmitting ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
