@@ -317,6 +317,20 @@ export default function AIChatPanel() {
   const checkRateLimit = () => {
     const now = Date.now();
     try {
+      // Check for admin reset signal
+      const resetAt = userProfile?.rateLimitResetAt;
+      if (resetAt) {
+        const resetTs = new Date(resetAt).getTime();
+        const lastChecked = localStorage.getItem('ai_rate_limit_checked');
+        if (!lastChecked || resetTs > parseInt(lastChecked)) {
+          localStorage.removeItem('ai_rate_limit');
+          localStorage.removeItem('ai_daily_limit');
+          localStorage.setItem('ai_rate_limit_checked', String(now));
+          setRateLimitInfo({ count: 0, resetTime: now + RATE_LIMIT_WINDOW, dailyCount: 0, dailyResetTime: now + DAILY_WINDOW });
+          return null;
+        }
+      }
+
       const stored = localStorage.getItem('ai_rate_limit');
       let rateData = stored ? JSON.parse(stored) : { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
       if (now > rateData.resetTime) rateData = { count: 0, resetTime: now + RATE_LIMIT_WINDOW };

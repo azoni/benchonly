@@ -238,6 +238,8 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
         estimatedCost: cost,
         responseTimeMs: responseTime,
         draftMode,
+        userMessage: `Generate ${workoutFocus || 'auto'} workout (${intensity || 'moderate'})`,
+        assistantResponse: `${workout.name || 'Workout'}: ${(workout.exercises || []).map(e => e.name).join(', ')}`.slice(0, 500),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     } catch (e) {

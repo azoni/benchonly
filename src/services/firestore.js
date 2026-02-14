@@ -904,6 +904,25 @@ export const tokenUsageService = {
     return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   },
 
+  // Count messages in the last N minutes for a user
+  async getRecentCounts(userId) {
+    const records = await this.getByUser(userId, 100);
+    const now = Date.now();
+    const oneHourAgo = now - (60 * 60 * 1000);
+    const oneDayAgo = now - (24 * 60 * 60 * 1000);
+
+    let hourCount = 0;
+    let dayCount = 0;
+
+    records.forEach(r => {
+      const ts = r.createdAt?.toDate?.()?.getTime?.() || new Date(r.createdAt).getTime() || 0;
+      if (ts > oneHourAgo) hourCount++;
+      if (ts > oneDayAgo) dayCount++;
+    });
+
+    return { hourCount, dayCount, total: records.length };
+  },
+
   async getSummary() {
     const records = await this.getRecent(500);
     

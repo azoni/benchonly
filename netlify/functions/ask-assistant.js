@@ -236,6 +236,8 @@ ${contextString}`
           userId, feature: 'ask-assistant-greeting', model: 'gpt-4o-mini',
           promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens,
           totalTokens: usage.total_tokens, estimatedCost: cost, responseTimeMs: responseTime,
+          userMessage: '[greeting request]',
+          assistantResponse: greeting,
           createdAt: new Date().toISOString()
         }})
       }
@@ -322,6 +324,8 @@ ${contextString}`
           userId, feature: 'ask-assistant', model: 'gpt-4o-mini',
           promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens,
           totalTokens: usage.total_tokens, estimatedCost: cost, responseTimeMs: responseTime,
+          userMessage: (message || '').slice(0, 500),
+          assistantResponse: cleanMessage.slice(0, 1000),
           createdAt: new Date().toISOString()
         }
       })

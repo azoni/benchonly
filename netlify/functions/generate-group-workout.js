@@ -292,6 +292,8 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
         responseTimeMs: responseTime,
         athleteCount: athletes.length,
         groupId,
+        userMessage: `Group workout for ${athletes.length} athletes${prompt ? `: ${prompt.slice(0, 200)}` : ''}`,
+        assistantResponse: `${result.name || 'Workout'} (${athletes.length} athletes)`,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     } catch (e) {

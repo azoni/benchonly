@@ -24,7 +24,7 @@ import { ClipboardList, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { collection, getDocs, query, orderBy, limit, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../services/firebase'
-import { workoutService, goalService, creditService, trainerService } from '../services/firestore'
+import { workoutService, goalService, creditService, trainerService, tokenUsageService } from '../services/firestore'
 import { analyticsService } from '../services/analyticsService'
 import { format, formatDistanceToNow } from 'date-fns'
 
@@ -40,6 +40,7 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [userWorkouts, setUserWorkouts] = useState([])
   const [userGoals, setUserGoals] = useState([])
+  const [userAiUsage, setUserAiUsage] = useState(null)
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [showWorkoutModal, setShowWorkoutModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
@@ -115,6 +116,7 @@ export default function AdminPage() {
     setSelectedUser(selectedUserData)
     setImpersonating(selectedUserData)
     setCreditAmount('')
+    setUserAiUsage(null)
     
     // Load user's workouts and goals
     try {
@@ -631,6 +633,105 @@ export default function AdminPage() {
                         <Plus className="w-3 h-3" />
                       )}
                       Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Usage & Rate Limits */}
+              <div className="card-steel p-4 rounded-xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <Activity className="w-4 h-4 text-blue-400" />
+                  <h3 className="font-medium text-iron-200">AI Chat Usage</h3>
+                </div>
+                {!userAiUsage ? (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const counts = await tokenUsageService.getRecentCounts(selectedUser.uid)
+                        setUserAiUsage(counts)
+                      } catch { setUserAiUsage({ hourCount: '?', dayCount: '?', total: '?' }) }
+                    }}
+                    className="text-sm text-flame-400 hover:text-flame-300"
+                  >
+                    Load usage data
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="p-2 bg-iron-800/50 rounded-lg">
+                        <p className="text-lg font-display text-iron-100">{userAiUsage.hourCount}</p>
+                        <p className="text-[10px] text-iron-500">Last Hour (limit 8)</p>
+                      </div>
+                      <div className="p-2 bg-iron-800/50 rounded-lg">
+                        <p className="text-lg font-display text-iron-100">{userAiUsage.dayCount}</p>
+                        <p className="text-[10px] text-iron-500">Last 24h (limit 25)</p>
+                      </div>
+                      <div className="p-2 bg-iron-800/50 rounded-lg">
+                        <p className="text-lg font-display text-iron-100">{userAiUsage.total}</p>
+                        <p className="text-[10px] text-iron-500">All Time</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const userRef = doc(db, 'users', selectedUser.uid)
+                          await updateDoc(userRef, { rateLimitResetAt: new Date().toISOString() })
+                          setUserAiUsage(null) // refresh
+                          alert('Rate limit reset signal sent. User will see it on next message.')
+                        } catch (err) {
+                          console.error(err)
+                          alert('Failed to reset rate limit')
+                        }
+                      }}
+                      className="w-full py-2 text-sm bg-yellow-500/10 text-yellow-400 rounded-lg hover:bg-yellow-500/20 transition-colors"
+                    >
+                      Reset Client Rate Limit
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* User Settings */}
+              <div className="card-steel p-4 rounded-xl">
+                <h3 className="font-medium text-iron-200 mb-3">User Settings</h3>
+                <div className="space-y-3">
+                  {/* Personality */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-iron-400">Coach Personality</span>
+                    <select
+                      value={selectedUser.chatPersonality || 'coach'}
+                      onChange={async (e) => {
+                        try {
+                          const userRef = doc(db, 'users', selectedUser.uid)
+                          await updateDoc(userRef, { chatPersonality: e.target.value })
+                          setSelectedUser(prev => ({ ...prev, chatPersonality: e.target.value }))
+                          setUsers(prev => prev.map(u =>
+                            u.uid === selectedUser.uid ? { ...u, chatPersonality: e.target.value } : u
+                          ))
+                        } catch (err) { console.error(err) }
+                      }}
+                      className="input-field text-sm py-1 px-2 w-36"
+                    >
+                      <option value="coach">Coach</option>
+                      <option value="drill-sergeant">Drill Sergeant</option>
+                      <option value="bro">Gym Bro</option>
+                      <option value="scientist">Scientist</option>
+                      <option value="comedian">Comedy</option>
+                    </select>
+                  </div>
+                  {/* Trainer status */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-iron-400">Trainer Status</span>
+                    <button
+                      onClick={() => handleToggleTrainer(selectedUser.uid || selectedUser.id, selectedUser.isTrainer)}
+                      className={`text-sm px-3 py-1 rounded-lg transition-colors ${
+                        selectedUser.isTrainer
+                          ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                          : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                      }`}
+                    >
+                      {selectedUser.isTrainer ? 'Active Trainer' : 'Not a Trainer'}
                     </button>
                   </div>
                 </div>
