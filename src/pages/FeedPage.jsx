@@ -50,12 +50,6 @@ export default function FeedPage() {
   const canSeeItem = (item) => {
     if (!user) return item.visibility === 'public' || !item.visibility
 
-    // Admin impersonating: hide real admin's items and impersonated user's items
-    if (isRealAdmin && impersonating) {
-      if (item.userId === realUser?.uid) return false
-      if (item.userId === impersonating.uid) return false
-    }
-
     if (item.userId === user.uid) return true
 
     const visibility = item.visibility || 'public'

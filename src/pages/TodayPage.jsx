@@ -864,11 +864,6 @@ export default function TodayPage() {
       {(() => {
         const userGroupIds = new Set(userProfile?.groups || [])
         const visibleItems = feedItems.filter(item => {
-          // Admin impersonating: hide real admin's items and impersonated user's items
-          if (isRealAdmin && impersonating) {
-            if (item.userId === realUser?.uid) return false
-            if (item.userId === impersonating.uid) return false
-          }
           if (item.userId === user?.uid) return true
           const visibility = item.visibility || 'public'
           if (visibility === 'private') return false
