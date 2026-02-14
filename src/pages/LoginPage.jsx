@@ -241,6 +241,8 @@ function GroupMockup() {
 export default function LoginPage() {
   const navigate = useNavigate();
   const { user, signInWithGoogle, signInAsGuest, loading } = useAuth();
+  const [signInError, setSignInError] = useState(null);
+  const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -249,9 +251,19 @@ export default function LoginPage() {
   }, [user, navigate]);
 
   const handleGoogleSignIn = async () => {
-    const result = await signInWithGoogle();
-    if (result.success) {
-      navigate('/today');
+    setSignInError(null);
+    setSigningIn(true);
+    try {
+      const result = await signInWithGoogle();
+      if (result.success) {
+        navigate('/today');
+      } else if (result.error !== 'cancelled') {
+        setSignInError(result.error);
+      }
+    } catch (e) {
+      setSignInError('Something went wrong. Please try again.');
+    } finally {
+      setSigningIn(false);
     }
   };
 
@@ -295,11 +307,11 @@ export default function LoginPage() {
               </button>
               <button
                 onClick={handleGoogleSignIn}
-                disabled={loading}
+                disabled={loading || signingIn}
                 className="flex items-center gap-2 px-4 py-2 bg-white text-iron-900
                   rounded-lg font-medium text-sm hover:bg-iron-100 transition-all disabled:opacity-50"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                {(loading || signingIn) ? <Loader2 className="w-4 h-4 animate-spin" /> : (
                   <>
                     <svg className="w-4 h-4" viewBox="0 0 24 24">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
@@ -333,12 +345,12 @@ export default function LoginPage() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleGoogleSignIn}
-                  disabled={loading}
+                  disabled={loading || signingIn}
                   className="group flex items-center justify-center gap-2.5 px-6 py-3.5 bg-flame-500 text-white
                     rounded-xl font-semibold hover:bg-flame-600 transition-all disabled:opacity-50 shadow-lg shadow-flame-500/20"
                 >
-                  Get Started Free
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
+                  {signingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Get Started Free'}
+                  {!signingIn && <ArrowRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />}
                 </button>
                 <button
                   onClick={handleGuestSignIn}
@@ -357,6 +369,11 @@ export default function LoginPage() {
                 <BookOpen className="w-3.5 h-3.5" />
                 Read the docs — how it works, calculations, AI system
               </Link>
+              {signInError && (
+                <p className="text-sm text-red-400 mt-3">
+                  Sign-in failed: {signInError}
+                </p>
+              )}
             </motion.div>
           </div>
         </section>
@@ -475,12 +492,12 @@ export default function LoginPage() {
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
                   onClick={handleGoogleSignIn}
-                  disabled={loading}
+                  disabled={loading || signingIn}
                   className="group flex items-center justify-center gap-2.5 px-6 py-3.5 bg-flame-500 text-white
                     rounded-xl font-semibold hover:bg-flame-600 transition-all disabled:opacity-50 shadow-lg shadow-flame-500/20"
                 >
-                  Get Started Free
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
+                  {signingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Get Started Free'}
+                  {!signingIn && <ArrowRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />}
                 </button>
                 <button
                   onClick={handleGuestSignIn}

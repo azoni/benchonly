@@ -2,8 +2,6 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signOut as firebaseSignOut,
   GoogleAuthProvider
 } from 'firebase/auth';
@@ -176,19 +174,6 @@ export function AuthProvider({ children }) {
   const [impersonating, setImpersonating] = useState(null); // { uid, email, displayName, ... }
   const [impersonatingProfile, setImpersonatingProfile] = useState(null);
 
-  // Detect mobile/PWA — popup auth fails on these
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
-    window.matchMedia('(display-mode: standalone)').matches;
-
-  // Handle redirect result on mount (for mobile sign-in flow)
-  useEffect(() => {
-    getRedirectResult(auth).catch((error) => {
-      if (error?.code !== 'auth/popup-closed-by-user') {
-        console.error('Redirect sign-in error:', error);
-      }
-    });
-  }, []);
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -244,26 +229,14 @@ export function AuthProvider({ children }) {
 
   const signInWithGoogle = async () => {
     try {
-      if (isMobile) {
-        // Redirect flow for mobile/PWA — page navigates away, 
-        // onAuthStateChanged picks up user on return
-        await signInWithRedirect(auth, googleProvider);
-        return { success: true }; // won't actually reach here
-      }
       const result = await signInWithPopup(auth, googleProvider);
       setIsGuest(false);
       return { success: true, user: result.user };
     } catch (error) {
       console.error('Google sign in error:', error);
-      // If popup fails (blocked, closed), try redirect as fallback
-      if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/popup-closed-by-user') {
-        try {
-          await signInWithRedirect(auth, googleProvider);
-          return { success: true };
-        } catch (redirectError) {
-          console.error('Redirect fallback error:', redirectError);
-          return { success: false, error: redirectError.message };
-        }
+      // Don't treat user-closed-popup as a real error
+      if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
+        return { success: false, error: 'cancelled' };
       }
       return { success: false, error: error.message };
     }
