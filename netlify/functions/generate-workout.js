@@ -20,7 +20,7 @@ export async function handler(event) {
     // Use targetUserId only if caller is admin (for impersonation)
     const userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
     // Enforce admin-only premium model
-    const selectedModel = (model === 'premium' && auth.isAdmin) ? 'gpt-4o' : 'gpt-4o-mini';
+    const selectedModel = (model === 'premium' && auth.isAdmin) ? 'gpt-4.1-mini' : 'gpt-4o-mini';
 
     if (!db) {
       return {
@@ -172,9 +172,9 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
 
     // Calculate cost based on model
     let cost;
-    if (selectedModel === 'gpt-4o') {
-      // GPT-4o: $2.50/$10.00 per 1M tokens
-      cost = (usage.prompt_tokens / 1e6) * 2.50 + (usage.completion_tokens / 1e6) * 10.00;
+    if (selectedModel === 'gpt-4.1-mini') {
+      // GPT-4.1-mini: $0.40/$1.60 per 1M tokens
+      cost = (usage.prompt_tokens / 1e6) * 0.40 + (usage.completion_tokens / 1e6) * 1.60;
     } else {
       // GPT-4o-mini: $0.15/$0.60 per 1M tokens
       cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60;
