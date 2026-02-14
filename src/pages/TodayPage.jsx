@@ -37,6 +37,7 @@ import { friendService } from '../services/friendService'
 import { format, startOfWeek, endOfWeek, subDays, addDays, isToday, startOfDay } from 'date-fns'
 import { toDateString } from '../utils/dateUtils'
 import { formatDuration } from '../utils/workoutUtils'
+import OnboardingChecklist from '../components/OnboardingChecklist'
 
 export default function TodayPage() {
   const { user, userProfile, isGuest, isRealAdmin, impersonating, realUser } = useAuth()
@@ -385,6 +386,9 @@ export default function TodayPage() {
           {greeting}{firstName ? `, ${firstName}` : ''}
         </h1>
       </motion.div>
+
+      {/* Onboarding Checklist */}
+      <OnboardingChecklist />
 
       {/* Pending Reviews */}
       {pendingReviews.length > 0 && (

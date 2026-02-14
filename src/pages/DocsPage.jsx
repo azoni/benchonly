@@ -98,12 +98,14 @@ function SectionContent({ id }) {
 
           <div className="grid sm:grid-cols-2 gap-4 mb-8">
             {[
-              { icon: Dumbbell, title: 'Smart Workouts', desc: 'AI generates workouts based on your maxes, RPE, and pain history.' },
+              { icon: Dumbbell, title: 'Smart Workouts', desc: 'AI generates workouts based on your maxes, RPE, and pain history. Control style, duration, and intensity.' },
               { icon: Layers, title: 'Periodized Programs', desc: 'Multi-week programs with auto-generated daily workouts.' },
-              { icon: Target, title: 'Goal Tracking', desc: 'Set strength, rep, or hold targets and track progress over time.' },
+              { icon: Target, title: 'Goal Tracking', desc: 'Set strength, rep, or hold targets. AI can suggest goals based on your data.' },
               { icon: Users, title: 'Group Training', desc: 'Train with friends, share workouts, and review each other\'s lifts.' },
               { icon: Brain, title: 'AI Coach', desc: 'Chat with an AI that knows your full training history.' },
               { icon: AlertTriangle, title: 'Pain Awareness', desc: 'Log pain on any set. The AI adapts around injuries automatically.' },
+              { icon: Activity, title: 'Cardio & Activity', desc: 'Log cardio sessions with calorie estimates. Set up recurring schedules.' },
+              { icon: Calculator, title: '1RM Testing', desc: 'AI-generated max attempt sessions with warm-up ramps and attempt protocols.' },
             ].map(item => (
               <div key={item.title} className="bg-iron-900/50 border border-iron-800 rounded-xl p-4">
                 <item.icon className="w-5 h-5 text-flame-400 mb-2" />
@@ -157,23 +159,38 @@ function SectionContent({ id }) {
               <h3 className="text-sm font-semibold text-iron-100 mb-1">Manual</h3>
               <p className="text-xs text-iron-400 leading-relaxed">
                 Add exercises, sets, weight, and reps yourself. Full control over every detail.
+                Supports strength (weighted), bodyweight (reps), and time-based exercises.
               </p>
             </div>
             <div className="bg-iron-900/50 border border-iron-800 rounded-xl p-4">
               <h3 className="text-sm font-semibold text-iron-100 mb-1">AI Generated</h3>
               <p className="text-xs text-iron-400 leading-relaxed">
-                Tell the AI what you want to train. It builds a complete workout based on your history,
-                maxes, pain data, and RPE patterns. Costs 1 credit.
+                Tell the AI what you want. Pick a style (Push, Pull, Legs, Upper, Full Body, Bench Focus, Bodyweight, Hotel/Travel),
+                intensity, target duration, and exercise count. The AI builds a complete workout personalized to your data.
               </p>
             </div>
             <div className="bg-iron-900/50 border border-iron-800 rounded-xl p-4">
               <h3 className="text-sm font-semibold text-iron-100 mb-1">Program-Generated</h3>
               <p className="text-xs text-iron-400 leading-relaxed">
                 When you're on a program, tap a scheduled day and the AI generates a workout 
-                matching that day's prescription (e.g. "Heavy Bench 4×6 at 80%"). Costs 1 credit.
+                matching that day's prescription (e.g. "Heavy Bench 4×6 at 80%").
               </p>
             </div>
           </div>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">1RM Test Mode</h2>
+          <p className="text-iron-300 text-sm leading-relaxed mb-6">
+            Select "Test 1RM" as the workout style and pick an exercise. The AI generates a proper max-attempt
+            session — progressive warm-up ramps from 40% to 90% of your estimated max, then 2–3 singles at
+            95–105%. Includes rest guidance and light accessory cooldown work. If you have no training data for
+            that lift, it starts from the bar and lets you work up by feel.
+          </p>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">Cardio Tracking</h2>
+          <p className="text-iron-300 text-sm leading-relaxed mb-6">
+            Log cardio sessions with activity type, duration, and distance. The app estimates calories
+            burned using MET values. You can also set up recurring schedules for regular cardio days.
+          </p>
 
           <h2 className="text-lg font-display text-iron-100 mb-3">Logging Sets</h2>
           <p className="text-iron-300 text-sm leading-relaxed mb-4">
@@ -324,6 +341,14 @@ function SectionContent({ id }) {
             </div>
           </div>
 
+          <h2 className="text-lg font-display text-iron-100 mb-3">AI Goal Suggestions</h2>
+          <p className="text-iron-300 text-sm leading-relaxed mb-6">
+            Tap the "Suggest" button on the Goals page to have the AI analyze your training data and 
+            propose 2–4 achievable goals. It looks at your current maxes, recent progress, and existing
+            goals to avoid duplicates. If you don't have enough training data yet, it'll let you know — log
+            a few workouts first and come back.
+          </p>
+
           <h2 className="text-lg font-display text-iron-100 mb-3">Custom Exercises</h2>
           <p className="text-iron-300 text-sm leading-relaxed">
             You can select from common presets or type in any exercise name. The AI understands
@@ -358,9 +383,15 @@ function SectionContent({ id }) {
           </div>
 
           <h2 className="text-lg font-display text-iron-100 mb-3">Activity Feed</h2>
+          <p className="text-iron-300 text-sm leading-relaxed mb-6">
+            The feed shows completed workouts, PRs, and milestones from people in your groups
+            and your friends list. Comment and react to stay connected with your training partners.
+          </p>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">Friends</h2>
           <p className="text-iron-300 text-sm leading-relaxed">
-            The feed shows completed workouts, PRs, and milestones from people in your groups.
-            Comment and react to stay connected with your training partners.
+            Add friends by name to follow each other's progress. Friends' activity shows up in your feed
+            even if you're not in the same group. Go to the Friends page to search and send requests.
           </p>
         </div>
       )
@@ -403,6 +434,20 @@ function SectionContent({ id }) {
             generated but you didn't actually do it, the prescribed numbers are excluded. This prevents the AI from 
             training on its own guesses. Within completed workouts, sets must have actual performance data 
             (not just the prescribed values) to be counted.
+          </p>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">New User Handling</h2>
+          <p className="text-iron-300 text-sm leading-relaxed mb-6">
+            If you have no training history yet, the AI sets weights conservatively — bar weight to 65 lbs for
+            upper body, 95–135 lbs for lower body. A note will remind you to log the session so future workouts
+            can be personalized. The more you train, the smarter it gets.
+          </p>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">Warm-Up Guidance</h2>
+          <p className="text-iron-300 text-sm leading-relaxed mb-6">
+            For the first compound lift in each workout, the AI includes warm-up ramp sets in the
+            exercise notes — scaled to your working weight. For example: "Warm-up: Bar×10, 95×8, 135×5,
+            185×3 → working sets." Isolation and accessory exercises skip warm-ups.
           </p>
 
           <h2 className="text-lg font-display text-iron-100 mb-3">AI Chat</h2>
@@ -556,8 +601,46 @@ function SectionContent({ id }) {
         <div>
           <h1 className="text-2xl lg:text-3xl font-display text-iron-50 mb-3">Credits</h1>
           <p className="text-iron-300 leading-relaxed mb-6">
-            Credits are the currency for AI features. Every new account starts with free credits.
+            Credits are the currency for AI features. New accounts start with 50 free credits, and you can
+            earn more by completing tasks.
           </p>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">Earning Credits</h2>
+          <p className="text-iron-300 text-sm leading-relaxed mb-4">
+            When you first sign up, a checklist appears on the Today page with tasks that earn bonus credits:
+          </p>
+          <div className="bg-iron-900/50 border border-iron-800 rounded-xl overflow-hidden mb-8">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-iron-800">
+                  <th className="text-left px-4 py-3 text-iron-400 font-medium">Task</th>
+                  <th className="text-right px-4 py-3 text-iron-400 font-medium">Reward</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-iron-800/50">
+                <tr>
+                  <td className="px-4 py-3 text-iron-200">Read the docs</td>
+                  <td className="px-4 py-3 text-right text-green-400 font-mono">+25</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 text-iron-200">Set your first goal</td>
+                  <td className="px-4 py-3 text-right text-green-400 font-mono">+100</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 text-iron-200">Complete a workout</td>
+                  <td className="px-4 py-3 text-right text-green-400 font-mono">+100</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 text-iron-200">Generate an AI workout</td>
+                  <td className="px-4 py-3 text-right text-green-400 font-mono">+50</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 text-iron-200">Add a friend</td>
+                  <td className="px-4 py-3 text-right text-green-400 font-mono">+50</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <h2 className="text-lg font-display text-iron-100 mb-3">Credit Costs</h2>
           <div className="bg-iron-900/50 border border-iron-800 rounded-xl overflow-hidden mb-8">
@@ -571,7 +654,7 @@ function SectionContent({ id }) {
               <tbody className="divide-y divide-iron-800/50">
                 <tr>
                   <td className="px-4 py-3 text-iron-200">Generate a workout</td>
-                  <td className="px-4 py-3 text-right text-flame-400 font-mono">1 credit</td>
+                  <td className="px-4 py-3 text-right text-flame-400 font-mono">5 credits</td>
                 </tr>
                 <tr>
                   <td className="px-4 py-3 text-iron-200">Generate a program</td>
@@ -582,8 +665,8 @@ function SectionContent({ id }) {
                   <td className="px-4 py-3 text-right text-flame-400 font-mono">1 credit</td>
                 </tr>
                 <tr>
-                  <td className="px-4 py-3 text-iron-200">Group workout generation</td>
-                  <td className="px-4 py-3 text-right text-flame-400 font-mono">1 credit</td>
+                  <td className="px-4 py-3 text-iron-200">Group workout (per athlete)</td>
+                  <td className="px-4 py-3 text-right text-flame-400 font-mono">5 credits</td>
                 </tr>
               </tbody>
             </table>
@@ -645,7 +728,7 @@ function SectionContent({ id }) {
             </div>
             <div className="flex justify-between">
               <span className="text-iron-400">AI</span>
-              <span className="text-iron-200">OpenAI GPT-4o</span>
+              <span className="text-iron-200">OpenAI GPT-4.1-mini / GPT-4o-mini</span>
             </div>
             <div className="flex justify-between">
               <span className="text-iron-400">PWA</span>

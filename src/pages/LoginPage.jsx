@@ -403,7 +403,8 @@ export default function LoginPage() {
                       'Analyzes your actual training history',
                       'Calculates working weights from your maxes',
                       'Skips exercises flagged for pain',
-                      'No-equipment and hotel/travel modes',
+                      'Warm-up ramps and 1RM test protocols',
+                      'Bodyweight and hotel/travel modes',
                     ].map((t, i) => (
                       <div key={i} className="flex items-center gap-2 text-sm text-iron-300">
                         <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
@@ -459,8 +460,8 @@ export default function LoginPage() {
                   { icon: Sparkles, label: 'AI Workouts' },
                   { icon: Users, label: 'Group Training' },
                   { icon: Target, label: 'Goal Tracking' },
-                  { icon: TrendingUp, label: 'Analytics' },
-                  { icon: Activity, label: 'Community Feed' },
+                  { icon: TrendingUp, label: '1RM Test Mode' },
+                  { icon: Activity, label: 'Cardio Tracking' },
                   { icon: Calendar, label: 'Calendar' },
                   { icon: Dumbbell, label: '1RM Calculator' },
                   { icon: Brain, label: 'AI Coach Chat' },
@@ -487,7 +488,7 @@ export default function LoginPage() {
                 START TRAINING TODAY
               </h2>
               <p className="text-iron-400 mb-6">
-                Free to use. No credit card required.
+                Free to use. 50 credits to start — earn more as you train.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
