@@ -17,7 +17,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { workoutService } from '../services/firestore';
+import { workoutService, trainerRequestService } from '../services/firestore';
 import CardioForm from '../components/CardioForm';
 import { getTodayString, parseLocalDate, toDateString } from '../utils/dateUtils';
 import { normalizeRepRange } from '../utils/workoutUtils';
@@ -94,9 +94,11 @@ export default function NewWorkoutPage() {
   const [activeAutocomplete, setActiveAutocomplete] = useState(null); // exercise.id or null
   const autocompleteRef = useRef(null);
   
-  // Support admin creating workout for another user
+  // Support admin/trainer creating workout for another user
   const targetUserId = searchParams.get('userId') || user?.uid;
   const isAdminCreating = searchParams.get('userId') && searchParams.get('userId') !== user?.uid;
+  const trainerRequestId = searchParams.get('requestId') || null;
+  const paramDate = searchParams.get('date') || null;
   const isEditMode = !!editId;
 
   // Merge default exercises with custom exercises from user profile
@@ -107,7 +109,7 @@ export default function NewWorkoutPage() {
 
   const [workout, setWorkout] = useState({
     name: '',
-    date: getTodayString(),
+    date: paramDate || getTodayString(),
     notes: '',
     exercises: [createEmptyExercise()],
   });
@@ -352,13 +354,24 @@ export default function NewWorkoutPage() {
         ...workout,
         date: parseLocalDate(workout.date),
       };
+
+      // Add trainer fields if creating for a trainer request
+      if (trainerRequestId) {
+        workoutData.trainerRequestId = trainerRequestId;
+        workoutData.trainerId = user?.uid;
+      }
       
       if (isEditMode) {
         await workoutService.update(editId, workoutData);
       } else {
-        await workoutService.create(targetUserId, workoutData);
+        const saved = await workoutService.create(targetUserId, workoutData);
+
+        // Link workout back to the trainer request
+        if (trainerRequestId && saved?.id) {
+          await trainerRequestService.linkWorkout(trainerRequestId, saved.id).catch(console.error);
+        }
       }
-      navigate(isAdminCreating ? '/admin' : '/workouts');
+      navigate(trainerRequestId ? '/trainer' : isAdminCreating ? '/admin' : '/workouts');
     } catch (error) {
       console.error('Error saving workout:', error);
       alert('Failed to save workout');
@@ -387,10 +400,10 @@ export default function NewWorkoutPage() {
         </button>
         <div>
           <h1 className="font-display text-display-md text-iron-50">
-            {isEditMode ? 'Edit Workout' : 'New Workout'}
+            {isEditMode ? 'Edit Workout' : trainerRequestId ? 'Create Trainer Workout' : 'New Workout'}
           </h1>
           <p className="text-iron-400">
-            {isEditMode ? 'Update your training session' : 'Log your training session'}
+            {isEditMode ? 'Update your training session' : trainerRequestId ? `Building for user ${targetUserId.slice(0, 8)}...` : 'Log your training session'}
           </p>
         </div>
       </div>

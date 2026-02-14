@@ -1602,6 +1602,15 @@ export const trainerRequestService = {
     });
   },
 
+  // Link a created workout to the request (keeps status in_progress)
+  async linkWorkout(requestId, workoutId) {
+    const ref = doc(db, 'trainerRequests', requestId);
+    await updateDoc(ref, {
+      workoutId,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
   // Complete a request with workout data
   async complete(requestId, workoutId, trainerNotes) {
     const ref = doc(db, 'trainerRequests', requestId);

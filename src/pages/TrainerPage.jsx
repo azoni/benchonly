@@ -389,7 +389,14 @@ export default function TrainerPage() {
                               <>
                                 {req.type === 'custom_workout' && (
                                   <button
-                                    onClick={() => navigate(`/workouts/new?forUser=${req.userId}&requestId=${req.id}`)}
+                                    onClick={() => {
+                                      const params = new URLSearchParams({
+                                        userId: req.userId,
+                                        requestId: req.id,
+                                      })
+                                      if (req.targetDate) params.set('date', req.targetDate)
+                                      navigate(`/workouts/new?${params.toString()}`)
+                                    }}
                                     className="flex-1 py-2.5 bg-flame-500 hover:bg-flame-400 text-white rounded-lg
                                       text-sm font-medium flex items-center justify-center gap-2 transition-colors"
                                   >

@@ -656,7 +656,7 @@ export default function WorkoutsPage() {
       {/* Click outside to close menu */}
       {activeMenu && (
         <div
-          className="fixed inset-0 z-10"
+          className="fixed inset-0 z-[5]"
           onClick={() => setActiveMenu(null)}
         />
       )}
