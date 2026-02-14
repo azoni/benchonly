@@ -301,11 +301,12 @@ export default function WorkoutsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => openTrainerRequest('custom_workout')}
-            className="btn-secondary flex items-center gap-2"
+            className="btn-secondary flex items-center gap-2 relative"
             title="Request custom workout from a real trainer"
           >
             <ClipboardList className="w-4 h-4" />
             <span className="hidden sm:inline">Trainer</span>
+            <span className="text-[9px] px-1 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium leading-none">Beta</span>
           </button>
           <Link to="/workouts/generate" className="btn-secondary flex items-center gap-2">
             <Sparkles className="w-4 h-4" />

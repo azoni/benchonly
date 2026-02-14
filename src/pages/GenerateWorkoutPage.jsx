@@ -105,6 +105,7 @@ export default function GenerateWorkoutPage() {
   const [model, setModel] = useState('standard');
   const [duration, setDuration] = useState('auto');
   const [exerciseCount, setExerciseCount] = useState('auto');
+  const [maxExercise, setMaxExercise] = useState('');
   const [workoutDate, setWorkoutDate] = useState(() => {
     const dateParam = searchParams.get('date')
     if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return dateParam
@@ -382,6 +383,7 @@ export default function GenerateWorkoutPage() {
           model,
           duration: duration !== 'auto' ? parseInt(duration) : null,
           exerciseCount: exerciseCount !== 'auto' ? parseInt(exerciseCount) : null,
+          maxExercise: workoutFocus === '1rm-test' ? maxExercise : null,
           draftMode: true,
           context: {
             recentWorkouts: userContext.recentWorkouts.slice(0, 5),
@@ -584,11 +586,11 @@ export default function GenerateWorkoutPage() {
     { value: 'pull', label: 'Pull' },
     { value: 'legs', label: 'Legs' },
     { value: 'upper', label: 'Upper' },
-    { value: 'lower', label: 'Lower' },
     { value: 'full', label: 'Full Body' },
     { value: 'bench', label: 'Bench Focus' },
-    { value: 'no-equipment', label: 'No Equipment' },
+    { value: 'no-equipment', label: 'Bodyweight' },
     { value: 'vacation', label: 'Hotel / Travel' },
+    { value: '1rm-test', label: 'Test 1RM' },
   ];
   
   const intensityOptions = [
@@ -831,10 +833,13 @@ export default function GenerateWorkoutPage() {
                   {focusOptions.map(opt => (
                     <button
                       key={opt.value}
-                      onClick={() => setWorkoutFocus(opt.value)}
+                      onClick={() => {
+                        setWorkoutFocus(opt.value)
+                        if (opt.value !== '1rm-test') setMaxExercise('')
+                      }}
                       className={`px-3 py-1.5 text-sm rounded-lg border transition-colors
                         ${workoutFocus === opt.value
-                          ? 'border-flame-500 bg-flame-500/10 text-flame-400'
+                          ? opt.value === '1rm-test' ? 'border-yellow-500 bg-yellow-500/10 text-yellow-400' : 'border-flame-500 bg-flame-500/10 text-flame-400'
                           : 'border-iron-700 text-iron-400 hover:border-iron-600'
                         }`}
                     >
@@ -843,7 +848,36 @@ export default function GenerateWorkoutPage() {
                   ))}
                 </div>
               </div>
-              
+
+              {/* 1RM Test — exercise picker */}
+              {workoutFocus === '1rm-test' && (
+                <div className="mb-4 p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-xl">
+                  <label className="block text-sm text-yellow-400 mb-2">Which lift are you testing?</label>
+                  <input
+                    type="text"
+                    value={maxExercise}
+                    onChange={(e) => setMaxExercise(e.target.value)}
+                    placeholder="e.g. Bench Press, Squat, Deadlift..."
+                    className="input-field w-full"
+                    list="known-exercises"
+                  />
+                  <datalist id="known-exercises">
+                    {Object.keys(userContext.maxLifts).map(name => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
+                  {maxExercise && userContext.maxLifts[maxExercise] && (
+                    <p className="text-xs text-iron-500 mt-2">
+                      Current e1RM: <span className="text-iron-300">{userContext.maxLifts[maxExercise].e1rm} lbs</span>
+                      <span className="text-iron-600"> (best: {userContext.maxLifts[maxExercise].weight}×{userContext.maxLifts[maxExercise].reps})</span>
+                    </p>
+                  )}
+                  <p className="text-xs text-iron-600 mt-1.5">AI will generate warm-up ramps, attempt protocols, and accessory cooldown.</p>
+                </div>
+              )}
+
+              {/* Intensity — hidden for 1RM test */}
+              {workoutFocus !== '1rm-test' && (
               <div className="mb-4">
                 <label className="block text-sm text-iron-400 mb-2">Intensity</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -863,7 +897,10 @@ export default function GenerateWorkoutPage() {
                   ))}
                 </div>
               </div>
+              )}
 
+              {/* Duration & Exercises — hidden for 1RM test */}
+              {workoutFocus !== '1rm-test' && (
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm text-iron-400 mb-2">Duration</label>
@@ -917,6 +954,7 @@ export default function GenerateWorkoutPage() {
                   </div>
                 </div>
               </div>
+              )}
               
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
@@ -959,7 +997,7 @@ export default function GenerateWorkoutPage() {
               
               <button
                 onClick={handleGenerate}
-                disabled={loading || loadingContext || (!isAdmin && (userProfile?.credits ?? 0) < (model === 'premium' ? PREMIUM_CREDIT_COST : CREDIT_COSTS['generate-workout']))}
+                disabled={loading || loadingContext || (workoutFocus === '1rm-test' && !maxExercise.trim()) || (!isAdmin && (userProfile?.credits ?? 0) < (model === 'premium' ? PREMIUM_CREDIT_COST : CREDIT_COSTS['generate-workout']))}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 {loading ? (

@@ -35,7 +35,7 @@ const ADMIN_EMAILS = ['charltonuw@gmail.com'];
 const baseNavItems = [
   { path: '/today', icon: Home, label: 'Today', badgeKey: 'workouts' },
   { path: '/workouts', icon: Dumbbell, label: 'Workouts' },
-  { path: '/programs', icon: Layers, label: 'Programs' },
+  { path: '/programs', icon: Layers, label: 'Programs', beta: true },
   { path: '/groups', icon: Users, label: 'Groups' },
   { path: '/feed', icon: Activity, label: 'Feed' },
   { path: '/goals', icon: Target, label: 'Goals' },
@@ -187,7 +187,10 @@ export default function Layout() {
                   )}
                 </div>
                 {sidebarOpen && (
-                  <span className="font-medium">{item.label}</span>
+                  <>
+                    <span className="font-medium">{item.label}</span>
+                    {item.beta && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium leading-none">Beta</span>}
+                  </>
                 )}
               </Link>
             );
@@ -358,6 +361,7 @@ export default function Layout() {
                         )}
                       </div>
                       <span className="font-medium text-lg">{item.label}</span>
+                      {item.beta && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium leading-none">Beta</span>}
                     </Link>
                   );
                 })}

@@ -774,30 +774,6 @@ export default function TodayPage() {
         </div>
       </motion.div>
 
-      {/* Start a Program prompt */}
-      {!hasActiveProgram && !loading && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18 }}
-          className="mb-6"
-        >
-          <Link
-            to="/programs"
-            className="card-steel p-4 flex items-center gap-3 hover:border-iron-600 transition-colors block"
-          >
-            <div className="w-10 h-10 rounded-xl bg-flame-500/10 flex items-center justify-center flex-shrink-0">
-              <Layers className="w-5 h-5 text-flame-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-iron-200">Start a Training Program</p>
-              <p className="text-xs text-iron-500">AI builds a periodized plan for your goals</p>
-            </div>
-            <ArrowRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
-          </Link>
-        </motion.div>
-      )}
-
       {/* Active Goals */}
       {goals.length > 0 ? (
         <motion.div
@@ -859,78 +835,6 @@ export default function TodayPage() {
           </Link>
         </motion.div>
       )}
-
-      {/* Recent Activity */}
-      {(() => {
-        const userGroupIds = new Set(userProfile?.groups || [])
-        const visibleItems = feedItems.filter(item => {
-          if (item.userId === user?.uid) return true
-          const visibility = item.visibility || 'public'
-          if (visibility === 'private') return false
-          if (visibility === 'friends') return friendSet.has(item.userId)
-          if (visibility === 'group') return item.groupId && userGroupIds.has(item.groupId)
-          return true // public
-        })
-        return visibleItems.length > 0 ? (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs text-iron-500 uppercase tracking-wider flex items-center gap-2">
-              <Users className="w-3.5 h-3.5" />
-              Recent Activity
-            </h3>
-            <Link to="/feed" className="text-xs text-flame-400 hover:text-flame-300">View all →</Link>
-          </div>
-          <div className="card-steel divide-y divide-iron-800">
-            {visibleItems.slice(0, 4).map(item => {
-              const feedUser = feedUsers[item.userId]
-              const userName = feedUser?.displayName || 'Someone'
-              const isOwnWorkout = item.userId === user?.uid && item.data?.workoutId
-              const workoutLink = isOwnWorkout
-                ? (item.type === 'group_workout' ? `/workouts/group/${item.data.workoutId}` : `/workouts/${item.data.workoutId}`)
-                : null
-              const Wrapper = workoutLink ? Link : 'div'
-              const wrapperProps = workoutLink ? { to: workoutLink } : {}
-              return (
-                <Wrapper key={item.id} {...wrapperProps} className={`flex items-center gap-3 p-3${workoutLink ? ' hover:bg-iron-800/50 transition-colors' : ''}`}>
-                  <Link to={`/profile/${item.userId}`} className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 text-xs flex-shrink-0 overflow-hidden">
-                    {feedUser?.photoURL ? (
-                      <img src={feedUser.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" />
-                    ) : (
-                      <span>{userName[0]}</span>
-                    )}
-                  </Link>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-iron-300 truncate">
-                      <span className="text-iron-200 font-medium">{userName}</span>{' '}
-                      {item.type === 'workout' ? `completed ${item.data?.name || 'a workout'}` :
-                       item.type === 'group_workout' ? `completed their workout${item.data?.groupName ? ` in ${item.data.groupName}` : ''}` :
-                       item.type === 'goal_completed' ? `achieved ${item.data?.lift}` :
-                       item.type === 'cardio' ? `logged ${item.data?.duration}min ${item.data?.name || 'cardio'}` :
-                       item.type === 'personal_record' ? `hit a new PR on ${item.data?.exercise}` :
-                       'was active'}
-                    </p>
-                    <p className="text-xs text-iron-600">
-                      {item.createdAt?.toDate && format(item.createdAt.toDate(), 'EEE, h:mm a')}
-                      {(item.type === 'workout' || item.type === 'group_workout') && (() => {
-                        const dur = formatDuration(item.data?.totalSets, item.data?.duration)
-                        return dur ? ` · ${dur}` : ''
-                      })()}
-                    </p>
-                  </div>
-                  {workoutLink && (
-                    <ChevronRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
-                  )}
-                </Wrapper>
-              )
-            })}
-          </div>
-        </motion.div>
-      ) : null
-      })()}
 
       {/* News & Updates */}
       <motion.div
@@ -1073,6 +977,79 @@ export default function TodayPage() {
           </motion.div>
         )}
       </motion.div>
+
+      {/* Recent Activity */}
+      {(() => {
+        const userGroupIds = new Set(userProfile?.groups || [])
+        const visibleItems = feedItems.filter(item => {
+          if (item.userId === user?.uid) return true
+          const visibility = item.visibility || 'public'
+          if (visibility === 'private') return false
+          if (visibility === 'friends') return friendSet.has(item.userId)
+          if (visibility === 'group') return item.groupId && userGroupIds.has(item.groupId)
+          return true // public
+        })
+        return visibleItems.length > 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="mt-6"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs text-iron-500 uppercase tracking-wider flex items-center gap-2">
+              <Users className="w-3.5 h-3.5" />
+              Recent Activity
+            </h3>
+            <Link to="/feed" className="text-xs text-flame-400 hover:text-flame-300">View all →</Link>
+          </div>
+          <div className="card-steel divide-y divide-iron-800">
+            {visibleItems.slice(0, 4).map(item => {
+              const feedUser = feedUsers[item.userId]
+              const userName = feedUser?.displayName || 'Someone'
+              const isOwnWorkout = item.userId === user?.uid && item.data?.workoutId
+              const workoutLink = isOwnWorkout
+                ? (item.type === 'group_workout' ? `/workouts/group/${item.data.workoutId}` : `/workouts/${item.data.workoutId}`)
+                : null
+              const Wrapper = workoutLink ? Link : 'div'
+              const wrapperProps = workoutLink ? { to: workoutLink } : {}
+              return (
+                <Wrapper key={item.id} {...wrapperProps} className={`flex items-center gap-3 p-3${workoutLink ? ' hover:bg-iron-800/50 transition-colors' : ''}`}>
+                  <Link to={`/profile/${item.userId}`} className="w-8 h-8 rounded-full bg-iron-800 flex items-center justify-center text-iron-400 text-xs flex-shrink-0 overflow-hidden">
+                    {feedUser?.photoURL ? (
+                      <img src={feedUser.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" />
+                    ) : (
+                      <span>{userName[0]}</span>
+                    )}
+                  </Link>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-iron-300 truncate">
+                      <span className="text-iron-200 font-medium">{userName}</span>{' '}
+                      {item.type === 'workout' ? `completed ${item.data?.name || 'a workout'}` :
+                       item.type === 'group_workout' ? `completed their workout${item.data?.groupName ? ` in ${item.data.groupName}` : ''}` :
+                       item.type === 'goal_completed' ? `achieved ${item.data?.lift}` :
+                       item.type === 'cardio' ? `logged ${item.data?.duration}min ${item.data?.name || 'cardio'}` :
+                       item.type === 'personal_record' ? `hit a new PR on ${item.data?.exercise}` :
+                       'was active'}
+                    </p>
+                    <p className="text-xs text-iron-600">
+                      {item.createdAt?.toDate && format(item.createdAt.toDate(), 'EEE, h:mm a')}
+                      {(item.type === 'workout' || item.type === 'group_workout') && (() => {
+                        const dur = formatDuration(item.data?.totalSets, item.data?.duration)
+                        return dur ? ` · ${dur}` : ''
+                      })()}
+                    </p>
+                  </div>
+                  {workoutLink && (
+                    <ChevronRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
+                  )}
+                </Wrapper>
+              )
+            })}
+          </div>
+        </motion.div>
+      ) : null
+      })()}
     </div>
   )
 }

@@ -16,7 +16,7 @@ export async function handler(event) {
   if (!auth) return UNAUTHORIZED;
 
   try {
-    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId, duration, exerciseCount } = JSON.parse(event.body);
+    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId, duration, exerciseCount, maxExercise } = JSON.parse(event.body);
     // Use targetUserId only if caller is admin (for impersonation)
     const userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
     // Enforce admin-only premium model
@@ -36,7 +36,7 @@ export async function handler(event) {
       painThresholdCount: 2,
     };
 
-    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings, duration, exerciseCount);
+    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings, duration, exerciseCount, maxExercise);
 
     const systemPrompt = `You are an expert strength coach. Create a personalized workout.
 
@@ -63,6 +63,15 @@ If a target duration or exercise count is specified, respect it:
 - Medium workouts (30-45 min): 4-5 exercises, 3-4 sets each.
 - Long workouts (60-90 min): 5-8 exercises, 3-5 sets each.
 - Adjust total volume so the workout fits the requested time.
+
+1RM TEST PROTOCOL:
+If the focus is "1rm-test", generate a max-attempt session for the specified exercise:
+1. Exercise 1: The target lift. Include 6-8 progressive warm-up sets ramping from ~40% to ~90% of estimated 1RM, then 2-3 max attempt singles at 95-105% e1RM. In the exercise "notes", write detailed warm-up/attempt plan:
+   "Warm-up: Bar x5, [40%]x5, [50%]x3, [60%]x2, [70%]x1, [80%]x1, [90%]x1 → Attempts: [95%]x1, [100%]x1, [102-105%]x1. Rest 3-5 min between attempts."
+   Use the actual e1RM data to calculate real weights rounded to nearest 5 lbs.
+2. Exercise 2-3: 1-2 light accessory exercises (2 sets each) as a cooldown targeting muscles used in the main lift. Keep volume very low.
+3. Set the workout name to "1RM Test: [Exercise Name]".
+4. Set estimatedDuration to 30-40 minutes.
 
 STANDARD WORKOUT RULES:
 - Max lifts (use 70-85% of e1RM for working sets)
@@ -300,22 +309,37 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
   }
 }
 
-function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null) {
+function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null, maxExercise = null) {
   const painThresholdMin = settings.painThresholdMin || 3;
   const painThresholdCount = settings.painThresholdCount || 2;
   
   let s = '';
 
-  // Duration and exercise count constraints
-  if (duration) {
-    s += `TARGET DURATION: ${duration} minutes. Fit the workout within this time.\n`;
+  // 1RM test mode
+  if (focus === '1rm-test' && maxExercise) {
+    s += `FOCUS: 1RM TEST for ${maxExercise}\n`;
+    s += `Generate a max-attempt session following the 1RM TEST PROTOCOL.\n`;
+    const liftData = ctx?.maxLifts?.[maxExercise];
+    if (liftData) {
+      s += `Current e1RM: ${liftData.e1rm} lbs (best: ${liftData.weight}lb x ${liftData.reps})\n`;
+    } else {
+      s += `No e1RM data available — use conservative warm-up progression and let the athlete work up by feel.\n`;
+    }
+    s += '\n';
+  } else {
+    // Duration and exercise count constraints
+    if (duration) {
+      s += `TARGET DURATION: ${duration} minutes. Fit the workout within this time.\n`;
+    }
+    if (exerciseCount) {
+      s += `TARGET EXERCISES: ${exerciseCount} exercises. Use exactly this many.\n`;
+    }
+    if (duration || exerciseCount) s += '\n';
   }
-  if (exerciseCount) {
-    s += `TARGET EXERCISES: ${exerciseCount} exercises. Use exactly this many.\n`;
-  }
-  if (duration || exerciseCount) s += '\n';
 
-  if (focus === 'no-equipment') {
+  if (focus === '1rm-test') {
+    // Skip regular focus/intensity for 1RM test
+  } else if (focus === 'no-equipment') {
     s += `FOCUS: Bodyweight only — NO equipment whatsoever. Use exercises like push-ups, pull-ups (if available), squats, lunges, planks, burpees, dips, glute bridges, mountain climbers, etc. Set type to 'bodyweight' or 'time' for all exercises.\n`;
   } else if (focus === 'vacation') {
     s += `FOCUS: Hotel/travel workout — minimal or no equipment. Assume only bodyweight and maybe a single set of light dumbbells or resistance band. Keep it 20-35 min. Prioritize compound movements and circuits. Set type to 'bodyweight' or 'time' for exercises without weights.\n`;
