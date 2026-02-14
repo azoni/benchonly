@@ -24,6 +24,7 @@ export const SPECIAL_EVENTS = [
       badgeIcon: '❤️',
       badgeName: "Valentine's Day 2026 — Completed the Valentine's Challenge",
       creditReward: 200,
+      dateLabel: 'Feb 14–16',
       theme: {
         bg: 'bg-pink-500/10',
         border: 'border-pink-500/25',
@@ -61,6 +62,7 @@ export const SPECIAL_EVENTS = [
               id: 'ex-1',
               name: 'Push-ups',
               type: 'bodyweight',
+              notes: 'Hands shoulder-width apart, body in a straight line from head to heels. Lower until chest nearly touches the floor, then push back up. Keep core tight throughout. Too hard? Do knee push-ups or incline push-ups with hands on a chair/counter.',
               sets: [1, 2, 3].map((n, i) => ({
                 id: `set-1-${i}`,
                 prescribedReps: String(scale.pushups),
@@ -75,6 +77,7 @@ export const SPECIAL_EVENTS = [
               id: 'ex-2',
               name: 'Bodyweight Squats',
               type: 'bodyweight',
+              notes: 'Feet shoulder-width apart, toes slightly out. Sit back and down like sitting into a chair — hips below parallel if possible. Drive through your heels to stand. Too hard? Squat to a chair (sit down lightly, then stand back up) or do half squats.',
               sets: [1, 2, 3].map((n, i) => ({
                 id: `set-2-${i}`,
                 prescribedReps: String(scale.squats),
@@ -89,6 +92,7 @@ export const SPECIAL_EVENTS = [
               id: 'ex-3',
               name: 'Alternating Lunges',
               type: 'bodyweight',
+              notes: 'Step forward with one leg, lower until both knees are at ~90°. Front knee stays over the ankle, not past your toes. Push back to standing and alternate legs. Too hard? Do reverse lunges (step backward instead) or hold onto a wall for balance.',
               sets: [1, 2, 3].map((n, i) => ({
                 id: `set-3-${i}`,
                 prescribedReps: `${scale.lunges} total`,
@@ -103,6 +107,7 @@ export const SPECIAL_EVENTS = [
               id: 'ex-4',
               name: 'Burpees',
               type: 'bodyweight',
+              notes: 'From standing: squat down, place hands on the floor, jump feet back into a plank, do a push-up, jump feet forward, then jump up with hands overhead. That\'s one rep. Too hard? Skip the push-up and/or the jump — just step feet back and forward instead.',
               sets: [1, 2, 3].map((n, i) => ({
                 id: `set-4-${i}`,
                 prescribedReps: String(scale.burpees),
@@ -117,6 +122,7 @@ export const SPECIAL_EVENTS = [
               id: 'ex-5',
               name: 'Mountain Climbers',
               type: 'bodyweight',
+              notes: 'Start in a high plank position. Drive one knee toward your chest, then quickly switch legs — like running in place horizontally. Keep hips level and core braced. Too hard? Slow it down — step feet in one at a time instead of jumping.',
               sets: [1, 2, 3].map((n, i) => ({
                 id: `set-5-${i}`,
                 prescribedReps: `${scale.mountainClimbers} total`,
@@ -131,6 +137,7 @@ export const SPECIAL_EVENTS = [
               id: 'ex-6',
               name: 'Plank',
               type: 'time',
+              notes: `Hold for ${scale.plank} seconds per round. Forearms on the ground, elbows under shoulders, body in a straight line. Squeeze your glutes and brace your abs — don't let your hips sag or pike up. Too hard? Drop to your knees or do the plank from your hands instead of forearms.`,
               sets: [1, 2, 3].map((n, i) => ({
                 id: `set-6-${i}`,
                 prescribedTime: String(scale.plank),

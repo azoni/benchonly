@@ -476,6 +476,7 @@ export default function TodayPage() {
                         ? 'In progress — tap to continue'
                         : `${activeEvent.creditReward} credits + profile badge`
                     }
+                    {activeEvent.dateLabel && !isCompleted && <> · {activeEvent.dateLabel}</>}
                   </p>
                 </div>
                 {isCompleted ? (

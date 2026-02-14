@@ -67,9 +67,14 @@ export default function SpecialEventModal({ event, onClose, userContext }) {
             <h2 className="text-xl font-display text-iron-50 mb-2">
               {event.name}
             </h2>
-            <p className="text-sm text-iron-400 leading-relaxed mb-6">
+            <p className="text-sm text-iron-400 leading-relaxed mb-4">
               {event.description}
             </p>
+            {event.dateLabel && (
+              <p className="text-xs text-iron-500 mb-6">
+                Available {event.dateLabel}
+              </p>
+            )}
 
             {/* Rewards */}
             <div className="flex items-center justify-center gap-4 mb-6">
