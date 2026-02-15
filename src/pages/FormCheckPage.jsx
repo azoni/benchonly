@@ -319,17 +319,61 @@ export default function FormCheckPage() {
 
       let startTime = 0, endTime = duration
       if (motionScores.length > maxFrames) {
-        const windowSize = Math.min(maxFrames, motionScores.length)
-        let bestSum = 0, bestStart = 0
-        for (let i = 0; i <= motionScores.length - windowSize; i++) {
-          let sum = 0
-          for (let j = i; j < i + windowSize; j++) sum += motionScores[j].score
-          if (sum > bestSum) { bestSum = sum; bestStart = i }
+        // Sort scores to find threshold — actual lifting creates much more
+        // motion than setup shuffling (adjusting grip, getting in position)
+        const sorted = [...motionScores].map(m => m.score).sort((a, b) => a - b)
+        const median = sorted[Math.floor(sorted.length / 2)]
+        const p75 = sorted[Math.floor(sorted.length * 0.75)]
+        // Threshold: frames above this are likely the actual exercise
+        // Use midpoint between median and 75th percentile
+        const threshold = (median + p75) / 2
+
+        // Find contiguous runs of above-threshold motion (the "bursts")
+        const bursts = []
+        let currentBurst = null
+        for (let i = 0; i < motionScores.length; i++) {
+          if (motionScores[i].score >= threshold) {
+            if (!currentBurst) currentBurst = { start: i, end: i, totalScore: 0 }
+            currentBurst.end = i
+            currentBurst.totalScore += motionScores[i].score
+          } else {
+            // Allow 1-frame gaps (brief pause between reps)
+            if (currentBurst && i - currentBurst.end <= 2) {
+              currentBurst.end = i
+              currentBurst.totalScore += motionScores[i].score
+            } else if (currentBurst) {
+              bursts.push(currentBurst)
+              currentBurst = null
+            }
+          }
         }
-        const ws = Math.max(0, bestStart - 1)
-        const we = Math.min(motionScores.length - 1, bestStart + windowSize)
-        startTime = motionScores[ws].time
-        endTime = motionScores[we].time
+        if (currentBurst) bursts.push(currentBurst)
+
+        // Pick the burst with the highest total motion
+        let bestBurst = bursts.length > 0
+          ? bursts.reduce((a, b) => a.totalScore > b.totalScore ? a : b)
+          : null
+
+        if (bestBurst) {
+          // Add 1 frame of context before/after the burst for setup/lockout
+          const ws = Math.max(0, bestBurst.start - 1)
+          const we = Math.min(motionScores.length - 1, bestBurst.end + 1)
+          startTime = motionScores[ws].time
+          endTime = motionScores[we].time
+        } else {
+          // Fallback to old sliding window if no clear burst found
+          const windowSize = Math.min(maxFrames, motionScores.length)
+          let bestSum = 0, bestStart = 0
+          for (let i = 0; i <= motionScores.length - windowSize; i++) {
+            let sum = 0
+            for (let j = i; j < i + windowSize; j++) sum += motionScores[j].score
+            if (sum > bestSum) { bestSum = sum; bestStart = i }
+          }
+          const ws = Math.max(0, bestStart - 1)
+          const we = Math.min(motionScores.length - 1, bestStart + windowSize)
+          startTime = motionScores[ws].time
+          endTime = motionScores[we].time
+        }
       }
 
       const windowDuration = endTime - startTime
@@ -542,7 +586,7 @@ export default function FormCheckPage() {
           <div className="flex items-start gap-2.5 p-3 bg-iron-800/40 rounded-xl">
             <Info className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" />
             <p className="text-xs text-iron-500 leading-relaxed">
-              Video is processed on your device — only extracted frames are sent. We auto-detect when the exercise starts. Best with a side or 45° angle.
+              Video is processed on your device — only extracted frames are sent. We skip setup and rest to focus frames on the actual lift. Best with a side or 45° angle.
             </p>
           </div>
 
@@ -563,10 +607,10 @@ export default function FormCheckPage() {
             </div>
           </div>
           <p className="text-iron-200 font-semibold mb-1">
-            {extractProgress <= 30 ? 'Scanning for movement...' : 'Extracting key frames...'}
+            {extractProgress <= 30 ? 'Scanning for the actual lift...' : 'Extracting key frames...'}
           </p>
           <p className="text-xs text-iron-500 mb-4">
-            {extractProgress <= 30 ? 'Detecting when the exercise starts' : `Capturing ${FRAME_PRESETS[quality].frames} frames`}
+            {extractProgress <= 30 ? 'Detecting when the lift starts' : `Capturing ${FRAME_PRESETS[quality].frames} frames`}
           </p>
           <div className="w-56 h-2.5 bg-iron-800 rounded-full mx-auto overflow-hidden">
             <motion.div className="h-full bg-gradient-to-r from-flame-500 to-flame-400 rounded-full"
