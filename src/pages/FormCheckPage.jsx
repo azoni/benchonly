@@ -19,9 +19,9 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { creditService, CREDIT_COSTS } from '../services/firestore'
 
-const MAX_FRAMES = 20
+const MAX_FRAMES = 10
 const FRAME_WIDTH = 480
-const JPEG_QUALITY = 0.6
+const JPEG_QUALITY = 0.5
 const FORM_CHECK_PREMIUM_COST = 50
 
 // Score helpers — return full static class names so Tailwind can detect them at build
@@ -116,12 +116,19 @@ export default function FormCheckPage() {
 
     const ctx = canvas.getContext('2d')
 
+    // Helper: seek and wait
+    const seekTo = (time) => new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Frame seek timed out')), 5000)
+      video.onseeked = () => { clearTimeout(timeout); resolve() }
+      video.onerror = () => { clearTimeout(timeout); reject(new Error('Video error during seek')) }
+      video.currentTime = time
+    })
+
     try {
       video.src = videoUrl
       await new Promise((resolve, reject) => {
-        if (video.readyState >= 1) {
-          resolve()
-        } else {
+        if (video.readyState >= 1) resolve()
+        else {
           video.onloadedmetadata = resolve
           video.onerror = () => reject(new Error('Could not load video'))
         }
@@ -134,32 +141,90 @@ export default function FormCheckPage() {
         return
       }
 
-      const totalFrames = Math.max(1, Math.min(MAX_FRAMES, Math.floor(duration)))
-      const interval = duration / totalFrames
+      // ── Pass 1: Motion scan ──
+      // Sample small thumbnails across the video and measure pixel differences
+      // to find the window where the actual exercise happens
+      const SCAN_WIDTH = 160
+      const scanScale = Math.min(1, SCAN_WIDTH / video.videoWidth)
+      canvas.width = Math.round(video.videoWidth * scanScale)
+      canvas.height = Math.round(video.videoHeight * scanScale)
 
-      const scale = Math.min(1, FRAME_WIDTH / video.videoWidth)
-      canvas.width = Math.round(video.videoWidth * scale)
-      canvas.height = Math.round(video.videoHeight * scale)
+      const scanCount = Math.max(2, Math.min(30, Math.floor(duration * 2))) // ~2 samples/sec, max 30
+      const scanInterval = duration / scanCount
+      const motionScores = [] // { time, score }
+      let prevData = null
+
+      for (let i = 0; i < scanCount; i++) {
+        const time = i * scanInterval
+        await seekTo(time)
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+
+        if (prevData) {
+          // Sum of absolute pixel differences (sample every 4th pixel for speed)
+          let diff = 0
+          for (let p = 0; p < imgData.length; p += 16) {
+            diff += Math.abs(imgData[p] - prevData[p])
+              + Math.abs(imgData[p + 1] - prevData[p + 1])
+              + Math.abs(imgData[p + 2] - prevData[p + 2])
+          }
+          motionScores.push({ time, score: diff })
+        }
+        prevData = new Uint8Array(imgData)
+        setExtractProgress(Math.round(((i + 1) / scanCount) * 30)) // 0-30%
+      }
+
+      // ── Find best window ──
+      // Slide a window of MAX_FRAMES seconds across motion scores
+      // and pick the window with the highest total motion
+      let startTime = 0
+      let endTime = duration
+
+      if (motionScores.length > MAX_FRAMES) {
+        const windowSize = Math.min(MAX_FRAMES, motionScores.length)
+        let bestSum = 0
+        let bestStart = 0
+
+        for (let i = 0; i <= motionScores.length - windowSize; i++) {
+          let sum = 0
+          for (let j = i; j < i + windowSize; j++) {
+            sum += motionScores[j].score
+          }
+          if (sum > bestSum) {
+            bestSum = sum
+            bestStart = i
+          }
+        }
+
+        // Expand window slightly for context (1 frame before/after)
+        const windowStart = Math.max(0, bestStart - 1)
+        const windowEnd = Math.min(motionScores.length - 1, bestStart + windowSize)
+        startTime = motionScores[windowStart].time
+        endTime = motionScores[windowEnd].time
+      }
+
+      // ── Pass 2: Extract final frames from the active window ──
+      const windowDuration = endTime - startTime
+      const totalFrames = Math.max(1, Math.min(MAX_FRAMES, Math.floor(windowDuration)))
+      const interval = windowDuration / totalFrames
+
+      // Set canvas to final output size
+      const finalScale = Math.min(1, FRAME_WIDTH / video.videoWidth)
+      canvas.width = Math.round(video.videoWidth * finalScale)
+      canvas.height = Math.round(video.videoHeight * finalScale)
 
       const extractedFrames = []
 
       for (let i = 0; i < totalFrames; i++) {
-        const time = i * interval
-
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('Frame seek timed out')), 5000)
-          video.onseeked = () => { clearTimeout(timeout); resolve() }
-          video.onerror = () => { clearTimeout(timeout); reject(new Error('Video error during seek')) }
-          video.currentTime = time
-        })
-
+        const time = startTime + (i * interval)
+        await seekTo(time)
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
         const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
         const base64 = dataUrl.split(',')[1]
         extractedFrames.push({ dataUrl, base64, timestamp: time, index: i + 1 })
 
-        setExtractProgress(Math.round(((i + 1) / totalFrames) * 100))
+        setExtractProgress(30 + Math.round(((i + 1) / totalFrames) * 70)) // 30-100%
       }
 
       setFrames(extractedFrames)
@@ -331,7 +396,7 @@ export default function FormCheckPage() {
           <div className="flex items-start gap-2 p-3 bg-iron-800/50 rounded-xl">
             <Info className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" />
             <p className="text-xs text-iron-500 leading-relaxed">
-              Your video is processed entirely on your device — only extracted frames are sent for analysis. Works best with a side or 45° angle of the full movement.
+              Your video is processed entirely on your device — only extracted frames are sent for analysis. We'll automatically detect when the exercise starts and focus on those frames. Best with a side or 45° angle.
             </p>
           </div>
 
@@ -381,7 +446,9 @@ export default function FormCheckPage() {
       {step === 'extracting' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-steel p-8 text-center">
           <Loader2 className="w-10 h-10 text-flame-400 animate-spin mx-auto mb-4" />
-          <p className="text-iron-200 font-medium mb-2">Extracting frames...</p>
+          <p className="text-iron-200 font-medium mb-2">
+            {extractProgress <= 30 ? 'Scanning for movement...' : 'Extracting key frames...'}
+          </p>
           <div className="w-48 h-2 bg-iron-800 rounded-full mx-auto overflow-hidden">
             <div
               className="h-full bg-flame-500 rounded-full transition-all duration-300"

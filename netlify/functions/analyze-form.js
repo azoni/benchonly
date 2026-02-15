@@ -66,11 +66,11 @@ export async function handler(event) {
       };
     }
 
-    if (frames.length > 30) {
+    if (frames.length > 15) {
       return {
         statusCode: 400,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Too many frames (max 30)' }),
+        body: JSON.stringify({ error: 'Too many frames (max 15)' }),
       };
     }
 
@@ -82,7 +82,7 @@ export async function handler(event) {
     if (note) {
       userText += `\n\nUser note: "${note}"`;
     }
-    userText += `\n\nFrames are numbered 1-${frames.length} in chronological order, extracted at ~1 frame per second.`;
+    userText += `\n\nFrames are numbered 1-${frames.length} in chronological order, extracted evenly across the video (~1 per second).`;
     content.push({ type: 'text', text: userText });
 
     // Add each frame as an image
@@ -104,11 +104,12 @@ export async function handler(event) {
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content },
       ],
-      max_tokens: 4096,
+      max_tokens: 2048,
       temperature: 0.3,
     });
 
