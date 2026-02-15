@@ -16,6 +16,8 @@
     "cap:android": "npm run build && npx cap sync && npx cap open android"
   },
   "dependencies": {
+    "@capacitor/cli": "^7.5.0",
+    "@capacitor/core": "^8.1.0",
     "date-fns": "^2.30.0",
     "firebase": "^10.7.0",
     "firebase-admin": "^13.6.0",
