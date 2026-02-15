@@ -582,7 +582,7 @@ export default function GenerateWorkoutPage() {
   };
   
   const focusOptions = [
-    { value: 'auto', label: 'Auto' },
+    { value: 'auto', label: 'Auto', desc: 'Based on your history' },
     { value: 'push', label: 'Push' },
     { value: 'pull', label: 'Pull' },
     { value: 'legs', label: 'Legs' },
@@ -855,10 +855,14 @@ export default function GenerateWorkoutPage() {
                         }`}
                     >
                       {opt.label}
+                      {opt.desc && <span className="text-[9px] text-iron-500 ml-1">{opt.desc}</span>}
                       {opt.value === '1rm-test' && <span className="ml-1 text-[9px] px-1 py-0.5 rounded-full bg-green-500/20 text-green-400 font-medium leading-none">New</span>}
                     </button>
                   ))}
                 </div>
+                {workoutFocus === 'auto' && (
+                  <p className="text-[11px] text-iron-600 mt-2">Auto selects exercises from your logged workouts and adjusts weights based on recent performance. The more you log, the more variety you'll get.</p>
+                )}
               </div>
 
               {/* 1RM Test — exercise picker */}
@@ -891,7 +895,10 @@ export default function GenerateWorkoutPage() {
               {/* Intensity — hidden for 1RM test */}
               {workoutFocus !== '1rm-test' && (
               <div className="mb-4">
-                <label className="block text-sm text-iron-400 mb-2">Intensity</label>
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="text-sm text-iron-400">Intensity</label>
+                  <span className="text-[10px] text-iron-600 bg-iron-800/80 px-1.5 py-0.5 rounded" title="Rate of Perceived Exertion — how hard a set feels. RPE 8 = 2 reps left in the tank.">RPE = reps left in tank</span>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {intensityOptions.map(opt => (
                     <button
@@ -1159,7 +1166,7 @@ export default function GenerateWorkoutPage() {
                               <>
                                 <span className="text-iron-300">{formatSetDisplay(set, type)}</span>
                                 {set.targetRpe && (
-                                  <span className="text-iron-500">@ RPE {set.targetRpe}</span>
+                                  <span className="text-iron-500 cursor-help" title={`RPE ${set.targetRpe} = ${set.targetRpe >= 10 ? 'max effort, no reps left' : set.targetRpe >= 9 ? '~1 rep left in tank' : set.targetRpe >= 8 ? '~2 reps left in tank' : set.targetRpe >= 7 ? '~3 reps left in tank' : '4+ reps left in tank'}`}>@ RPE {set.targetRpe}</span>
                                 )}
                               </>
                             )}
