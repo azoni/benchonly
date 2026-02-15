@@ -1109,6 +1109,7 @@ export default function AdminPage() {
                   'generate-workout': 'Workout Gen',
                   'generate-group-workout': 'Group Gen',
                   'ask-assistant': 'AI Chat',
+                  'form-check': 'Form Check',
                 }
                 filtered.forEach(r => {
                   const label = FEATURE_LABELS[r.feature] || r.feature || 'other'
@@ -1199,11 +1200,14 @@ export default function AdminPage() {
                                           ? 'bg-purple-500/20 text-purple-400'
                                           : usage.feature === 'generate-group-workout'
                                             ? 'bg-cyan-500/20 text-cyan-400'
-                                            : 'bg-blue-500/20 text-blue-400'
+                                            : usage.feature === 'form-check'
+                                              ? 'bg-green-500/20 text-green-400'
+                                              : 'bg-blue-500/20 text-blue-400'
                                       }`}>
                                         {usage.feature === 'generate-workout' ? 'Workout Gen'
                                           : usage.feature === 'generate-group-workout' ? 'Group Gen'
                                           : usage.feature === 'ask-assistant' ? 'AI Chat'
+                                          : usage.feature === 'form-check' ? 'Form Check'
                                           : usage.feature || 'unknown'}
                                       </span>
                                     </td>

@@ -11,7 +11,8 @@ import {
   Sparkles,
   MessageSquare,
   Wand2,
-  Search
+  Search,
+  Video
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getTokenUsage } from '../services/api'
@@ -20,7 +21,8 @@ const FEATURE_COLORS = {
   'generate-workout': { bg: 'bg-purple-500/20', text: 'text-purple-400', icon: Wand2 },
   'ask-assistant': { bg: 'bg-blue-500/20', text: 'text-blue-400', icon: MessageSquare },
   'autofill': { bg: 'bg-green-500/20', text: 'text-green-400', icon: Sparkles },
-  'analyze': { bg: 'bg-orange-500/20', text: 'text-orange-400', icon: Search }
+  'analyze': { bg: 'bg-orange-500/20', text: 'text-orange-400', icon: Search },
+  'form-check': { bg: 'bg-teal-500/20', text: 'text-teal-400', icon: Video },
 }
 
 export default function UsagePage() {

@@ -1,7 +1,8 @@
 import OpenAI from 'openai';
-import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
+import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE, admin } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
 
+const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 24000 });
 
 const SYSTEM_PROMPT = `You are an expert strength and conditioning coach analyzing exercise form from video frames.
@@ -102,6 +103,7 @@ export async function handler(event) {
 
     logActivity({ type: 'form-check', title: 'Form Check', description: `Analyzed ${frames.length} frames`, model: isPremium ? 'premium' : 'standard', metadata: { userId, frameCount: frames.length, hasNote: !!note } });
 
+    const startMs = Date.now();
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       response_format: { type: 'json_object' },
@@ -112,6 +114,11 @@ export async function handler(event) {
       max_tokens: 2048,
       temperature: 0.3,
     });
+    const responseTime = Date.now() - startMs;
+
+    const usage = response.usage;
+    // gpt-4o pricing: $2.50/1M input, $10/1M output
+    const cost = (usage.prompt_tokens / 1e6) * 2.50 + (usage.completion_tokens / 1e6) * 10.00;
 
     const raw = response.choices[0]?.message?.content || '';
 
@@ -123,6 +130,31 @@ export async function handler(event) {
     } catch (parseErr) {
       console.error('Failed to parse form analysis JSON:', parseErr.message);
       console.error('Raw response:', raw.substring(0, 500));
+      analysis = null;
+    }
+
+    // Log to tokenUsage collection
+    if (db) {
+      try {
+        await db.collection('tokenUsage').add({
+          userId,
+          feature: 'form-check',
+          model: 'gpt-4o',
+          promptTokens: usage.prompt_tokens,
+          completionTokens: usage.completion_tokens,
+          totalTokens: usage.total_tokens,
+          estimatedCost: cost,
+          responseTimeMs: responseTime,
+          userMessage: `Form check: ${frames.length} frames${note ? ` — ${note}` : ''}`,
+          assistantResponse: `${analysis?.exercise || 'Unknown'}: score ${analysis?.overallScore || 0}/10`,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        console.error('Failed to log usage:', e);
+      }
+    }
+
+    if (!analysis) {
       return {
         statusCode: 200,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -136,7 +168,7 @@ export async function handler(event) {
             frames: [],
             recommendations: [],
           },
-          tokens: response.usage,
+          tokens: usage,
         }),
       };
     }
@@ -146,7 +178,7 @@ export async function handler(event) {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         analysis,
-        tokens: response.usage,
+        tokens: usage,
       }),
     };
   } catch (error) {

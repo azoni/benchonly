@@ -17,6 +17,7 @@ import {
   Calendar,
   MessageCircle,
   BookOpen,
+  Video,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
@@ -238,6 +239,62 @@ function GroupMockup() {
   );
 }
 
+function FormCheckMockup() {
+  const mockFrames = [
+    { phase: 'Setup', score: 9, color: 'green' },
+    { phase: 'Descent', score: 8, color: 'green' },
+    { phase: 'Bottom', score: 6, color: 'yellow' },
+    { phase: 'Ascent', score: 7, color: 'yellow' },
+    { phase: 'Lockout', score: 9, color: 'green' },
+  ]
+  return (
+    <div className="bg-iron-900/80 rounded-2xl border border-iron-700/50 overflow-hidden">
+      {/* Score header */}
+      <div className="px-4 py-3 border-b border-iron-800 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-green-500/15 flex items-center justify-center">
+          <span className="text-lg font-display font-bold text-green-400">8</span>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium text-iron-200">Barbell Back Squat</p>
+          <p className="text-[10px] text-iron-500">Good depth, minor knee cave on ascent</p>
+        </div>
+        <span className="text-[10px] text-iron-500">5 frames</span>
+      </div>
+      {/* Frame timeline */}
+      <div className="px-4 pt-3 pb-2">
+        <div className="flex gap-1 mb-2">
+          {mockFrames.map((f, i) => (
+            <div
+              key={i}
+              className={`flex-1 h-1.5 rounded-full ${
+                f.color === 'green' ? 'bg-green-500' : 'bg-yellow-500'
+              } ${i === 2 ? 'ring-1 ring-white/30' : 'opacity-50'}`}
+            />
+          ))}
+        </div>
+        <div className="text-[10px] text-iron-500 flex justify-between">
+          <span>Setup</span>
+          <span>Lockout</span>
+        </div>
+      </div>
+      {/* Active frame analysis */}
+      <div className="px-4 pb-3">
+        <div className="bg-iron-800/50 rounded-lg p-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-semibold text-yellow-400">Frame 3 · Bottom</span>
+            <span className="text-[10px] font-bold text-yellow-400">6/10</span>
+          </div>
+          <p className="text-[11px] text-iron-400 leading-relaxed">Slight knee cave at the bottom position. Depth is good — hip crease below knee line.</p>
+          <div className="flex items-center gap-1 mt-1.5">
+            <span className="text-flame-400 text-[10px]">→</span>
+            <span className="text-[10px] text-iron-500">Push knees out over toes on the way down</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const { user, signInWithGoogle, signInAsGuest, loading } = useAuth();
@@ -448,6 +505,42 @@ export default function LoginPage() {
               </div>
             </motion.div>
 
+            {/* Form Check */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-50px' }}
+              className="mb-12"
+            >
+              <div className="grid lg:grid-cols-2 gap-6 items-start">
+                <div className="pt-2">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Video className="w-5 h-5 text-purple-400" />
+                    <h2 className="font-display text-2xl text-iron-100">AI FORM CHECK</h2>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-400 uppercase">Beta</span>
+                  </div>
+                  <p className="text-iron-400 mb-4 leading-relaxed">
+                    Upload a video of your lift and get instant frame-by-frame form analysis from AI. 
+                    It detects the exercise, scores each phase of the movement, and gives you specific coaching cues.
+                  </p>
+                  <div className="space-y-2">
+                    {[
+                      'Smart motion detection focuses on the actual lift',
+                      'Per-frame scores with phase detection',
+                      'Specific coaching cues and corrections',
+                      'Video never leaves your device — only frames are sent',
+                    ].map((t, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm text-iron-300">
+                        <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                        {t}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <FormCheckMockup />
+              </div>
+            </motion.div>
+
             {/* Feature chips */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -458,6 +551,7 @@ export default function LoginPage() {
               <div className="flex flex-wrap gap-2 justify-center">
                 {[
                   { icon: Sparkles, label: 'AI Workouts' },
+                  { icon: Video, label: 'AI Form Check' },
                   { icon: Users, label: 'Group Training' },
                   { icon: Target, label: 'Goal Tracking' },
                   { icon: TrendingUp, label: '1RM Test Mode' },
