@@ -1,0 +1,48 @@
+# Bench Only
+
+> AI-powered workout tracking app for serious lifters. Generates personalized workouts from your training history, analyzes lifting form from video, and supports group training.
+
+## About
+
+Bench Only is a free fitness app at https://benchpressonly.com that uses AI to help lifters train smarter. It tracks workouts, generates personalized training programs, and analyzes exercise form from video — all powered by AI that learns from your actual training data.
+
+## Features
+
+### AI Workout Generation
+The AI reviews your complete training history — lift PRs, estimated 1RM data, RPE trends, and pain flags — to generate workouts tailored to you. It calculates working weights from your maxes, skips exercises flagged for pain, includes warm-up ramps, and progressively overloads based on real performance data. Supports bodyweight-only and hotel/travel modes.
+
+### AI Form Check
+Upload a video of any lift and get instant frame-by-frame form analysis. The system uses client-side motion detection to identify the active portion of the video, extracts key frames on-device (video never leaves the phone), and sends compressed frames to GPT-4o vision for analysis. Returns per-frame scores with phase detection (setup, descent, bottom, ascent, lockout), specific coaching cues, and prioritized recommendations. Available at: https://benchpressonly.com/ai-form-check
+
+### Group Training
+Create training groups, invite athletes, and assign AI-generated workouts to the team. The AI personalizes weights for each athlete based on their individual training history. Coaches can track completion and progress across the group.
+
+### 1RM Testing and Tracking
+Built-in 1RM test protocols with warm-up ramp calculations. Tracks estimated one-rep maxes over time across all exercises. Includes a standalone 1RM calculator tool.
+
+### AI Coach Chat
+Ask training questions and get answers informed by your workout history, goals, and progress data.
+
+### Goal Tracking
+Set strength, consistency, and body composition goals with automated progress tracking and milestone celebrations.
+
+### Cardio Tracking
+Log cardio sessions alongside strength training with duration, distance, and heart rate tracking.
+
+## Pricing
+
+Free to use. New accounts receive 50 credits. AI features cost credits (10-25 credits per form check depending on depth, 10 per AI workout). Credits are earned through training activities like completing workouts and hitting goals.
+
+## Technical Details
+
+- Web app (PWA) accessible at https://benchpressonly.com
+- Works on mobile and desktop browsers
+- Sign in with Google or try the demo without an account
+- Video processing for form check happens entirely on-device
+- Built with React, Firebase, and Netlify
+
+## Links
+
+- App: https://benchpressonly.com
+- AI Form Check: https://benchpressonly.com/ai-form-check
+- Documentation: https://benchpressonly.com/docs

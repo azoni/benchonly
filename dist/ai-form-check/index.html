@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Form Check — Instant Lifting Form Analysis | Bench Only</title>
+  <meta name="description" content="Upload a video of your lift and get instant AI-powered frame-by-frame form analysis. Detects exercises, scores each phase, and gives specific coaching cues. Free to try." />
+  <meta name="keywords" content="AI form check, lifting form analysis, squat form checker, deadlift form AI, workout form analysis, exercise form correction, gym form checker, AI personal trainer" />
+  <link rel="canonical" href="https://benchpressonly.com/ai-form-check" />
+
+  <!-- AI model discovery -->
+  <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM info" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="AI Form Check — Instant Lifting Form Analysis" />
+  <meta property="og:description" content="Upload a video of your lift. Get frame-by-frame form analysis with scores, coaching cues, and specific corrections. Powered by AI." />
+  <meta property="og:url" content="https://benchpressonly.com/ai-form-check" />
+  <meta property="og:site_name" content="Bench Only" />
+  <meta property="og:image" content="https://benchpressonly.com/pwa-512x512.png" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="AI Form Check — Instant Lifting Form Analysis" />
+  <meta name="twitter:description" content="Upload a video of your lift. Get frame-by-frame AI form analysis with scores and coaching cues." />
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Bench Only — AI Form Check",
+    "applicationCategory": "HealthApplication",
+    "operatingSystem": "Web",
+    "description": "Upload a video of your lift and get instant AI-powered frame-by-frame form analysis with scores, phase detection, and coaching cues.",
+    "url": "https://benchpressonly.com/ai-form-check",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "Frame-by-frame form analysis",
+      "Automatic exercise detection",
+      "Per-phase scoring",
+      "Specific coaching cues",
+      "Smart motion detection",
+      "Client-side video processing"
+    ]
+  }
+  </script>
+
+  <link rel="icon" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --flame: #f97316;
+      --flame-dark: #ea580c;
+      --iron-50: #f8fafc;
+      --iron-100: #f1f5f9;
+      --iron-200: #e2e8f0;
+      --iron-300: #cbd5e1;
+      --iron-400: #94a3b8;
+      --iron-500: #64748b;
+      --iron-600: #475569;
+      --iron-700: #334155;
+      --iron-800: #1e293b;
+      --iron-900: #0f172a;
+      --iron-950: #0a0f1a;
+      --purple: #a78bfa;
+      --green: #4ade80;
+      --yellow: #facc15;
+      --red: #f87171;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'DM Sans', -apple-system, sans-serif;
+      background: var(--iron-950);
+      color: var(--iron-300);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .display { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.04em; }
+
+    /* Background glow */
+    .bg-glow {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    }
+    .bg-glow::before {
+      content: ''; position: absolute; top: -120px; right: -60px;
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(168,85,247,0.08) 0%, transparent 70%);
+    }
+    .bg-glow::after {
+      content: ''; position: absolute; bottom: -80px; left: -80px;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(249,115,22,0.06) 0%, transparent 70%);
+    }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 0 20px; position: relative; z-index: 1; }
+
+    /* Nav */
+    nav {
+      padding: 20px 0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none; color: var(--iron-50);
+    }
+    .logo-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--flame); display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 12px rgba(249,115,22,0.2);
+    }
+    .logo-text { font-size: 18px; }
+    .nav-cta {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; background: white; color: var(--iron-900);
+      border-radius: 10px; font-weight: 600; font-size: 14px;
+      text-decoration: none; transition: background 0.2s;
+    }
+    .nav-cta:hover { background: var(--iron-100); }
+
+    /* Hero */
+    .hero { padding: 60px 0 80px; text-align: center; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 999px;
+      background: rgba(168,85,247,0.12); border: 1px solid rgba(168,85,247,0.2);
+      font-size: 12px; font-weight: 600; color: var(--purple);
+      margin-bottom: 24px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .badge svg { width: 14px; height: 14px; }
+    h1 {
+      font-size: clamp(40px, 7vw, 72px); line-height: 1;
+      color: var(--iron-50); margin-bottom: 20px;
+    }
+    .hero p {
+      font-size: 18px; line-height: 1.6; color: var(--iron-400);
+      max-width: 560px; margin: 0 auto 36px;
+    }
+    .hero-cta {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 16px 32px; background: var(--flame); color: white;
+      border-radius: 14px; font-weight: 700; font-size: 16px;
+      text-decoration: none; transition: all 0.2s;
+      box-shadow: 0 8px 24px rgba(249,115,22,0.25);
+    }
+    .hero-cta:hover { background: var(--flame-dark); transform: translateY(-1px); }
+    .hero-sub { font-size: 13px; color: var(--iron-500); margin-top: 12px; }
+
+    /* Mockup */
+    .mockup-section { padding: 0 0 80px; }
+    .mockup-card {
+      max-width: 480px; margin: 0 auto;
+      background: var(--iron-900); border: 1px solid var(--iron-700);
+      border-radius: 20px; overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .mockup-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--iron-800);
+      display: flex; align-items: center; gap: 14px;
+    }
+    .score-circle {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: rgba(74,222,128,0.12);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; font-weight: 800; color: var(--green);
+    }
+    .mockup-header-text h3 { font-size: 15px; color: var(--iron-100); font-weight: 600; }
+    .mockup-header-text p { font-size: 11px; color: var(--iron-500); margin-top: 2px; }
+    .mockup-timeline { padding: 16px 20px 10px; }
+    .timeline-bars { display: flex; gap: 4px; margin-bottom: 8px; }
+    .timeline-bar {
+      flex: 1; height: 6px; border-radius: 3px; transition: all 0.3s;
+    }
+    .timeline-labels {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: var(--iron-500);
+    }
+    .mockup-frame {
+      margin: 0 20px 16px; padding: 14px;
+      background: rgba(30,41,59,0.5); border-radius: 12px;
+    }
+    .frame-head {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px;
+    }
+    .frame-phase { font-size: 11px; font-weight: 700; color: var(--yellow); }
+    .frame-score { font-size: 11px; font-weight: 800; color: var(--yellow); }
+    .frame-text { font-size: 12px; line-height: 1.6; color: var(--iron-400); }
+    .frame-cue {
+      display: flex; align-items: flex-start; gap: 6px;
+      margin-top: 8px; font-size: 11px; color: var(--iron-500);
+    }
+    .frame-cue .arrow { color: var(--flame); flex-shrink: 0; margin-top: 1px; }
+
+    /* How it works */
+    .how-section { padding: 0 0 80px; }
+    .how-section h2 {
+      font-size: clamp(28px, 4vw, 40px); color: var(--iron-50);
+      text-align: center; margin-bottom: 48px;
+    }
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; }
+    .step {
+      padding: 24px; background: var(--iron-900);
+      border: 1px solid var(--iron-800); border-radius: 16px;
+    }
+    .step-num {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: rgba(249,115,22,0.12);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; color: var(--flame);
+      margin-bottom: 14px;
+    }
+    .step h3 { font-size: 16px; color: var(--iron-100); font-weight: 600; margin-bottom: 8px; }
+    .step p { font-size: 13px; line-height: 1.6; color: var(--iron-500); }
+
+    /* Features grid */
+    .features-section { padding: 0 0 80px; }
+    .features-section h2 {
+      font-size: clamp(28px, 4vw, 40px); color: var(--iron-50);
+      text-align: center; margin-bottom: 48px;
+    }
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+    .feature {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 20px; background: var(--iron-900);
+      border: 1px solid var(--iron-800); border-radius: 14px;
+    }
+    .feature-icon {
+      width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .feature h3 { font-size: 14px; color: var(--iron-200); font-weight: 600; margin-bottom: 4px; }
+    .feature p { font-size: 12px; line-height: 1.5; color: var(--iron-500); }
+
+    /* FAQ */
+    .faq-section { padding: 0 0 80px; }
+    .faq-section h2 {
+      font-size: clamp(28px, 4vw, 40px); color: var(--iron-50);
+      text-align: center; margin-bottom: 40px;
+    }
+    .faq-list { max-width: 640px; margin: 0 auto; }
+    .faq-item {
+      border-bottom: 1px solid var(--iron-800); padding: 20px 0;
+    }
+    .faq-item h3 { font-size: 15px; color: var(--iron-200); font-weight: 600; margin-bottom: 8px; }
+    .faq-item p { font-size: 13px; line-height: 1.6; color: var(--iron-500); }
+
+    /* Bottom CTA */
+    .bottom-cta {
+      padding: 60px 0; text-align: center;
+      border-top: 1px solid var(--iron-800);
+    }
+    .bottom-cta h2 {
+      font-size: clamp(28px, 4vw, 40px); color: var(--iron-50); margin-bottom: 12px;
+    }
+    .bottom-cta p { color: var(--iron-400); margin-bottom: 28px; font-size: 16px; }
+
+    /* Footer */
+    footer {
+      padding: 24px 0; border-top: 1px solid var(--iron-800);
+      text-align: center; font-size: 12px; color: var(--iron-600);
+    }
+    footer a { color: var(--iron-400); text-decoration: none; }
+    footer a:hover { color: var(--iron-200); }
+
+    @media (max-width: 640px) {
+      .hero { padding: 40px 0 60px; }
+      .steps { grid-template-columns: 1fr; }
+      .features { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+
+  <div class="container">
+    <!-- Nav -->
+    <nav>
+      <a href="/" class="logo">
+        <div class="logo-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.4 14.4 9.6 9.6"/><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/></svg>
+        </div>
+        <span class="display logo-text">BENCH ONLY</span>
+      </a>
+      <a href="/" class="nav-cta">Try It Free →</a>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+        AI Form Check — Now in Beta
+      </div>
+      <h1 class="display">YOUR AI<br />LIFTING COACH</h1>
+      <p>Upload a video of your set. Get instant frame-by-frame form analysis with per-phase scoring, coaching cues, and specific corrections.</p>
+      <a href="/" class="hero-cta">Get Started Free →</a>
+      <p class="hero-sub">No credit card needed · 50 free credits to start · <a href="/form-check" style="color: var(--flame); text-decoration: none;">Already signed in? Try it now →</a></p>
+    </section>
+
+    <!-- Mockup -->
+    <section class="mockup-section">
+      <div class="mockup-card">
+        <div class="mockup-header">
+          <div class="score-circle display">8</div>
+          <div class="mockup-header-text">
+            <h3>Barbell Back Squat</h3>
+            <p>Good depth, minor knee cave on ascent</p>
+          </div>
+        </div>
+        <div class="mockup-timeline">
+          <div class="timeline-bars">
+            <div class="timeline-bar" style="background: var(--green)"></div>
+            <div class="timeline-bar" style="background: var(--green); opacity: 0.7"></div>
+            <div class="timeline-bar" style="background: var(--yellow); box-shadow: 0 0 0 2px rgba(250,204,21,0.3)"></div>
+            <div class="timeline-bar" style="background: var(--yellow); opacity: 0.7"></div>
+            <div class="timeline-bar" style="background: var(--green); opacity: 0.7"></div>
+          </div>
+          <div class="timeline-labels">
+            <span>Setup</span>
+            <span>Descent</span>
+            <span>Bottom ←</span>
+            <span>Ascent</span>
+            <span>Lockout</span>
+          </div>
+        </div>
+        <div class="mockup-frame">
+          <div class="frame-head">
+            <span class="frame-phase">Frame 3 · Bottom</span>
+            <span class="frame-score">6/10</span>
+          </div>
+          <p class="frame-text">Slight knee cave at the bottom position. Depth is good — hip crease below knee line. Torso angle could be more upright.</p>
+          <div class="frame-cue">
+            <span class="arrow">→</span>
+            <span>Push knees out over toes and brace core harder at the bottom</span>
+          </div>
+          <div class="frame-cue">
+            <span class="arrow">→</span>
+            <span>Try pause squats at lighter weight to build stability</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="how-section">
+      <h2 class="display">HOW IT WORKS</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Record Your Set</h3>
+          <p>Film your lift from the side or at a 45° angle. Any length video works — the AI finds the active movement automatically.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Smart Frame Extraction</h3>
+          <p>Your phone scans for movement and pulls the key frames. The video never leaves your device — only compressed frames are sent.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>AI Analysis</h3>
+          <p>Each frame is analyzed for joint angles, body position, and alignment. You get a score for every phase of the lift with specific fixes.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features-section">
+      <h2 class="display">WHAT YOU GET</h2>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon" style="background: rgba(74,222,128,0.12)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div>
+            <h3>Per-Frame Scoring</h3>
+            <p>Every frame gets a 1–10 score with phase detection: setup, descent, bottom, ascent, lockout.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background: rgba(249,115,22,0.12)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--flame)" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <div>
+            <h3>Exercise Detection</h3>
+            <p>Automatically identifies what exercise you're performing from the movement pattern.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background: rgba(168,85,247,0.12)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div>
+            <h3>Coaching Cues</h3>
+            <p>Actionable corrections for each issue — not vague advice, specific cues you can apply on your next set.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background: rgba(250,204,21,0.12)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div>
+            <h3>Privacy First</h3>
+            <p>Your video is processed on-device. Only compressed frames are sent for analysis — nothing is stored.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background: rgba(56,189,248,0.12)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <div>
+            <h3>Smart Motion Detection</h3>
+            <p>Scans your video for the active movement window so you don't waste analysis on walking to the rack.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background: rgba(249,115,22,0.12)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--flame)" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </div>
+          <div>
+            <h3>Detailed Recommendations</h3>
+            <p>Prioritized list of what to fix first, with explanations of why each issue matters for performance and injury prevention.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq-section">
+      <h2 class="display">QUESTIONS</h2>
+      <div class="faq-list">
+        <div class="faq-item">
+          <h3>What exercises does it support?</h3>
+          <p>Any exercise that's visible in the video — squats, deadlifts, bench press, overhead press, rows, lunges, pull-ups, and more. The AI identifies the movement automatically.</p>
+        </div>
+        <div class="faq-item">
+          <h3>How long should my video be?</h3>
+          <p>Any length works. The smart motion detection finds the active portion of your video automatically, so you can hit record before you start your set and stop whenever.</p>
+        </div>
+        <div class="faq-item">
+          <h3>Is my video stored anywhere?</h3>
+          <p>No. Your video is processed entirely on your device. Only compressed image frames are sent for analysis, and those aren't stored either.</p>
+        </div>
+        <div class="faq-item">
+          <h3>How much does it cost?</h3>
+          <p>Choose your depth: Quick (5 frames, 10 credits), Standard (10 frames, 15 credits), or Detailed (20 frames, 25 credits). You get 50 free credits when you sign up, and earn more through training activities like completing workouts and hitting goals.</p>
+        </div>
+        <div class="faq-item">
+          <h3>What camera angle works best?</h3>
+          <p>A side view or 45-degree angle that shows your full body through the entire range of motion. Make sure the camera is stable and the lighting is reasonable.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom CTA -->
+    <section class="bottom-cta">
+      <h2 class="display">CHECK YOUR FORM TODAY</h2>
+      <p>Free to start. No credit card needed.</p>
+      <a href="/" class="hero-cta">Get Started Free →</a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p>© 2025 Bench Only · <a href="/">Home</a> · <a href="/docs">Docs</a></p>
+    </footer>
+  </div>
+</body>
+</html>

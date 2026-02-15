@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Bench Only</string>
+    <string name="title_activity_main">Bench Only</string>
+    <string name="package_name">com.benchonly.app</string>
+    <string name="custom_url_scheme">com.benchonly.app</string>
+</resources>
