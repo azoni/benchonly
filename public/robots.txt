@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Allow: /ai-form-check
+Allow: /docs
+
+Sitemap: https://benchpressonly.com/sitemap.xml

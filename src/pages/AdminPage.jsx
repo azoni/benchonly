@@ -226,7 +226,7 @@ export default function AdminPage() {
     if (activeTab === 'activity' && !activityData) {
       loadActivityData()
     }
-    if (activeTab === 'usage' && usageData.length === 0) {
+    if (activeTab === 'usage') {
       loadUsageData()
     }
     if (activeTab === 'settings') {
@@ -1074,18 +1074,27 @@ export default function AdminPage() {
         /* Usage Tab */
         <div className="space-y-6">
           {/* Filter */}
-          <div className="card-steel p-4">
-            <label className="text-sm text-iron-400 mb-2 block">Filter by User</label>
-            <select
-              value={usageFilter}
-              onChange={(e) => setUsageFilter(e.target.value)}
-              className="input-field w-full max-w-xs"
+          <div className="card-steel p-4 flex items-end gap-4 flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-sm text-iron-400 mb-2 block">Filter by User</label>
+              <select
+                value={usageFilter}
+                onChange={(e) => setUsageFilter(e.target.value)}
+                className="input-field w-full max-w-xs"
+              >
+                <option value="">All Users</option>
+                {users.map(u => (
+                  <option key={u.uid} value={u.uid}>{u.displayName || u.email}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={loadUsageData}
+              disabled={usageLoading}
+              className="text-sm text-flame-400 hover:text-flame-300 disabled:opacity-50"
             >
-              <option value="">All Users</option>
-              {users.map(u => (
-                <option key={u.uid} value={u.uid}>{u.displayName || u.email}</option>
-              ))}
-            </select>
+              Refresh
+            </button>
           </div>
 
           {usageLoading ? (

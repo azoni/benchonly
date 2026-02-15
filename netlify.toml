@@ -7,6 +7,12 @@
   NODE_VERSION = "20"
   NPM_FLAGS = "--include=dev"
 
+# Static promo pages — serve before SPA catch-all
+[[redirects]]
+  from = "/ai-form-check"
+  to = "/ai-form-check/index.html"
+  status = 200
+
 # Redirect all routes to index.html for SPA
 [[redirects]]
   from = "/*"
