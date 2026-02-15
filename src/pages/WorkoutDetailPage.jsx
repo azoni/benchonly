@@ -32,6 +32,8 @@ import { getAuthHeaders } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { getDisplayDate } from '../utils/dateUtils'
 import { ACTIVITY_METS } from '../services/calorieService'
+import usePageTitle from '../utils/usePageTitle'
+import { apiUrl } from '../utils/platform'
 
 // Calculate estimated 1RM using Epley formula
 const calculateE1RM = (weight, reps) => {
@@ -63,6 +65,7 @@ export default function WorkoutDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  usePageTitle('Workout')
   const { user, isGuest } = useAuth()
   const [workout, setWorkout] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -144,7 +147,7 @@ export default function WorkoutDetailPage() {
         .map(e => e.name)
 
       const swapHeaders = await getAuthHeaders()
-      const response = await fetch('/.netlify/functions/swap-exercise', {
+      const response = await fetch(apiUrl('swap-exercise'), {
         method: 'POST',
         headers: swapHeaders,
         body: JSON.stringify({

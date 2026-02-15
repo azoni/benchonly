@@ -1,12 +1,14 @@
 import OpenAI from 'openai';
-import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE, admin } from './utils/auth.js';
+import { verifyAuth, UNAUTHORIZED, getCorsHeaders, optionsResponse, admin } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function handler(event) {
-  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
+  const cors = getCorsHeaders(event);
+  if (event.httpMethod === 'OPTIONS') return optionsResponse(event);
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -15,14 +17,32 @@ export async function handler(event) {
   const auth = await verifyAuth(event);
   if (!auth) return UNAUTHORIZED;
 
+  // Rate limit
+  const rateCheck = await checkRateLimit(auth.uid, 'generate-group-workout');
+  if (!rateCheck.allowed) {
+    return { statusCode: 429, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Too many requests. Please wait a moment.' }) };
+  }
+
+  let creditCost = 0;
+
   try {
     const { groupId, athletes, prompt, workoutDate, model, settings, workoutFocus, intensity, duration, exerciseCount, maxExercise } = JSON.parse(event.body);
     const coachId = auth.uid;
 
+    // Credit cost: 5 per athlete (or 100 for premium)
+    creditCost = model === 'premium' ? 100 : (athletes?.length || 1) * 5;
+
+    // Server-side credit deduction
+    const creditResult = await deductCredits(coachId, 'generate-group-workout', creditCost, auth.isAdmin);
+    if (!creditResult.success) {
+      return { statusCode: 402, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: `Not enough credits. Need ${creditCost}, have ${creditResult.balance}.` }) };
+    }
+
     if (!groupId || !athletes?.length) {
+      await refundCredits(coachId, creditCost, auth.isAdmin);
       return {
         statusCode: 400,
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ error: 'groupId and athletes required' }),
       };
     }
@@ -30,7 +50,7 @@ export async function handler(event) {
     if (!db) {
       return {
         statusCode: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ error: 'Firebase not configured. Add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY to Netlify.' }),
       };
     }
@@ -190,7 +210,7 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
     } catch {
       return {
         statusCode: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ error: 'AI returned invalid JSON' }),
       };
     }
@@ -216,7 +236,7 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
     if (!result.athleteWorkouts) {
       return {
         statusCode: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ error: 'AI response missing athleteWorkouts' }),
       };
     }
@@ -329,7 +349,7 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json', ...cors },
       body: JSON.stringify({
         success: true,
         workoutName: result.name,
@@ -348,9 +368,10 @@ For pain substitutions (only when allowed): "substitution": { "reason": "shoulde
   } catch (error) {
     console.error('Error:', error);
     logError('generate-group-workout', error, 'high', { action: 'generate' });
+    await refundCredits(auth.uid, creditCost, auth.isAdmin);
     return {
       statusCode: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json', ...cors },
       body: JSON.stringify({ error: error.message }),
     };
   }

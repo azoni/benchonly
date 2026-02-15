@@ -58,7 +58,7 @@ export default function Layout() {
     if (user && !isGuest) {
       groupWorkoutService.getPendingReviews(user.uid)
         .then(reviews => setPendingReviewCount(reviews.length))
-        .catch(() => {});
+        .catch(err => console.error('[Layout]', err.message));
     }
   }, [user, isGuest, location.pathname]);
 
@@ -67,7 +67,7 @@ export default function Layout() {
     if (user && !isGuest) {
       notificationService.getUnread(user.uid)
         .then(notifs => setUnreadNotifCount(notifs.length))
-        .catch(() => {});
+        .catch(err => console.error('[Layout]', err.message));
     }
   }, [user, isGuest, location.pathname]);
 

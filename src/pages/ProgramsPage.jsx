@@ -25,6 +25,8 @@ import { programService, goalService, creditService, CREDIT_COSTS, PREMIUM_CREDI
 import { collection, query, where, getDocs, limit } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import { format, addWeeks, startOfWeek, addDays } from 'date-fns'
+import usePageTitle from '../utils/usePageTitle'
+import { apiUrl } from '../utils/platform'
 
 const DAYS_OF_WEEK = [
   { id: 'monday', short: 'Mon' },
@@ -81,6 +83,7 @@ const DAY_TYPE_COLORS = {
 
 export default function ProgramsPage() {
   const navigate = useNavigate()
+  usePageTitle('Programs')
   const { user, userProfile, updateProfile, isAppAdmin } = useAuth()
   const isAdmin = isAppAdmin
   const [programs, setPrograms] = useState([])
@@ -227,8 +230,8 @@ export default function ProgramsPage() {
     startThinking()
 
     try {
+      // Credits deducted server-side — just update local display
       if (!isAdmin) {
-        await creditService.deduct(user.uid, 'generate-program', model === 'premium' ? PREMIUM_CREDIT_COST / CREDIT_COSTS['generate-program'] : 1)
         updateProfile({ credits: credits - cost })
       }
 
@@ -301,7 +304,7 @@ export default function ProgramsPage() {
           }
 
       const authHeaders = await getAuthHeaders()
-      const response = await fetch('/.netlify/functions/generate-program', {
+      const response = await fetch(apiUrl('generate-program'), {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
@@ -329,9 +332,8 @@ export default function ProgramsPage() {
       console.error('Generation error:', err)
       setError(err.message)
       stopThinking()
-      // Refund credits
+      // Server refunds on failure — restore local display
       if (!isAdmin) {
-        await creditService.add(user.uid, cost).catch(() => {})
         updateProfile({ credits })
       }
     } finally {

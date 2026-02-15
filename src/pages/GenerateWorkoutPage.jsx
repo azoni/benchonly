@@ -32,6 +32,8 @@ import { workoutService, creditService, CREDIT_COSTS, PREMIUM_CREDIT_COST, progr
 import { ouraService } from '../services/ouraService';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import usePageTitle from '../utils/usePageTitle'
+import { apiUrl } from '../utils/platform'
 
 // Thinking messages that rotate during AI generation
 const THINKING_MESSAGES = [
@@ -49,6 +51,7 @@ const THINKING_MESSAGES = [
 
 export default function GenerateWorkoutPage() {
   const navigate = useNavigate();
+  usePageTitle('Generate Workout')
   const [searchParams] = useSearchParams();
   const { user, userProfile, updateProfile, isAppAdmin } = useAuth();
   
@@ -368,14 +371,13 @@ export default function GenerateWorkoutPage() {
     startThinkingAnimation();
     
     try {
-      // Deduct credits upfront (admin bypasses)
+      // Credits deducted server-side — just update local display
       if (!isAdmin) {
-        await creditService.deduct(user.uid, 'generate-workout', model === 'premium' ? PREMIUM_CREDIT_COST / CREDIT_COSTS['generate-workout'] : 1);
         updateProfile({ credits: credits - cost });
       }
 
       const authHeaders = await getAuthHeaders();
-      const response = await fetch('/.netlify/functions/generate-workout', {
+      const response = await fetch(apiUrl('generate-workout'), {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
@@ -412,9 +414,8 @@ export default function GenerateWorkoutPage() {
     } catch (err) {
       console.error('Generation error:', err);
       setError(err.message);
-      // Refund credits on failure
+      // Server refunds on failure — restore local display
       if (!isAdmin) {
-        await creditService.add(user.uid, cost).catch(() => {});
         updateProfile({ credits });
       }
       stopThinkingAnimation();
@@ -524,7 +525,7 @@ export default function GenerateWorkoutPage() {
         .map(e => e.name);
 
       const swapHeaders = await getAuthHeaders();
-      const response = await fetch('/.netlify/functions/swap-exercise', {
+      const response = await fetch(apiUrl('swap-exercise'), {
         method: 'POST',
         headers: swapHeaders,
         body: JSON.stringify({

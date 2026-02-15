@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE, admin } from './utils/auth.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -12,6 +13,15 @@ export async function handler(event) {
 
   const auth = await verifyAuth(event);
   if (!auth) return UNAUTHORIZED;
+
+  const rateCheck = await checkRateLimit(auth.uid, 'suggest-goals');
+  if (!rateCheck.allowed) {
+    return { statusCode: 429, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Too many requests.' }) };
+  }
+  const creditResult = await deductCredits(auth.uid, 'suggest-goals', null, auth.isAdmin);
+  if (!creditResult.success) {
+    return { statusCode: 402, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Not enough credits.' }) };
+  }
 
   try {
     const { maxLifts, currentGoals, recentWorkouts } = JSON.parse(event.body);
@@ -107,6 +117,7 @@ OUTPUT JSON only, no markdown:
 
   } catch (error) {
     console.error('Error suggesting goals:', error);
+    await refundCredits(auth.uid, creditResult.cost || 1, auth.isAdmin);
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },

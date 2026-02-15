@@ -21,6 +21,8 @@ import { useAuth } from '../context/AuthContext'
 import { getAuthHeaders } from '../services/api'
 import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore'
 import { db } from '../services/firebase'
+import usePageTitle from '../utils/usePageTitle'
+import { apiUrl } from '../utils/platform'
 
 const COMMON_LIFTS = [
   'Bench Press',
@@ -36,6 +38,7 @@ const COMMON_LIFTS = [
 ]
 
 export default function GoalsPage() {
+  usePageTitle('Goals')
   const { user, isGuest } = useAuth()
   const [goals, setGoals] = useState([])
   const [loading, setLoading] = useState(true)
@@ -271,7 +274,7 @@ export default function GoalsPage() {
       })
 
       const authHeaders = await getAuthHeaders()
-      const response = await fetch('/.netlify/functions/suggest-goals', {
+      const response = await fetch(apiUrl('suggest-goals'), {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({

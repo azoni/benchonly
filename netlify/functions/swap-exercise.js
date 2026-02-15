@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -13,6 +14,16 @@ export const handler = async (event) => {
 
   const auth = await verifyAuth(event);
   if (!auth) return UNAUTHORIZED;
+
+  const rateCheck = await checkRateLimit(auth.uid, 'swap-exercise');
+  if (!rateCheck.allowed) {
+    return { statusCode: 429, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Too many requests.' }) };
+  }
+
+  const creditResult = await deductCredits(auth.uid, 'swap-exercise', null, auth.isAdmin);
+  if (!creditResult.success) {
+    return { statusCode: 402, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Not enough credits.' }) };
+  }
 
   try {
     const { exerciseName, exerciseType, sets, workoutContext, reason } = JSON.parse(event.body);
@@ -94,6 +105,7 @@ Rules:
   } catch (err) {
     console.error('Swap exercise error:', err);
     logError('swap-exercise', err, 'high', { action: 'swap' });
+    await refundCredits(auth.uid, creditResult.cost || 1, auth.isAdmin);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message || 'Failed to swap exercise' }),

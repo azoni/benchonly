@@ -24,6 +24,8 @@ import { collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import { format, addWeeks, addDays, startOfWeek, isToday, isPast, startOfDay, differenceInDays } from 'date-fns'
 import { toDateString } from '../utils/dateUtils'
+import usePageTitle from '../utils/usePageTitle'
+import { apiUrl } from '../utils/platform'
 
 const DAY_TYPE_COLORS = {
   primary: { bg: 'bg-flame-500/20', text: 'text-flame-400', border: 'border-flame-500/30', dot: 'bg-flame-500' },
@@ -39,6 +41,7 @@ const DAY_INDEX = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4,
 export default function ProgramDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  usePageTitle('Program')
   const { user, userProfile, updateProfile, isAppAdmin } = useAuth()
   const [program, setProgram] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -100,7 +103,7 @@ export default function ProgramDetailPage() {
       })
       // Update if out of sync
       if (JSON.stringify(actualCompletedDays.sort()) !== JSON.stringify((prog.completedDays || []).sort())) {
-        programService.update(id, { completedDays: actualCompletedDays }).catch(() => {})
+        programService.update(id, { completedDays: actualCompletedDays }).catch(err => console.error('[ProgramDetail] Sync failed:', err.message))
         prog.completedDays = actualCompletedDays
       }
 
@@ -161,8 +164,8 @@ export default function ProgramDetailPage() {
     setGeneratingDay(dayKey)
 
     try {
+      // Credits deducted server-side — just update local display
       if (!isAdmin) {
-        await creditService.deduct(user.uid, 'generate-workout')
         updateProfile({ credits: credits - cost })
       }
 
@@ -241,7 +244,7 @@ ${day.type === 'deload' ? '- This is a DELOAD day. Reduce volume 40-50%, keep we
 ${day.type === 'test' ? '- This is a TEST day. Work up to a heavy single or rep max.' : ''}`
 
       const authHeaders = await getAuthHeaders()
-      const response = await fetch('/.netlify/functions/generate-workout', {
+      const response = await fetch(apiUrl('generate-workout'), {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
@@ -282,10 +285,9 @@ ${day.type === 'test' ? '- This is a TEST day. Work up to a heavy single or rep 
     } catch (err) {
       console.error('Generate error:', err)
       if (!isAdmin) {
-        await creditService.add(user.uid, CREDIT_COSTS['generate-workout']).catch(() => {})
         updateProfile({ credits })
       }
-      alert('Failed to generate workout.' + (!isAdmin ? ' Credits refunded.' : ''))
+      alert('Failed to generate workout.')
     } finally {
       setGeneratingDay(null)
     }

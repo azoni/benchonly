@@ -21,6 +21,7 @@ import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
 import { creditService, CREDIT_COSTS, PREMIUM_CREDIT_COST } from '../services/firestore';
+import { apiUrl } from '../utils/platform'
 
 // Simulated thinking messages that rotate during AI generation
 const THINKING_MESSAGES = [
@@ -294,13 +295,8 @@ export default function GenerateGroupWorkoutModal({
     startThinkingAnimation();
 
     try {
-      // Deduct credits upfront (admin bypasses)
+      // Credits deducted server-side — just update local display
       if (!isAdmin) {
-        if (model === 'premium') {
-          await creditService.deduct(user.uid, 'generate-group-workout', PREMIUM_CREDIT_COST / CREDIT_COSTS['generate-group-workout']);
-        } else {
-          await creditService.deduct(user.uid, 'generate-group-workout', selectedAthletes.length);
-        }
         updateProfile({ credits: credits - creditCost });
       }
 
@@ -315,7 +311,7 @@ export default function GenerateGroupWorkoutModal({
       }));
 
       const authHeaders = await getAuthHeaders();
-      const response = await fetch('/.netlify/functions/generate-group-workout', {
+      const response = await fetch(apiUrl('generate-group-workout'), {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
@@ -353,9 +349,8 @@ export default function GenerateGroupWorkoutModal({
     } catch (err) {
       console.error('Error:', err);
       setError(err.message);
-      // Refund credits on failure
+      // Server refunds on failure — restore local display
       if (!isAdmin) {
-        await creditService.add(user.uid, creditCost).catch(() => {});
         updateProfile({ credits });
       }
       stopThinkingAnimation();
@@ -809,7 +804,7 @@ export default function GenerateGroupWorkoutModal({
                                   {selectedAthletes.includes(a.uid) && <Check className="w-3 h-3 text-white" />}
                                 </div>
                                 {a.photoURL ? (
-                                  <img src={a.photoURL} className="w-6 h-6 rounded-full" />
+                                  <img src={a.photoURL} alt="" className="w-6 h-6 rounded-full" />
                                 ) : (
                                   <div className="w-6 h-6 rounded-full bg-iron-700 flex items-center justify-center text-xs text-iron-400">
                                     {a.displayName?.[0]}

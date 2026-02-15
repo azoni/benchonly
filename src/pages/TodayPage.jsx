@@ -41,8 +41,10 @@ import { formatDuration } from '../utils/workoutUtils'
 import OnboardingChecklist from '../components/OnboardingChecklist'
 import SpecialEventModal from '../components/SpecialEventModal'
 import { getActiveEvent } from '../config/specialEvents'
+import usePageTitle from '../utils/usePageTitle'
 
 export default function TodayPage() {
+  usePageTitle('Today')
   const { user, userProfile, isGuest, isRealAdmin, impersonating, realUser } = useAuth()
   const navigate = useNavigate()
   const [todayWorkouts, setTodayWorkouts] = useState([])
@@ -242,7 +244,7 @@ export default function TodayPage() {
         setFeedUsers(usersMap)
         setNotifications(notifs || [])
         setFriendSet(friends || new Set())
-      }).catch(() => {})
+      }).catch(err => console.error('[TodayPage] Feed/notifications load failed:', err))
 
       // This week's stats
       const completedDates = new Set()

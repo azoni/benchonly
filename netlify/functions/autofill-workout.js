@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -15,6 +16,15 @@ export async function handler(event) {
 
   const auth = await verifyAuth(event);
   if (!auth) return UNAUTHORIZED;
+
+  const rateCheck = await checkRateLimit(auth.uid, 'autofill-workout');
+  if (!rateCheck.allowed) {
+    return { statusCode: 429, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Too many requests.' }) };
+  }
+  const creditResult = await deductCredits(auth.uid, 'autofill-workout', null, auth.isAdmin);
+  if (!creditResult.success) {
+    return { statusCode: 402, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Not enough credits.' }) };
+  }
 
   try {
     const { partialWorkout, recentWorkouts, goals } = JSON.parse(event.body)
@@ -100,7 +110,7 @@ Fill in missing weights and reps based on progression from recent workouts.`
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
+        ...CORS_HEADERS
       },
       body: JSON.stringify({
         ...result,
@@ -110,6 +120,7 @@ Fill in missing weights and reps based on progression from recent workouts.`
   } catch (error) {
     console.error('Autofill workout error:', error)
     logError('autofill-workout', error, 'high', { action: 'autofill' });
+    await refundCredits(auth.uid, creditResult.cost || 2, auth.isAdmin);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: 'Failed to autofill workout' })

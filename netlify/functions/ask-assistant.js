@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
-import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
+import { verifyAuth, UNAUTHORIZED, getCorsHeaders, optionsResponse } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -147,17 +148,36 @@ function buildContextString(context) {
 }
 
 export async function handler(event) {
-  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
+  const cors = getCorsHeaders(event);
+  if (event.httpMethod === 'OPTIONS') return optionsResponse(event);
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: CORS_HEADERS, body: 'Method Not Allowed' }
+    return { statusCode: 405, headers: cors, body: 'Method Not Allowed' }
   }
 
   const auth = await verifyAuth(event);
   if (!auth) return UNAUTHORIZED;
 
+  // Rate limit
+  const rateCheck = await checkRateLimit(auth.uid, 'ask-assistant');
+  if (!rateCheck.allowed) {
+    return { statusCode: 429, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Too many requests. Please wait a moment.' }) };
+  }
+
+  let creditCost = 0;
+
   try {
     const { message, context, mode } = JSON.parse(event.body)
     const userId = auth.uid;
+
+    // Greetings are free; regular chat costs 1 credit
+    if (mode !== 'greeting') {
+      creditCost = 1;
+      const creditResult = await deductCredits(userId, 'ask-assistant', creditCost, auth.isAdmin);
+      if (!creditResult.success) {
+        return { statusCode: 402, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: `Not enough credits.` }) };
+      }
+    }
+
     const contextString = buildContextString(context)
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
     const personality = context?.personality || 'coach'
@@ -231,7 +251,7 @@ ${contextString}`
 
       return {
         statusCode: 200,
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ greeting, quickActions, usage: {
           userId, feature: 'ask-assistant-greeting', model: 'gpt-4o-mini',
           promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens,
@@ -317,7 +337,7 @@ ${contextString}`
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      headers: { 'Content-Type': 'application/json', ...cors },
       body: JSON.stringify({
         message: cleanMessage, workout,
         usage: {
@@ -333,9 +353,10 @@ ${contextString}`
   } catch (error) {
     console.error('Ask assistant error:', error)
     logError('ask-assistant', error, 'high', { action: 'chat' });
+    await refundCredits(auth.uid, creditCost, auth.isAdmin);
     return {
       statusCode: 500,
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      headers: { 'Content-Type': 'application/json', ...cors },
       body: JSON.stringify({ error: 'Failed to get response', detail: error.message })
     }
   }

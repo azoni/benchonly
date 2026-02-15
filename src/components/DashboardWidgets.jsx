@@ -342,6 +342,7 @@ export function OneRepMaxWidget() {
           <input
             type="number"
             placeholder="Weight"
+            aria-label="Weight in pounds"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
             className="input-field w-full py-2 text-sm"
@@ -351,6 +352,7 @@ export function OneRepMaxWidget() {
           <input
             type="number"
             placeholder="Reps"
+            aria-label="Number of reps"
             value={reps}
             onChange={(e) => setReps(e.target.value)}
             className="input-field w-full py-2 text-sm"

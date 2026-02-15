@@ -47,10 +47,28 @@ export const UNAUTHORIZED = {
 };
 
 /**
- * CORS headers that include Authorization
+ * CORS headers — locked to production domain
  */
+const ALLOWED_ORIGINS = [
+  'https://benchpressonly.com',
+  'http://localhost:5173',
+  'capacitor://localhost',   // iOS native (Capacitor)
+  'http://localhost',        // Android native (Capacitor)
+];
+
+export function getCorsHeaders(event) {
+  const origin = event?.headers?.origin || '';
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+}
+
+// Keep static version for backwards compat — uses production origin
 export const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://benchpressonly.com',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
@@ -58,6 +76,15 @@ export const CORS_HEADERS = {
 /**
  * Standard OPTIONS response for CORS preflight
  */
+export function optionsResponse(event) {
+  return {
+    statusCode: 204,
+    headers: getCorsHeaders(event),
+    body: '',
+  };
+}
+
+// Keep static version for backwards compat
 export const OPTIONS_RESPONSE = {
   statusCode: 204,
   headers: CORS_HEADERS,

@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -15,6 +16,15 @@ export async function handler(event) {
 
   const auth = await verifyAuth(event);
   if (!auth) return UNAUTHORIZED;
+
+  const rateCheck = await checkRateLimit(auth.uid, 'analyze-progress');
+  if (!rateCheck.allowed) {
+    return { statusCode: 429, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Too many requests.' }) };
+  }
+  const creditResult = await deductCredits(auth.uid, 'analyze-progress', null, auth.isAdmin);
+  if (!creditResult.success) {
+    return { statusCode: 402, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Not enough credits.' }) };
+  }
 
   try {
     const { workouts, goals, timeframe } = JSON.parse(event.body)
@@ -112,7 +122,7 @@ Provide detailed analysis and actionable recommendations.`
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
+        ...CORS_HEADERS
       },
       body: JSON.stringify({
         analysis,
@@ -122,6 +132,7 @@ Provide detailed analysis and actionable recommendations.`
   } catch (error) {
     console.error('Analyze progress error:', error)
     logError('analyze-progress', error, 'high', { action: 'analyze' });
+    await refundCredits(auth.uid, creditResult.cost || 3, auth.isAdmin);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: 'Failed to analyze progress' })

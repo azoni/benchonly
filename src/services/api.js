@@ -1,7 +1,7 @@
 import { tokenUsageService } from './firestore';
 import { getAuth } from 'firebase/auth';
 
-const API_BASE = '/.netlify/functions';
+import { API_BASE } from '../utils/platform';
 
 /**
  * Get Authorization headers with Firebase ID token.

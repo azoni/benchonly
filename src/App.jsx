@@ -1,33 +1,47 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
+
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
+
+// Eagerly load the two most common entry points
 import LoginPage from './pages/LoginPage'
 import TodayPage from './pages/TodayPage'
-import DashboardPage from './pages/DashboardPage'
-import WorkoutsPage from './pages/WorkoutsPage'
-import NewWorkoutPage from './pages/NewWorkoutPage'
-import WorkoutDetailPage from './pages/WorkoutDetailPage'
-import GroupWorkoutPage from './pages/GroupWorkoutPage'
-import CalendarPage from './pages/CalendarPage'
-import GroupsPage from './pages/GroupsPage'
-import GroupDetailPage from './pages/GroupDetailPage'
-import GoalsPage from './pages/GoalsPage'
-import ToolsPage from './pages/ToolsPage'
-import HealthPage from './pages/HealthPage'
-import UsagePage from './pages/UsagePage'
-import SettingsPage from './pages/SettingsPage'
-import AdminPage from './pages/AdminPage'
-import FeedPage from './pages/FeedPage'
-import FriendsPage from './pages/FriendsPage'
-import ProfilePage from './pages/ProfilePage'
-import GenerateWorkoutPage from './pages/GenerateWorkoutPage'
-import ProgramsPage from './pages/ProgramsPage'
-import ProgramDetailPage from './pages/ProgramDetailPage'
-import DocsPage from './pages/DocsPage'
-import OnboardingPage from './pages/OnboardingPage'
-import TrainerPage from './pages/TrainerPage'
-import FormCheckPage from './pages/FormCheckPage'
+
+// Lazy load everything else — these only download when the user navigates to them
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const WorkoutsPage = lazy(() => import('./pages/WorkoutsPage'))
+const NewWorkoutPage = lazy(() => import('./pages/NewWorkoutPage'))
+const WorkoutDetailPage = lazy(() => import('./pages/WorkoutDetailPage'))
+const GroupWorkoutPage = lazy(() => import('./pages/GroupWorkoutPage'))
+const CalendarPage = lazy(() => import('./pages/CalendarPage'))
+const GroupsPage = lazy(() => import('./pages/GroupsPage'))
+const GroupDetailPage = lazy(() => import('./pages/GroupDetailPage'))
+const GoalsPage = lazy(() => import('./pages/GoalsPage'))
+const ToolsPage = lazy(() => import('./pages/ToolsPage'))
+const HealthPage = lazy(() => import('./pages/HealthPage'))
+const UsagePage = lazy(() => import('./pages/UsagePage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
+const FeedPage = lazy(() => import('./pages/FeedPage'))
+const FriendsPage = lazy(() => import('./pages/FriendsPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const GenerateWorkoutPage = lazy(() => import('./pages/GenerateWorkoutPage'))
+const ProgramsPage = lazy(() => import('./pages/ProgramsPage'))
+const ProgramDetailPage = lazy(() => import('./pages/ProgramDetailPage'))
+const DocsPage = lazy(() => import('./pages/DocsPage'))
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
+const TrainerPage = lazy(() => import('./pages/TrainerPage'))
+const FormCheckPage = lazy(() => import('./pages/FormCheckPage'))
+
+function PageLoader() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center">
+      <div className="w-10 h-10 border-4 border-flame-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 function ProtectedRoute({ children }) {
   const { user, userProfile, loading, isGuest } = useAuth()
@@ -134,13 +148,13 @@ export default function App() {
       
       <Route path="/guest" element={<GuestRoute />} />
 
-      <Route path="/docs" element={<DocsPage />} />
+      <Route path="/docs" element={<Suspense fallback={<PageLoader />}><DocsPage /></Suspense>} />
       
       <Route 
         path="/onboarding" 
         element={
           <OnboardingRoute>
-            <OnboardingPage />
+            <Suspense fallback={<PageLoader />}><OnboardingPage /></Suspense>
           </OnboardingRoute>
         } 
       />
@@ -155,33 +169,33 @@ export default function App() {
       >
         <Route index element={<TodayPage />} />
         <Route path="today" element={<TodayPage />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="workouts" element={<WorkoutsPage />} />
-        <Route path="workouts/group/:id" element={<GroupWorkoutPage />} />
-        <Route path="workouts/generate" element={<GenerateWorkoutPage />} /> 
-        <Route path="workouts/new" element={<NewWorkoutPage />} />
-        <Route path="workouts/:id/edit" element={<NewWorkoutPage />} />
-        <Route path="workouts/:id" element={<WorkoutDetailPage />} />
-        <Route path="calendar" element={<CalendarPage />} />
-        <Route path="programs" element={<ProgramsPage />} />
-        <Route path="programs/:id" element={<ProgramDetailPage />} />
-        <Route path="groups" element={<GroupsPage />} />
-        <Route path="groups/:id" element={<GroupDetailPage />} />
-        <Route path="goals" element={<GoalsPage />} />
-        <Route path="tools" element={<ToolsPage />} />
-        <Route path="form-check" element={<FormCheckPage />} />
-        <Route path="health" element={<HealthPage />} />
-        <Route path="feed" element={<FeedPage />} />
-        <Route path="friends" element={<FriendsPage />} />
-        <Route path="profile/:userId" element={<ProfilePage />} />
-        <Route path="profile" element={<ProfilePage />} />
-        <Route path="usage" element={<UsagePage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="trainer" element={<TrainerPage />} />
-        <Route path="admin" element={<AdminPage />} />
+        <Route path="dashboard" element={<Suspense fallback={<PageLoader />}><DashboardPage /></Suspense>} />
+        <Route path="workouts" element={<Suspense fallback={<PageLoader />}><WorkoutsPage /></Suspense>} />
+        <Route path="workouts/group/:id" element={<Suspense fallback={<PageLoader />}><GroupWorkoutPage /></Suspense>} />
+        <Route path="workouts/generate" element={<Suspense fallback={<PageLoader />}><GenerateWorkoutPage /></Suspense>} /> 
+        <Route path="workouts/new" element={<Suspense fallback={<PageLoader />}><NewWorkoutPage /></Suspense>} />
+        <Route path="workouts/:id/edit" element={<Suspense fallback={<PageLoader />}><NewWorkoutPage /></Suspense>} />
+        <Route path="workouts/:id" element={<Suspense fallback={<PageLoader />}><WorkoutDetailPage /></Suspense>} />
+        <Route path="calendar" element={<Suspense fallback={<PageLoader />}><CalendarPage /></Suspense>} />
+        <Route path="programs" element={<Suspense fallback={<PageLoader />}><ProgramsPage /></Suspense>} />
+        <Route path="programs/:id" element={<Suspense fallback={<PageLoader />}><ProgramDetailPage /></Suspense>} />
+        <Route path="groups" element={<Suspense fallback={<PageLoader />}><GroupsPage /></Suspense>} />
+        <Route path="groups/:id" element={<Suspense fallback={<PageLoader />}><GroupDetailPage /></Suspense>} />
+        <Route path="goals" element={<Suspense fallback={<PageLoader />}><GoalsPage /></Suspense>} />
+        <Route path="tools" element={<Suspense fallback={<PageLoader />}><ToolsPage /></Suspense>} />
+        <Route path="form-check" element={<Suspense fallback={<PageLoader />}><FormCheckPage /></Suspense>} />
+        <Route path="health" element={<Suspense fallback={<PageLoader />}><HealthPage /></Suspense>} />
+        <Route path="feed" element={<Suspense fallback={<PageLoader />}><FeedPage /></Suspense>} />
+        <Route path="friends" element={<Suspense fallback={<PageLoader />}><FriendsPage /></Suspense>} />
+        <Route path="profile/:userId" element={<Suspense fallback={<PageLoader />}><ProfilePage /></Suspense>} />
+        <Route path="profile" element={<Suspense fallback={<PageLoader />}><ProfilePage /></Suspense>} />
+        <Route path="usage" element={<Suspense fallback={<PageLoader />}><UsagePage /></Suspense>} />
+        <Route path="settings" element={<Suspense fallback={<PageLoader />}><SettingsPage /></Suspense>} />
+        <Route path="trainer" element={<Suspense fallback={<PageLoader />}><TrainerPage /></Suspense>} />
+        <Route path="admin" element={<Suspense fallback={<PageLoader />}><AdminPage /></Suspense>} />
       </Route>
       
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFoundPage /></Suspense>} />
     </Routes>
   )
 }

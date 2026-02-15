@@ -31,6 +31,7 @@ import { useAuth } from '../context/AuthContext'
 import { getDisplayDate } from '../utils/dateUtils'
 import { normalizeRepRange } from '../utils/workoutUtils'
 import GenerateGroupWorkoutModal from '../components/GenerateGroupWorkoutModal'
+import usePageTitle from '../utils/usePageTitle'
 
 // Helper to safely parse dates from Firestore
 const safeFormatDate = (date, formatStr = 'MMM d, yyyy') => {
@@ -81,6 +82,7 @@ export default function GroupDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  usePageTitle('Group')
   const { user, userProfile, isAppAdmin } = useAuth()
   const [group, setGroup] = useState(null)
   const [members, setMembers] = useState([])
@@ -1816,7 +1818,7 @@ export default function GroupDetailPage() {
         isAdmin={isAppAdmin}
         onSuccess={() => {
           // Refresh workouts list
-          groupWorkoutService.getByGroup(id, user.uid).then(setGroupWorkouts)
+          groupWorkoutService.getByGroup(id, user.uid).then(setGroupWorkouts).catch(err => console.error('[GroupDetail] Refresh failed:', err))
         }}
       />
     </div>

@@ -1,11 +1,13 @@
 import OpenAI from 'openai'
-import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
+import { verifyAuth, UNAUTHORIZED, getCorsHeaders, optionsResponse } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 export async function handler(event) {
-  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
+  const cors = getCorsHeaders(event);
+  if (event.httpMethod === 'OPTIONS') return optionsResponse(event);
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' }
@@ -13,6 +15,14 @@ export async function handler(event) {
 
   const auth = await verifyAuth(event);
   if (!auth) return UNAUTHORIZED;
+
+  // Rate limit
+  const rateCheck = await checkRateLimit(auth.uid, 'generate-program');
+  if (!rateCheck.allowed) {
+    return { statusCode: 429, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Too many requests. Please wait a moment.' }) };
+  }
+
+  let creditCost = 10;
 
   try {
     const {
@@ -26,11 +36,18 @@ export async function handler(event) {
       model,            // 'standard' or 'premium'
     } = JSON.parse(event.body)
     const userId = auth.uid;
+    creditCost = model === 'premium' ? 100 : 10;
+
+    // Server-side credit deduction
+    const creditResult = await deductCredits(userId, 'generate-program', creditCost, auth.isAdmin);
+    if (!creditResult.success) {
+      return { statusCode: 402, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: `Not enough credits. Need ${creditCost}, have ${creditResult.balance}.` }) };
+    }
 
     if (!trainingDays?.length) {
       return {
         statusCode: 400,
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ error: 'Missing required fields: trainingDays' }),
       }
     }
@@ -246,7 +263,7 @@ ${type === 'mixed' ? '- Balance barbell/dumbbell work with bodyweight movements 
       logError('generate-program', parseErr, 'medium', { action: 'parse-response' });
       return {
         statusCode: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ error: 'AI returned invalid program format. Try again.' }),
       }
     }
@@ -255,7 +272,7 @@ ${type === 'mixed' ? '- Balance barbell/dumbbell work with bodyweight movements 
     if (!program.weeks || !Array.isArray(program.weeks) || program.weeks.length === 0) {
       return {
         statusCode: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ error: 'AI returned program without weeks. Try again.' }),
       }
     }
@@ -300,7 +317,7 @@ ${type === 'mixed' ? '- Balance barbell/dumbbell work with bodyweight movements 
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json', ...cors },
       body: JSON.stringify({
         program,
         usage: {
@@ -316,9 +333,10 @@ ${type === 'mixed' ? '- Balance barbell/dumbbell work with bodyweight movements 
   } catch (error) {
     console.error('Program generation error:', error)
     logError('generate-program', error, 'high', { action: 'generate' });
+    await refundCredits(auth.uid, creditCost, auth.isAdmin);
     return {
       statusCode: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json', ...cors },
       body: JSON.stringify({ error: error.message || 'Failed to generate program' }),
     }
   }

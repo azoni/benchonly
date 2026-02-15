@@ -2,11 +2,14 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   GoogleAuthProvider
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../services/firebase';
+import { isNative } from '../utils/platform';
 
 const AuthContext = createContext({});
 
@@ -227,14 +230,29 @@ export function AuthProvider({ children }) {
     return () => unsubscribe();
   }, [isGuest]);
 
+  // Handle redirect result on native (catches errors from Google sign-in redirect)
+  useEffect(() => {
+    if (!isNative) return;
+    getRedirectResult(auth).catch((err) => {
+      if (err?.code !== 'auth/redirect-cancelled-by-user') {
+        console.error('[Auth] Redirect result error:', err.message);
+      }
+    });
+  }, []);
+
   const signInWithGoogle = async () => {
     try {
+      if (isNative) {
+        // Native: use redirect flow (popups blocked in WebView)
+        await signInWithRedirect(auth, googleProvider);
+        // onAuthStateChanged will pick up the user after redirect
+        return { success: true };
+      }
       const result = await signInWithPopup(auth, googleProvider);
       setIsGuest(false);
       return { success: true, user: result.user };
     } catch (error) {
       console.error('Google sign in error:', error);
-      // Don't treat user-closed-popup as a real error
       if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
         return { success: false, error: 'cancelled' };
       }

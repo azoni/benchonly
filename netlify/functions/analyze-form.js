@@ -1,55 +1,83 @@
 import OpenAI from 'openai';
-import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE, admin } from './utils/auth.js';
+import { verifyAuth, UNAUTHORIZED, getCorsHeaders, optionsResponse, admin } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 24000 });
 
-const SYSTEM_PROMPT = `You are an expert strength and conditioning coach analyzing exercise form from video frames.
+const SYSTEM_PROMPT = `You are an elite strength and conditioning coach with 20+ years of experience, analyzing exercise form from sequential video frames.
 
-You will receive sequential frames extracted from a workout video, numbered in order. Analyze the movement frame by frame.
+You will receive numbered frames extracted from a workout video in chronological order. Analyze the complete movement pattern across all frames.
 
-ANALYSIS RULES:
-- Identify the exercise being performed from the movement pattern
-- Track form throughout the entire range of motion
-- Be specific about joint angles, body positions, and alignment
-- Call out both good form AND issues — be balanced
-- For each issue, explain WHY it matters (injury risk, muscle activation, etc.)
-- Give actionable corrections, not vague advice
-- If a frame is a transition or rest, note it briefly and move on
-- Consider the full movement arc — some positions look wrong in isolation but are fine mid-movement
+ANALYSIS APPROACH:
+1. First, identify the exercise and watch the full sequence to understand the movement arc
+2. Score each frame in context of the whole movement — don't penalize transitional positions that are normal
+3. Be specific: reference exact body parts, joint angles, and positions you can see
+4. Be honest but constructive — if form is dangerous, say so clearly
+5. If the video is unclear, too dark, or doesn't show exercise, set overallScore to 0 and explain
 
-RESPOND WITH ONLY VALID JSON (no markdown, no backticks, no preamble):
+RESPOND WITH ONLY VALID JSON (no markdown, no backticks):
 {
-  "exercise": "Name of the exercise detected",
+  "exercise": "Detected exercise name",
+  "variation": "Specific variation if identifiable (e.g. 'low bar', 'sumo', 'close grip')",
+  "repsDetected": 1,
   "overallScore": 7,
-  "overallSummary": "2-3 sentence overall assessment",
-  "keyIssues": ["Most important issue 1", "Issue 2"],
-  "keyStrengths": ["What they're doing well 1", "Strength 2"],
+  "overallSummary": "2-3 sentence assessment written directly to the lifter. Be specific about what you saw.",
+  "movementQuality": {
+    "stability": { "score": 8, "note": "Brief note on core/base stability" },
+    "rangeOfMotion": { "score": 7, "note": "Brief note on ROM" },
+    "control": { "score": 6, "note": "Brief note on tempo/control through movement" },
+    "alignment": { "score": 8, "note": "Brief note on joint stacking and path" }
+  },
+  "keyStrengths": ["Specific strength with body part reference", "Another strength"],
+  "keyIssues": ["Specific issue with WHY it matters", "Another issue"],
+  "injuryRisks": [
+    {
+      "area": "Body area at risk",
+      "severity": "low|medium|high",
+      "description": "What's happening and why it's risky",
+      "fix": "Specific cue to address it"
+    }
+  ],
   "frames": [
     {
       "frameNumber": 1,
       "phase": "setup|descent|bottom|ascent|lockout|transition|rest",
-      "assessment": "Brief assessment of this specific frame",
+      "assessment": "What's happening in this frame — be specific about positions",
       "formScore": 8,
-      "cues": ["Specific coaching cue if needed"]
+      "cues": ["Actionable coaching cue"]
     }
   ],
-  "recommendations": ["Top priority fix 1", "Fix 2", "Fix 3"]
+  "focusDrill": {
+    "title": "The ONE thing to fix first",
+    "description": "2-3 sentences: what to do differently next session, with a specific cue or drill",
+    "cue": "Short memorable coaching cue (e.g. 'chest up, spread the floor')"
+  },
+  "recommendations": ["Priority fix 1 with specific instruction", "Fix 2", "Fix 3"]
 }
 
-SCORING: 1-3 dangerous form, 4-5 needs significant work, 6-7 decent with some issues, 8-9 good form, 10 textbook.
+SCORING: 1-3 dangerous/injury risk, 4-5 significant technique issues, 6-7 decent with clear fixes needed, 8-9 solid form with minor tweaks, 10 textbook.
 
-If the video is unclear, too dark, or doesn't show an exercise, say so in overallSummary and set overallScore to 0.`;
+IMPORTANT: Write assessments as if talking directly to the lifter. Use "you/your" not "the lifter". Be concise but specific — reference what you actually see in the frames, not generic advice.`;
 
 export async function handler(event) {
-  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
+  const cors = getCorsHeaders(event);
+  if (event.httpMethod === 'OPTIONS') return optionsResponse(event);
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    return { statusCode: 405, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
   const auth = await verifyAuth(event);
   if (!auth) return UNAUTHORIZED;
+
+  // Rate limit
+  const rateCheck = await checkRateLimit(auth.uid, 'form-check');
+  if (!rateCheck.allowed) {
+    return { statusCode: 429, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Too many requests. Please wait a moment.' }) };
+  }
+
+  let creditCost = 0;
 
   try {
     const { frames, note, targetUserId, model, quality } = JSON.parse(event.body);
@@ -59,18 +87,30 @@ export async function handler(event) {
     const isPremium = model === 'premium' && auth.isAdmin;
     const imageDetail = isPremium ? 'high' : 'low';
 
+    // Determine credit cost from quality
+    const QUALITY_COSTS = { quick: 10, standard: 15, detailed: 25 };
+    creditCost = isPremium ? 50 : (QUALITY_COSTS[quality] || 15);
+
+    // Server-side credit deduction
+    const creditResult = await deductCredits(userId, 'form-check', creditCost, auth.isAdmin);
+    if (!creditResult.success) {
+      return { statusCode: 402, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: `Not enough credits. Need ${creditCost}, have ${creditResult.balance}.` }) };
+    }
+
     if (!frames || !Array.isArray(frames) || frames.length === 0) {
+      await refundCredits(userId, creditCost, auth.isAdmin);
       return {
         statusCode: 400,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
         body: JSON.stringify({ error: 'No frames provided' }),
       };
     }
 
     if (frames.length > 25) {
+      await refundCredits(userId, creditCost, auth.isAdmin);
       return {
         statusCode: 400,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
         body: JSON.stringify({ error: 'Too many frames (max 25)' }),
       };
     }
@@ -157,7 +197,7 @@ export async function handler(event) {
     if (!analysis) {
       return {
         statusCode: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           analysis: {
             exercise: 'Unknown',
@@ -175,7 +215,7 @@ export async function handler(event) {
 
     return {
       statusCode: 200,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         analysis,
         tokens: usage,
@@ -184,9 +224,11 @@ export async function handler(event) {
   } catch (error) {
     console.error('Form analysis error:', error);
     logError('analyze-form', error, 'high', { userId: auth.uid });
+    // Refund credits on failure
+    await refundCredits(auth.uid, creditCost, auth.isAdmin);
     return {
       statusCode: 500,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: 'Failed to analyze form. Please try again.' }),
     };
   }

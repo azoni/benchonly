@@ -1,12 +1,14 @@
 import OpenAI from 'openai';
-import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE, admin } from './utils/auth.js';
+import { verifyAuth, UNAUTHORIZED, getCorsHeaders, optionsResponse, admin } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 24000 });
 
 export async function handler(event) {
-  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
+  const cors = getCorsHeaders(event);
+  if (event.httpMethod === 'OPTIONS') return optionsResponse(event);
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -15,17 +17,32 @@ export async function handler(event) {
   const auth = await verifyAuth(event);
   if (!auth) return UNAUTHORIZED;
 
+  // Rate limit
+  const rateCheck = await checkRateLimit(auth.uid, 'generate-workout');
+  if (!rateCheck.allowed) {
+    return { statusCode: 429, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Too many requests. Please wait a moment.' }) };
+  }
+
+  let creditCost = 5;
+
   try {
     const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId, duration, exerciseCount, maxExercise } = JSON.parse(event.body);
     // Use targetUserId only if caller is admin (for impersonation)
     const userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
     // Enforce admin-only premium model
     const selectedModel = (model === 'premium' && auth.isAdmin) ? 'gpt-4.1-mini' : 'gpt-4o-mini';
+    creditCost = model === 'premium' ? 100 : 5;
+
+    // Server-side credit deduction
+    const creditResult = await deductCredits(userId, 'generate-workout', creditCost, auth.isAdmin);
+    if (!creditResult.success) {
+      return { statusCode: 402, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: `Not enough credits. Need ${creditCost}, have ${creditResult.balance}.` }) };
+    }
 
     if (!db) {
       return {
         statusCode: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ error: 'Firebase not configured. Add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY to Netlify.' }),
       };
     }
@@ -164,7 +181,7 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
     } catch {
       return {
         statusCode: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ error: 'AI returned invalid JSON' }),
       };
     }
@@ -286,7 +303,7 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json', ...cors },
       body: JSON.stringify({
         success: true,
         workoutId,
@@ -303,10 +320,11 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
   } catch (error) {
     console.error('Error:', error);
     logError('generate-workout', error, 'high', { action: 'generate' });
+    await refundCredits(auth.uid, creditCost, auth.isAdmin);
     const isTimeout = error?.code === 'ETIMEDOUT' || error?.message?.includes('timeout') || error?.message?.includes('timed out');
     return {
       statusCode: isTimeout ? 504 : 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json', ...cors },
       body: JSON.stringify({ error: isTimeout ? 'AI took too long to respond. Try again or use standard model.' : error.message }),
     };
   }

@@ -1,6 +1,7 @@
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { getAuthHeaders } from './api';
+import { apiUrl } from '../utils/platform'
 
 export const ouraService = {
   /**
@@ -25,7 +26,7 @@ export const ouraService = {
    */
   async connect() {
     const headers = await getAuthHeaders();
-    const response = await fetch('/.netlify/functions/oura-auth', {
+    const response = await fetch(apiUrl('oura-auth'), {
       method: 'POST',
       headers,
     });
@@ -42,7 +43,7 @@ export const ouraService = {
    */
   async sync() {
     const headers = await getAuthHeaders();
-    const response = await fetch('/.netlify/functions/oura-sync', {
+    const response = await fetch(apiUrl('oura-sync'), {
       method: 'POST',
       headers,
     });

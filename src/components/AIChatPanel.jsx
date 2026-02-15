@@ -293,11 +293,6 @@ export default function AIChatPanel() {
 
     setGreetingLoading(true);
     try {
-      // Deduct credit for greeting
-      if (user?.uid && !isAppAdmin) {
-        await creditService.deduct(user.uid, 'ask-assistant');
-        updateProfile({ credits: credits - CREDIT_COSTS['ask-assistant'] });
-      }
       incrementRateLimit();
 
       const response = await api.askAssistant(null, { ...context, personality: userProfile?.chatPersonality || 'coach' }, 'greeting');
@@ -314,11 +309,6 @@ export default function AIChatPanel() {
       }
     } catch (error) {
       console.error('Greeting fetch error:', error);
-      // Refund on failure
-      if (user?.uid && !isAppAdmin) {
-        await creditService.add(user.uid, CREDIT_COSTS['ask-assistant']).catch(() => {});
-        updateProfile({ credits });
-      }
       setMessages([{
         role: 'assistant',
         content: "Hey! I'm your training coach — I've got your full workout history loaded. Ask me anything about your lifts, pain, goals, or say 'generate a workout'."
@@ -440,10 +430,7 @@ export default function AIChatPanel() {
       incrementRateLimit();
 
       if (user?.uid && !isAdmin) {
-        // Deduct Nx credits during overage, 1x normally
-        for (let i = 0; i < creditCost; i++) {
-          await creditService.deduct(user.uid, 'ask-assistant');
-        }
+        // Credits deducted server-side — just update local display
         updateProfile({ credits: credits - creditCost });
       }
 
@@ -459,7 +446,7 @@ export default function AIChatPanel() {
       ]);
     } catch (error) {
       if (user?.uid && !isAdmin) {
-        await creditService.add(user.uid, creditCost).catch(() => {});
+        // Server refunds on failure — restore local display
         updateProfile({ credits: credits });
       }
       setMessages((prev) => [
@@ -749,6 +736,7 @@ export default function AIChatPanel() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Ask about your workouts..."
+                  aria-label="Chat message"
                   className="flex-1 bg-iron-800 text-iron-100 px-4 py-2.5 rounded-full
                     border border-iron-700 focus:border-flame-500/50 focus:outline-none
                     placeholder:text-iron-500 text-sm"
