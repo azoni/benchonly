@@ -13,6 +13,22 @@
   to = "/ai-form-check/index.html"
   status = 200
 
+# Static SEO/meta files — match before SPA catch-all
+[[redirects]]
+  from = "/llms.txt"
+  to = "/llms.txt"
+  status = 200
+
+[[redirects]]
+  from = "/robots.txt"
+  to = "/robots.txt"
+  status = 200
+
+[[redirects]]
+  from = "/sitemap.xml"
+  to = "/sitemap.xml"
+  status = 200
+
 # Redirect all routes to index.html for SPA
 [[redirects]]
   from = "/*"
