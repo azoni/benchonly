@@ -52,7 +52,7 @@ export async function handler(event) {
   if (!auth) return UNAUTHORIZED;
 
   try {
-    const { frames, note, targetUserId, model } = JSON.parse(event.body);
+    const { frames, note, targetUserId, model, quality } = JSON.parse(event.body);
     const userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
     
     // Premium uses high detail vision — admin only
@@ -67,11 +67,11 @@ export async function handler(event) {
       };
     }
 
-    if (frames.length > 15) {
+    if (frames.length > 25) {
       return {
         statusCode: 400,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Too many frames (max 15)' }),
+        body: JSON.stringify({ error: 'Too many frames (max 25)' }),
       };
     }
 
@@ -101,7 +101,7 @@ export async function handler(event) {
       });
     });
 
-    logActivity({ type: 'form-check', title: 'Form Check', description: `Analyzed ${frames.length} frames`, model: isPremium ? 'premium' : 'standard', metadata: { userId, frameCount: frames.length, hasNote: !!note } });
+    logActivity({ type: 'form-check', title: 'Form Check', description: `Analyzed ${frames.length} frames (${quality || 'standard'})`, model: isPremium ? 'premium' : 'standard', metadata: { userId, frameCount: frames.length, quality: quality || 'standard', hasNote: !!note } });
 
     const startMs = Date.now();
     const response = await openai.chat.completions.create({
@@ -111,7 +111,7 @@ export async function handler(event) {
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content },
       ],
-      max_tokens: 2048,
+      max_tokens: 4096,
       temperature: 0.3,
     });
     const responseTime = Date.now() - startMs;
@@ -145,7 +145,7 @@ export async function handler(event) {
           totalTokens: usage.total_tokens,
           estimatedCost: cost,
           responseTimeMs: responseTime,
-          userMessage: `Form check: ${frames.length} frames${note ? ` — ${note}` : ''}`,
+          userMessage: `Form check (${quality || 'standard'}): ${frames.length} frames${note ? ` — ${note}` : ''}`,
           assistantResponse: `${analysis?.exercise || 'Unknown'}: score ${analysis?.overallScore || 0}/10`,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });

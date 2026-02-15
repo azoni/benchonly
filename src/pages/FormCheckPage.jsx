@@ -17,9 +17,13 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { creditService, CREDIT_COSTS } from '../services/firestore'
+import { creditService } from '../services/firestore'
 
-const MAX_FRAMES = 10
+const FRAME_PRESETS = {
+  quick:    { frames: 5,  label: 'Quick',    desc: '5 frames · ~10s',  credits: 10 },
+  standard: { frames: 10, label: 'Standard', desc: '10 frames · ~15s', credits: 15 },
+  detailed: { frames: 20, label: 'Detailed', desc: '20 frames · ~25s', credits: 25 },
+}
 const FRAME_WIDTH = 480
 const JPEG_QUALITY = 0.5
 const FORM_CHECK_PREMIUM_COST = 50
@@ -66,6 +70,7 @@ export default function FormCheckPage() {
   const [frames, setFrames] = useState([])
   const [note, setNote] = useState('')
   const [model, setModel] = useState('standard')
+  const [quality, setQuality] = useState('standard') // quick | standard | detailed
   const [extractProgress, setExtractProgress] = useState(0)
   const [analysis, setAnalysis] = useState(null)
   const [error, setError] = useState(null)
@@ -102,6 +107,7 @@ export default function FormCheckPage() {
 
   const extractFrames = useCallback(async () => {
     if (!videoUrl) return
+    const maxFrames = FRAME_PRESETS[quality].frames
     setStep('extracting')
     setExtractProgress(0)
     setError(null)
@@ -175,13 +181,13 @@ export default function FormCheckPage() {
       }
 
       // ── Find best window ──
-      // Slide a window of MAX_FRAMES seconds across motion scores
+      // Slide a window of maxFrames seconds across motion scores
       // and pick the window with the highest total motion
       let startTime = 0
       let endTime = duration
 
-      if (motionScores.length > MAX_FRAMES) {
-        const windowSize = Math.min(MAX_FRAMES, motionScores.length)
+      if (motionScores.length > maxFrames) {
+        const windowSize = Math.min(maxFrames, motionScores.length)
         let bestSum = 0
         let bestStart = 0
 
@@ -205,7 +211,7 @@ export default function FormCheckPage() {
 
       // ── Pass 2: Extract final frames from the active window ──
       const windowDuration = endTime - startTime
-      const totalFrames = Math.max(1, Math.min(MAX_FRAMES, Math.floor(windowDuration)))
+      const totalFrames = Math.max(1, Math.min(maxFrames, Math.floor(windowDuration)))
       const interval = windowDuration / totalFrames
 
       // Set canvas to final output size
@@ -234,7 +240,7 @@ export default function FormCheckPage() {
       setError(err.message || 'Could not extract frames from this video. Try a different file.')
       setStep('upload')
     }
-  }, [videoUrl])
+  }, [videoUrl, quality])
 
   const analyzeForm = useCallback(async () => {
     if (!user || frames.length === 0) return
@@ -242,13 +248,14 @@ export default function FormCheckPage() {
     setError(null)
 
     const isPremium = model === 'premium'
-    const cost = isPremium ? FORM_CHECK_PREMIUM_COST : CREDIT_COSTS['form-check']
+    const baseCost = FRAME_PRESETS[quality].credits
+    const cost = isPremium ? FORM_CHECK_PREMIUM_COST : baseCost
 
     try {
       if (!isAdmin) {
-        const creditResult = await creditService.deduct(user.uid, 'form-check', isPremium ? FORM_CHECK_PREMIUM_COST / CREDIT_COSTS['form-check'] : 1)
+        const creditResult = await creditService.deductAmount(user.uid, cost)
         if (!creditResult.success) {
-          setError(`Not enough credits. You need ${cost} credits for a ${isPremium ? 'premium ' : ''}form check.`)
+          setError(`Not enough credits. You need ${cost} credits for this form check.`)
           setStep('preview')
           return
         }
@@ -267,6 +274,7 @@ export default function FormCheckPage() {
           frames: frameData,
           note: note.trim() || undefined,
           model: isPremium ? 'premium' : 'standard',
+          quality,
         }),
       })
 
@@ -287,7 +295,7 @@ export default function FormCheckPage() {
       }
       setStep('preview')
     }
-  }, [user, frames, note, model, isAdmin])
+  }, [user, frames, note, model, quality, isAdmin])
 
   const reset = () => {
     setStep('upload')
@@ -299,6 +307,7 @@ export default function FormCheckPage() {
     setFrames([])
     setNote('')
     setModel('standard')
+    setQuality('standard')
     setAnalysis(null)
     setError(null)
     setActiveFrame(0)
@@ -400,36 +409,58 @@ export default function FormCheckPage() {
             </p>
           </div>
 
-          {/* Model toggle */}
+          {/* Quality selector */}
           <div>
-            <label className="block text-sm text-iron-400 mb-2">AI Model</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setModel('standard')}
-                className={`px-3 py-2 text-xs rounded-lg border transition-colors text-center
-                  ${model === 'standard'
-                    ? 'border-flame-500 bg-flame-500/10 text-flame-400'
-                    : 'border-iron-700 text-iron-400 hover:border-iron-600'
-                  }`}
-              >
-                <div className="font-medium flex items-center justify-center gap-1"><Zap className="w-3 h-3" />Standard</div>
-                <div className="text-[10px] text-iron-500">{CREDIT_COSTS['form-check']} credits</div>
-              </button>
-              <button
-                onClick={() => { if (isAdmin) setModel('premium') }}
-                className={`px-3 py-2 text-xs rounded-lg border transition-colors text-center relative
-                  ${model === 'premium'
-                    ? 'border-purple-500 bg-purple-500/10 text-purple-400'
-                    : isAdmin
-                      ? 'border-iron-700 text-iron-400 hover:border-iron-600'
-                      : 'border-iron-800 text-iron-600 cursor-not-allowed opacity-50'
-                  }`}
-              >
-                <div className="font-medium flex items-center justify-center gap-1"><Sparkles className="w-3 h-3" />Premium</div>
-                <div className="text-[10px] text-iron-500">{isAdmin ? `${FORM_CHECK_PREMIUM_COST} credits` : 'Coming soon'}</div>
-              </button>
+            <label className="block text-sm text-iron-400 mb-2">Analysis Depth</label>
+            <div className="grid grid-cols-3 gap-2">
+              {Object.entries(FRAME_PRESETS).map(([key, preset]) => (
+                <button
+                  key={key}
+                  onClick={() => setQuality(key)}
+                  className={`px-3 py-2.5 text-xs rounded-lg border transition-colors text-center
+                    ${quality === key
+                      ? 'border-flame-500 bg-flame-500/10 text-flame-400'
+                      : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                    }`}
+                >
+                  <div className="font-medium">{preset.label}</div>
+                  <div className="text-[10px] text-iron-500 mt-0.5">{preset.desc}</div>
+                  <div className="text-[10px] text-iron-500">{preset.credits} credits</div>
+                </button>
+              ))}
             </div>
           </div>
+
+          {/* Premium model toggle — admin only */}
+          {isAdmin && (
+            <div>
+              <label className="block text-sm text-iron-400 mb-2">AI Model</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setModel('standard')}
+                  className={`px-3 py-2 text-xs rounded-lg border transition-colors text-center
+                    ${model === 'standard'
+                      ? 'border-flame-500 bg-flame-500/10 text-flame-400'
+                      : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                    }`}
+                >
+                  <div className="font-medium flex items-center justify-center gap-1"><Zap className="w-3 h-3" />Standard</div>
+                  <div className="text-[10px] text-iron-500">Low detail vision</div>
+                </button>
+                <button
+                  onClick={() => setModel('premium')}
+                  className={`px-3 py-2 text-xs rounded-lg border transition-colors text-center
+                    ${model === 'premium'
+                      ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                      : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                    }`}
+                >
+                  <div className="font-medium flex items-center justify-center gap-1"><Sparkles className="w-3 h-3" />Premium</div>
+                  <div className="text-[10px] text-iron-500">High detail vision</div>
+                </button>
+              </div>
+            </div>
+          )}
 
           <button
             onClick={extractFrames}
@@ -495,7 +526,7 @@ export default function FormCheckPage() {
             </button>
             <button onClick={analyzeForm} className="btn-primary flex-1 py-3 flex items-center justify-center gap-2">
               <Zap className="w-4 h-4" />
-              Analyze ({model === 'premium' ? FORM_CHECK_PREMIUM_COST : CREDIT_COSTS['form-check']} credits)
+              Analyze ({model === 'premium' ? FORM_CHECK_PREMIUM_COST : FRAME_PRESETS[quality].credits} credits)
             </button>
           </div>
         </motion.div>

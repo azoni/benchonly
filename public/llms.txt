@@ -31,7 +31,7 @@ Log cardio sessions alongside strength training with duration, distance, and hea
 
 ## Pricing
 
-Free to use. New accounts receive 50 credits. AI features cost credits (15 credits per form check, 10 per AI workout). Credits are earned through training activities like completing workouts and hitting goals.
+Free to use. New accounts receive 50 credits. AI features cost credits (10-25 credits per form check depending on depth, 10 per AI workout). Credits are earned through training activities like completing workouts and hitting goals.
 
 ## Technical Details
 

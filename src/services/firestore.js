@@ -1238,6 +1238,16 @@ export const creditService = {
     return { success: true, balance: balance - cost, cost };
   },
 
+  async deductAmount(userId, amount) {
+    const balance = await this.getBalance(userId);
+    if (balance < amount) {
+      return { success: false, balance, cost: amount, error: 'insufficient_credits' };
+    }
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { credits: increment(-amount) });
+    return { success: true, balance: balance - amount, cost: amount };
+  },
+
   async add(userId, amount) {
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, { credits: increment(amount) });
