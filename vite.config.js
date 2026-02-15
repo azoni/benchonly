@@ -53,7 +53,14 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/\.netlify/, /^\/api/],
+        navigateFallbackDenylist: [
+          /^\/\.netlify/,
+          /^\/api/,
+          /\.txt$/,
+          /\.xml$/,
+          /\.json$/,
+          /^\/ai-form-check/,
+        ],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

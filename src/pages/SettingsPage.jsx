@@ -425,6 +425,7 @@ export default function SettingsPage() {
         'generate-workout': 'Workout Generation',
         'generate-group-workout': 'Group Workout',
         'ask-assistant': 'AI Chat',
+        'form-check': 'Form Check',
       }
       
       records.forEach(r => {

@@ -1,5 +1,0 @@
-# Static files — serve as-is (must come before catch-all)
-/ai-form-check  /ai-form-check/index.html  200
-
-# SPA catch-all — only applies when no file exists at the path
-/*  /index.html  200
