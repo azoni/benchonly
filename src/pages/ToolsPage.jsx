@@ -199,7 +199,7 @@ export default function ToolsPage() {
         <div className="flex-1">
           <h2 className="font-display text-lg text-iron-100 flex items-center gap-2">
             Form Check
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 uppercase">New</span>
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-400 uppercase">Beta</span>
           </h2>
           <p className="text-iron-500 text-sm">Upload a video for AI-powered frame-by-frame form analysis</p>
         </div>

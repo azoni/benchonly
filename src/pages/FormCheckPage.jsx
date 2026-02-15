@@ -254,6 +254,7 @@ export default function FormCheckPage() {
           <h1 className="text-2xl font-display text-iron-100 flex items-center gap-2">
             <Video className="w-6 h-6 text-flame-400" />
             Form Check
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-400 uppercase">Beta</span>
           </h1>
           <p className="text-sm text-iron-500 mt-1">
             Upload a video and get AI-powered frame-by-frame form analysis

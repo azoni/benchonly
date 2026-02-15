@@ -310,9 +310,10 @@ export default function Layout() {
           <button
             onClick={() => navigate('/form-check')}
             className="w-11 h-11 bg-iron-800 border border-iron-700 hover:bg-iron-700
-              rounded-full shadow-lg flex items-center justify-center transition-all"
+              rounded-full shadow-lg flex items-center justify-center transition-all relative"
           >
             <Video className="w-5 h-5 text-purple-400" />
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-500 text-[7px] font-bold text-white flex items-center justify-center">β</span>
           </button>
         )}
         <button
@@ -451,11 +452,12 @@ export default function Layout() {
           <button
             onClick={() => navigate('/form-check')}
             className="w-11 h-11 rounded-full bg-iron-800 border border-iron-700 text-purple-400
-              flex items-center justify-center shadow-lg
+              flex items-center justify-center shadow-lg relative
               hover:bg-iron-700 transition-all duration-200"
-            title="Form Check"
+            title="Form Check (Beta)"
           >
             <Video className="w-5 h-5" />
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-500 text-[7px] font-bold text-white flex items-center justify-center">β</span>
           </button>
         )}
         <button
