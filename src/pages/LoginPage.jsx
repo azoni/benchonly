@@ -621,6 +621,9 @@ export default function LoginPage() {
               <Link to="/docs" className="text-xs text-iron-500 hover:text-iron-300 transition-colors flex items-center gap-1">
                 <BookOpen className="w-3 h-3" /> Docs
               </Link>
+              <a href="/ai-form-check" className="text-xs text-iron-500 hover:text-iron-300 transition-colors flex items-center gap-1">
+                <Video className="w-3 h-3" /> AI Form Check
+              </a>
               <a href="https://azoni.ai" target="_blank" rel="noopener noreferrer" className="text-xs text-iron-500 hover:text-iron-300 transition-colors">
                 Built by Azoni
               </a>
