@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Calculator, Dumbbell, ChevronDown, Info, TrendingUp, BarChart3, Calendar, Target, ArrowRight } from 'lucide-react'
+import { Calculator, Dumbbell, ChevronDown, Info, TrendingUp, BarChart3, Calendar, Target, ArrowRight, Video } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { workoutService, goalService } from '../services/firestore'
 import { format, subDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
@@ -187,6 +187,24 @@ export default function ToolsPage() {
           Training calculators and utilities
         </p>
       </div>
+
+      {/* Form Check */}
+      <Link
+        to="/form-check"
+        className="card-steel rounded-xl p-4 mb-6 flex items-center gap-4 hover:bg-iron-800/80 transition-colors group"
+      >
+        <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+          <Video className="w-5 h-5 text-purple-400" />
+        </div>
+        <div className="flex-1">
+          <h2 className="font-display text-lg text-iron-100 flex items-center gap-2">
+            Form Check
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 uppercase">New</span>
+          </h2>
+          <p className="text-iron-500 text-sm">Upload a video for AI-powered frame-by-frame form analysis</p>
+        </div>
+        <ArrowRight className="w-5 h-5 text-iron-600 group-hover:text-iron-400 transition-colors" />
+      </Link>
 
       {/* 1RM Calculator */}
       <div className="card-steel rounded-xl overflow-hidden">

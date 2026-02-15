@@ -27,6 +27,7 @@ import ProgramDetailPage from './pages/ProgramDetailPage'
 import DocsPage from './pages/DocsPage'
 import OnboardingPage from './pages/OnboardingPage'
 import TrainerPage from './pages/TrainerPage'
+import FormCheckPage from './pages/FormCheckPage'
 
 function ProtectedRoute({ children }) {
   const { user, userProfile, loading, isGuest } = useAuth()
@@ -168,6 +169,7 @@ export default function App() {
         <Route path="groups/:id" element={<GroupDetailPage />} />
         <Route path="goals" element={<GoalsPage />} />
         <Route path="tools" element={<ToolsPage />} />
+        <Route path="form-check" element={<FormCheckPage />} />
         <Route path="health" element={<HealthPage />} />
         <Route path="feed" element={<FeedPage />} />
         <Route path="friends" element={<FriendsPage />} />

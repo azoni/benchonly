@@ -20,6 +20,7 @@ import {
   Layers,
   BookOpen,
   ClipboardList,
+  Video,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore } from '../store';
@@ -46,7 +47,7 @@ const baseNavItems = [
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, userProfile, signOut, signInWithGoogle, isGuest, isRealAdmin, impersonating, stopImpersonating } = useAuth();
+  const { user, userProfile, signOut, signInWithGoogle, isGuest, isRealAdmin, realUser, impersonating, stopImpersonating } = useAuth();
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
@@ -69,6 +70,15 @@ export default function Layout() {
         .catch(() => {});
     }
   }, [user, isGuest, location.pathname]);
+
+  // Set admin context for analytics tagging
+  useEffect(() => {
+    if (isRealAdmin && realUser?.uid) {
+      analyticsService.setAdminContext(realUser.uid)
+    } else {
+      analyticsService.clearAdminContext()
+    }
+  }, [isRealAdmin, realUser?.uid])
 
   // Track page views
   useEffect(() => {
@@ -292,16 +302,28 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Mobile Floating Chat Button */}
-      <button
-        onClick={toggleChat}
-        className="lg:hidden fixed bottom-6 right-4 z-30 w-14 h-14 bg-flame-500 hover:bg-flame-600 
-          active:bg-flame-700 rounded-full shadow-lg shadow-flame-500/30 
-          flex items-center justify-center transition-all"
+      {/* Mobile Floating Buttons */}
+      <div className="lg:hidden fixed bottom-6 right-4 z-30 flex flex-col gap-3"
         style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <MessageCircle className="w-6 h-6 text-white" />
-      </button>
+        {location.pathname !== '/form-check' && (
+          <button
+            onClick={() => navigate('/form-check')}
+            className="w-11 h-11 bg-iron-800 border border-iron-700 hover:bg-iron-700
+              rounded-full shadow-lg flex items-center justify-center transition-all"
+          >
+            <Video className="w-5 h-5 text-purple-400" />
+          </button>
+        )}
+        <button
+          onClick={toggleChat}
+          className="w-14 h-14 bg-flame-500 hover:bg-flame-600 
+            active:bg-flame-700 rounded-full shadow-lg shadow-flame-500/30 
+            flex items-center justify-center transition-all"
+        >
+          <MessageCircle className="w-6 h-6 text-white" />
+        </button>
+      </div>
 
       {/* Mobile Menu Overlay */}
       <AnimatePresence>
@@ -421,17 +443,30 @@ export default function Layout() {
         </div>
       </main>
 
-      {/* AI Chat Button (Desktop) */}
-      <button
-        onClick={toggleChat}
-        className={`hidden lg:flex fixed bottom-6 right-6 z-30
-          w-14 h-14 rounded-full bg-flame-500 text-white
-          items-center justify-center shadow-glow-lg
-          hover:bg-flame-400 transition-all duration-200
-          ${chatOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}
+      {/* Floating Buttons (Desktop) */}
+      <div className={`hidden lg:flex fixed bottom-6 right-6 z-30 flex-col gap-3 transition-all duration-200
+        ${chatOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}
       >
-        <MessageCircle className="w-6 h-6" />
-      </button>
+        {location.pathname !== '/form-check' && (
+          <button
+            onClick={() => navigate('/form-check')}
+            className="w-11 h-11 rounded-full bg-iron-800 border border-iron-700 text-purple-400
+              flex items-center justify-center shadow-lg
+              hover:bg-iron-700 transition-all duration-200"
+            title="Form Check"
+          >
+            <Video className="w-5 h-5" />
+          </button>
+        )}
+        <button
+          onClick={toggleChat}
+          className="w-14 h-14 rounded-full bg-flame-500 text-white
+            flex items-center justify-center shadow-glow-lg
+            hover:bg-flame-400 transition-all duration-200"
+        >
+          <MessageCircle className="w-6 h-6" />
+        </button>
+      </div>
 
       {/* AI Chat Panel */}
       <InstallPrompt />

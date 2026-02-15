@@ -14,7 +14,14 @@ import {
 // ============ ANALYTICS SERVICE ============
 // Tracks user activity for admin insights
 
+// Admin context — set when an admin user is logged in
+let _adminUid = null
+
 export const analyticsService = {
+  // Call when admin logs in / starts impersonating
+  setAdminContext(uid) { _adminUid = uid },
+  clearAdminContext() { _adminUid = null },
+
   // Log a user action
   async logAction(userId, action, metadata = {}) {
     if (!userId) return
@@ -24,14 +31,19 @@ export const analyticsService = {
       const cleanMeta = Object.fromEntries(
         Object.entries(metadata).filter(([_, v]) => v !== undefined)
       )
-      await addDoc(collection(db, 'analytics'), {
+      const doc = {
         userId,
         action,
         metadata: cleanMeta,
         timestamp: serverTimestamp(),
         userAgent: navigator.userAgent,
         screenSize: `${window.innerWidth}x${window.innerHeight}`,
-      })
+      }
+      // Tag admin-initiated events (direct or impersonated)
+      if (_adminUid) {
+        doc.adminUid = _adminUid
+      }
+      await addDoc(collection(db, 'analytics'), doc)
     } catch (error) {
       // Silently fail - don't break the app for analytics
       console.error('Analytics error:', error)
@@ -105,7 +117,8 @@ export const analyticsService = {
       pageCounts,
       dailyActiveCounts,
       userActivity,
-      recentEvents: events.slice(0, 50)
+      recentEvents: events.slice(0, 50),
+      allEvents: events, // for client-side filtering
     }
   },
 

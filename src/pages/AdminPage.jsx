@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Users, 
@@ -66,6 +66,7 @@ export default function AdminPage() {
   const [creditAmount, setCreditAmount] = useState('')
   const [creditLoading, setCreditLoading] = useState(false)
   const [activityLoading, setActivityLoading] = useState(false)
+  const [hideAdminActivity, setHideAdminActivity] = useState(false)
   const [usageData, setUsageData] = useState([])
   const [usageLoading, setUsageLoading] = useState(false)
   const [usageFilter, setUsageFilter] = useState('')
@@ -168,6 +169,57 @@ export default function AdminPage() {
       setActivityLoading(false)
     }
   }
+
+  // Re-aggregate activity data when admin filter changes
+  const filteredActivity = useMemo(() => {
+    if (!activityData?.allEvents) return activityData
+    
+    const events = hideAdminActivity
+      ? activityData.allEvents.filter(e => !e.adminUid)
+      : activityData.allEvents
+
+    const uniqueUsers = new Set(events.map(e => e.userId))
+    const actionCounts = {}
+    const pageCounts = {}
+    const dailyActive = {}
+    const userActivity = {}
+
+    events.forEach(event => {
+      actionCounts[event.action] = (actionCounts[event.action] || 0) + 1
+      if (event.action === 'page_view' && event.metadata?.page) {
+        pageCounts[event.metadata.page] = (pageCounts[event.metadata.page] || 0) + 1
+      }
+      const date = event.timestamp?.toDate?.()
+      if (date) {
+        const dateKey = date.toISOString().split('T')[0]
+        if (!dailyActive[dateKey]) dailyActive[dateKey] = new Set()
+        dailyActive[dateKey].add(event.userId)
+      }
+      if (!userActivity[event.userId]) {
+        userActivity[event.userId] = { actions: 0, lastSeen: null }
+      }
+      userActivity[event.userId].actions++
+      if (!userActivity[event.userId].lastSeen ||
+          (event.timestamp?.toDate?.() > userActivity[event.userId].lastSeen)) {
+        userActivity[event.userId].lastSeen = event.timestamp?.toDate?.()
+      }
+    })
+
+    const dailyActiveCounts = Object.entries(dailyActive).map(([date, users]) => ({
+      date, count: users.size
+    })).sort((a, b) => a.date.localeCompare(b.date))
+
+    return {
+      ...activityData,
+      totalEvents: events.length,
+      uniqueUsers: uniqueUsers.size,
+      actionCounts,
+      pageCounts,
+      dailyActiveCounts,
+      userActivity,
+      recentEvents: events.slice(0, 50),
+    }
+  }, [activityData, hideAdminActivity])
 
   // Load activity when tab changes
   useEffect(() => {
@@ -892,24 +944,37 @@ export default function AdminPage() {
               <div className="w-8 h-8 border-2 border-flame-500 border-t-transparent rounded-full animate-spin mx-auto" />
               <p className="text-iron-500 mt-4">Loading activity data...</p>
             </div>
-          ) : activityData ? (
+          ) : filteredActivity ? (
             <>
+              {/* Admin filter toggle */}
+              <div className="flex items-center justify-end">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-sm text-iron-400">Hide admin activity</span>
+                  <button
+                    onClick={() => setHideAdminActivity(prev => !prev)}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${hideAdminActivity ? 'bg-flame-500' : 'bg-iron-700'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${hideAdminActivity ? 'translate-x-5' : ''}`} />
+                  </button>
+                </label>
+              </div>
+
               {/* Summary Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="card-steel p-4 text-center">
-                  <p className="text-3xl font-display text-flame-400">{activityData.uniqueUsers}</p>
+                  <p className="text-3xl font-display text-flame-400">{filteredActivity.uniqueUsers}</p>
                   <p className="text-sm text-iron-500">Active Users (7d)</p>
                 </div>
                 <div className="card-steel p-4 text-center">
-                  <p className="text-3xl font-display text-iron-100">{activityData.totalEvents}</p>
+                  <p className="text-3xl font-display text-iron-100">{filteredActivity.totalEvents}</p>
                   <p className="text-sm text-iron-500">Total Events</p>
                 </div>
                 <div className="card-steel p-4 text-center">
-                  <p className="text-3xl font-display text-green-400">{activityData.actionCounts?.workout_created || 0}</p>
+                  <p className="text-3xl font-display text-green-400">{filteredActivity.actionCounts?.workout_created || 0}</p>
                   <p className="text-sm text-iron-500">Workouts Created</p>
                 </div>
                 <div className="card-steel p-4 text-center">
-                  <p className="text-3xl font-display text-orange-400">{activityData.actionCounts?.cardio_logged || 0}</p>
+                  <p className="text-3xl font-display text-orange-400">{filteredActivity.actionCounts?.cardio_logged || 0}</p>
                   <p className="text-sm text-iron-500">Cardio Logged</p>
                 </div>
               </div>
@@ -918,11 +983,11 @@ export default function AdminPage() {
               <div className="card-steel p-4">
                 <h3 className="font-display text-lg text-iron-100 mb-4">Daily Active Users</h3>
                 <div className="flex items-end gap-2 h-32">
-                  {activityData.dailyActiveCounts?.map((day, i) => (
+                  {filteredActivity.dailyActiveCounts?.map((day, i) => (
                     <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
                       <div 
                         className="w-full bg-flame-500 rounded-t"
-                        style={{ height: `${Math.max(8, (day.count / Math.max(...activityData.dailyActiveCounts.map(d => d.count), 1)) * 100)}%` }}
+                        style={{ height: `${Math.max(8, (day.count / Math.max(...filteredActivity.dailyActiveCounts.map(d => d.count), 1)) * 100)}%` }}
                       />
                       <span className="text-xs text-iron-500">{format(new Date(day.date), 'EEE')}</span>
                     </div>
@@ -935,7 +1000,7 @@ export default function AdminPage() {
                 <div className="card-steel p-4">
                   <h3 className="font-display text-lg text-iron-100 mb-4">Top Pages</h3>
                   <div className="space-y-2">
-                    {Object.entries(activityData.pageCounts || {})
+                    {Object.entries(filteredActivity.pageCounts || {})
                       .sort(([,a], [,b]) => b - a)
                       .slice(0, 8)
                       .map(([page, count]) => (
@@ -950,7 +1015,7 @@ export default function AdminPage() {
                 <div className="card-steel p-4">
                   <h3 className="font-display text-lg text-iron-100 mb-4">Action Breakdown</h3>
                   <div className="space-y-2">
-                    {Object.entries(activityData.actionCounts || {})
+                    {Object.entries(filteredActivity.actionCounts || {})
                       .sort(([,a], [,b]) => b - a)
                       .map(([action, count]) => (
                         <div key={action} className="flex justify-between items-center py-2 border-b border-iron-800 last:border-0">
@@ -974,7 +1039,7 @@ export default function AdminPage() {
                   </button>
                 </div>
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                  {activityData.recentEvents?.map((event) => {
+                  {filteredActivity.recentEvents?.map((event) => {
                     const eventUser = users.find(u => u.uid === event.userId)
                     return (
                       <div key={event.id} className="flex items-center gap-3 py-2 border-b border-iron-800 last:border-0">

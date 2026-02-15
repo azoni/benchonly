@@ -1212,6 +1212,7 @@ export const CREDIT_COSTS = {
   'generate-workout': 5,
   'generate-group-workout': 5, // per athlete
   'generate-program': 10,
+  'form-check': 15,
   'trainer-custom-workout': 100,
   'trainer-review': 50,
 };
