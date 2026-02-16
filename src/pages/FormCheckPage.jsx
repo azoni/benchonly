@@ -1044,7 +1044,7 @@ export default function FormCheckPage() {
           {/* Frame-by-Frame */}
           {frames.length > 0 && analysis.frames?.length > 0 && (
             <motion.div className="card-steel overflow-hidden" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-              <h3 className="text-xs font-semibold text-iron-400 uppercase tracking-wider px-4 pt-4 pb-2">Frame-by-Frame</h3>
+              <h3 className="text-xs font-semibold text-iron-400 uppercase tracking-wider px-4 pt-4 pb-2">Movement Timeline</h3>
 
               <div className="relative bg-black"
                 onTouchStart={(e) => { e.currentTarget.dataset.touchX = e.touches[0].clientX }}
@@ -1074,39 +1074,105 @@ export default function FormCheckPage() {
 
                 <div className="absolute top-3 left-3 flex items-center gap-2">
                   <span className="text-xs text-white bg-black/60 backdrop-blur-sm px-2 py-1 rounded-lg font-medium">{activeFrame + 1}/{frames.length}</span>
-                  {cfa && (cfa.formScore > 0
-                    ? <span className={`text-xs font-bold px-2 py-1 rounded-lg backdrop-blur-sm ${scoreBg(cfa.formScore)} ${scoreColor(cfa.formScore)}`}>{cfa.formScore}/10</span>
-                    : <span className="text-xs font-medium px-2 py-1 rounded-lg backdrop-blur-sm bg-iron-700/80 text-iron-400">Not scored</span>
-                  )}
                 </div>
-                {cfa?.phase && <div className="absolute top-3 right-3"><PhasePill phase={cfa.phase} /></div>}
+                {(() => {
+                  const fa = analysis.frames?.[activeFrame]
+                  const phase = fa?.phase || (fa?.formScore !== undefined ? 'transition' : null)
+                  return phase ? <div className="absolute top-3 right-3"><PhasePill phase={phase} /></div> : null
+                })()}
               </div>
 
-              {cfa && (
-                <div className="p-4 border-t border-iron-800/50">
-                  <p className="text-sm text-iron-200 leading-relaxed">{cfa.assessment}</p>
-                  {cfa.cues?.length > 0 && (
-                    <div className="mt-2.5 space-y-1.5">
-                      {cfa.cues.map((cue, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <ArrowRight className="w-3 h-3 text-flame-400 mt-1 flex-shrink-0" />
-                          <p className="text-xs text-iron-400 leading-relaxed">{cue}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Key moment card for current frame */}
+              {(() => {
+                const frameNum = activeFrame + 1
+                const km = analysis.keyMoments?.find(m => m.frames?.includes(frameNum))
+                // Backward compat: old format has per-frame assessment
+                const oldFrame = analysis.frames?.[activeFrame]
+                const hasOldFormat = oldFrame?.assessment || oldFrame?.formScore > 0
 
+                if (km) {
+                  const typeColors = {
+                    strength: 'border-green-500/30 bg-green-500/5',
+                    issue: 'border-red-500/30 bg-red-500/5',
+                    neutral: 'border-iron-600/30 bg-iron-800/30',
+                  }
+                  const typeIcons = { strength: '✓', issue: '!', neutral: '—' }
+                  const typeTextColors = { strength: 'text-green-400', issue: 'text-red-400', neutral: 'text-iron-400' }
+
+                  return (
+                    <div className={`p-4 border-t ${typeColors[km.type] || typeColors.neutral}`}>
+                      <div className="flex items-start gap-2 mb-1.5">
+                        <span className={`text-xs font-bold ${typeTextColors[km.type] || typeTextColors.neutral}`}>{typeIcons[km.type] || '—'}</span>
+                        <p className="text-sm font-semibold text-iron-200">{km.title}</p>
+                      </div>
+                      <p className="text-sm text-iron-300 leading-relaxed ml-5">{km.assessment}</p>
+                      {km.cue && (
+                        <div className="flex items-start gap-2 mt-2.5 ml-5">
+                          <ArrowRight className="w-3 h-3 text-flame-400 mt-1 flex-shrink-0" />
+                          <p className="text-xs text-iron-400 leading-relaxed">{km.cue}</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                } else if (hasOldFormat) {
+                  // Backward compat for old per-frame format
+                  return (
+                    <div className="p-4 border-t border-iron-800/50">
+                      <p className="text-sm text-iron-200 leading-relaxed">{oldFrame.assessment}</p>
+                      {oldFrame.cues?.length > 0 && (
+                        <div className="mt-2.5 space-y-1.5">
+                          {oldFrame.cues.map((cue, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <ArrowRight className="w-3 h-3 text-flame-400 mt-1 flex-shrink-0" />
+                              <p className="text-xs text-iron-400 leading-relaxed">{cue}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                } else {
+                  return (
+                    <div className="p-4 border-t border-iron-800/50">
+                      <p className="text-xs text-iron-500 italic">No key moment at this frame — use the timeline to jump to highlighted frames.</p>
+                    </div>
+                  )
+                }
+              })()}
+
+              {/* Timeline dots */}
               <div className="px-4 pb-4">
                 <div className="flex gap-1">
                   {frames.map((_, i) => {
                     const fa = analysis.frames?.[i]
-                    const sc = fa?.formScore || 0
+                    const phase = fa?.phase || 'transition'
+                    const frameNum = i + 1
+                    const isKeyMoment = analysis.keyMoments?.some(m => m.frames?.includes(frameNum))
+                    const kmType = isKeyMoment ? analysis.keyMoments.find(m => m.frames?.includes(frameNum))?.type : null
+
+                    // Phase colors for dots
+                    const phaseColors = {
+                      setup: 'bg-blue-500', descent: 'bg-purple-500', bottom: 'bg-red-500',
+                      ascent: 'bg-amber-500', lockout: 'bg-green-500', transition: 'bg-iron-600', rest: 'bg-iron-600',
+                    }
+                    const phaseFaint = {
+                      setup: 'bg-blue-500/30', descent: 'bg-purple-500/30', bottom: 'bg-red-500/30',
+                      ascent: 'bg-amber-500/30', lockout: 'bg-green-500/30', transition: 'bg-iron-700/30', rest: 'bg-iron-700/30',
+                    }
+
+                    // Old format compat: use score colors if formScore exists
+                    const hasScore = fa?.formScore > 0
+                    const dotColor = i === activeFrame
+                      ? (hasScore ? scoreBgSolid(fa.formScore) : (phaseColors[phase] || 'bg-iron-600'))
+                      : (hasScore ? scoreBgFaint(fa.formScore) : (phaseFaint[phase] || 'bg-iron-700/30'))
+
+                    // Key moment frames get a ring
+                    const ring = isKeyMoment && i !== activeFrame ? 'ring-1 ring-white/40' : ''
+
                     return (
                       <button key={i} onClick={() => setActiveFrame(i)} aria-label={`Frame ${i + 1}`}
-                        className={`flex-1 rounded-full transition-all ${i === activeFrame ? `h-3 ${sc > 0 ? scoreBgSolid(sc) : 'bg-iron-500'} shadow-sm` : `h-2 ${sc > 0 ? scoreBgFaint(sc) : 'bg-iron-700/50'} hover:h-2.5`}`}
-                        title={`Frame ${i + 1}: ${fa?.phase || ''} ${sc > 0 ? `(${sc}/10)` : '(not scored)'}`} />
+                        className={`flex-1 rounded-full transition-all ${ring} ${i === activeFrame ? `h-3 ${dotColor} shadow-sm` : `h-2 ${dotColor} hover:h-2.5`}`}
+                        title={`Frame ${i + 1}: ${phase}${isKeyMoment ? ` — ${kmType}` : ''}`} />
                     )
                   })}
                 </div>
