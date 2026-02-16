@@ -23,7 +23,7 @@ import {
   Copy,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { feedService } from '../services/feedService'
+import { feedService, notificationService } from '../services/feedService'
 import { friendService } from '../services/friendService'
 import { groupService, workoutService } from '../services/firestore'
 import { collection, getDocs, query } from 'firebase/firestore'
@@ -77,12 +77,12 @@ export default function FeedPage() {
         notes: '',
       }))
       const userName = users[item.userId]?.displayName || 'someone'
-      const result = await workoutService.create({
+      const result = await workoutService.create(user.uid, {
         name: `${item.data?.name || 'Workout'} (from ${userName})`,
         exercises,
         date: new Date(),
         workoutType: 'strength',
-      }, user.uid)
+      })
       navigate(`/workouts/${result.id}`)
     } catch (err) {
       console.error('Copy failed:', err)
@@ -115,6 +115,11 @@ export default function FeedPage() {
   const loadInitialData = async () => {
     setLoading(true)
     try {
+      // Mark all notifications as read when user visits feed
+      if (user && !isGuest) {
+        notificationService.markAllAsRead(user.uid).catch(() => {})
+      }
+
       // Load users, friends, and groups in parallel
       const [usersSnap, friends, groups] = await Promise.all([
         getDocs(collection(db, 'users')),

@@ -354,6 +354,9 @@ export default function WorkoutDetailPage() {
   }
 
   const isScheduled = workout.status === 'scheduled'
+  const hasPartialData = isScheduled && (workout.userNotes || workout.exercises?.some(ex => 
+    ex.userNotes || ex.sets?.some(s => s.actualWeight || s.actualReps || s.actualTime || s.rpe)
+  ))
   const isCardio = workout.workoutType === 'cardio'
   const backLabel = location.state?.fromLabel || 'Back'
 
@@ -756,7 +759,7 @@ export default function WorkoutDetailPage() {
               {isScheduled ? (
                 <>
                   <Play className="w-6 h-6" />
-                  Start Workout
+                  {hasPartialData ? 'Continue Workout' : 'Start Workout'}
                 </>
               ) : (
                 <>
@@ -822,34 +825,6 @@ export default function WorkoutDetailPage() {
                 <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
               )}
             </div>
-            
-            {/* Fill All button */}
-            <button
-              onClick={() => {
-                setExercises(prev => {
-                  const newExercises = [...prev]
-                  const ex = { ...newExercises[exerciseIndex] }
-                  const exType = getExerciseType(ex)
-                  ex.sets = ex.sets.map(s => {
-                    const filled = { ...s }
-                    if (exType === 'time') {
-                      if (!filled.actualTime) filled.actualTime = s.prescribedTime || ''
-                    } else if (exType === 'bodyweight') {
-                      if (!filled.actualReps) filled.actualReps = s.prescribedReps || ''
-                    } else {
-                      if (!filled.actualWeight) filled.actualWeight = s.prescribedWeight || ''
-                      if (!filled.actualReps) filled.actualReps = s.prescribedReps || ''
-                    }
-                    return filled
-                  })
-                  newExercises[exerciseIndex] = ex
-                  return newExercises
-                })
-              }}
-              className="w-full mb-3 py-2 text-xs text-iron-500 hover:text-flame-400 bg-iron-800/40 hover:bg-iron-800 rounded-lg border border-iron-700/50 border-dashed transition-colors active:scale-[0.98]"
-            >
-              Fill all sets with targets
-            </button>
             
             <div className="space-y-3">
               {exercise.sets?.map((set, setIndex) => {
@@ -965,40 +940,36 @@ export default function WorkoutDetailPage() {
                     </div>
                   )}
                   
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs text-iron-500 mb-1">RPE</label>
-                      <div className="flex gap-1 flex-wrap">
-                        {[6, 7, 8, 9, 10].map(v => (
-                          <button
-                            key={v}
-                            onClick={() => updateSet(exerciseIndex, setIndex, 'rpe', set.rpe == v ? '' : String(v))}
-                            className={`px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${
-                              set.rpe == v
-                                ? 'border-flame-500 bg-flame-500/15 text-flame-400 font-medium'
-                                : 'border-iron-700 text-iron-500 hover:border-iron-600'
-                            }`}
-                          >{v}</button>
-                        ))}
-                      </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-[10px] text-iron-500 uppercase tracking-wider">RPE</label>
+                      {[7, 8, 9, 10].map(v => (
+                        <button
+                          key={v}
+                          onClick={() => updateSet(exerciseIndex, setIndex, 'rpe', set.rpe == v ? '' : String(v))}
+                          className={`w-8 h-7 text-xs rounded-md border transition-colors ${
+                            set.rpe == v
+                              ? 'border-flame-500 bg-flame-500/15 text-flame-400 font-semibold'
+                              : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
+                          }`}
+                        >{v}</button>
+                      ))}
                     </div>
-                    <div>
-                      <label className="block text-xs text-iron-500 mb-1">Pain</label>
-                      <div className="flex gap-1 flex-wrap">
-                        {[0, 1, 2, 3, 4, 5].map(v => (
-                          <button
-                            key={v}
-                            onClick={() => updateSet(exerciseIndex, setIndex, 'painLevel', v)}
-                            className={`px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${
-                              (set.painLevel || 0) === v
-                                ? v === 0 ? 'border-green-500/50 bg-green-500/10 text-green-400 font-medium'
-                                  : v <= 2 ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 font-medium'
-                                  : 'border-red-500/50 bg-red-500/10 text-red-400 font-medium'
-                                : 'border-iron-700 text-iron-500 hover:border-iron-600'
-                            }`}
-                          >{v === 0 ? 'None' : v}</button>
-                        ))}
-                      </div>
+                    <div className="w-px h-5 bg-iron-700/50" />
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-[10px] text-iron-500 uppercase tracking-wider">Pain</label>
+                      {[1, 2, 3, 4, 5].map(v => (
+                        <button
+                          key={v}
+                          onClick={() => updateSet(exerciseIndex, setIndex, 'painLevel', (set.painLevel || 0) === v ? 0 : v)}
+                          className={`w-7 h-7 text-xs rounded-md border transition-colors ${
+                            (set.painLevel || 0) === v
+                              ? v <= 2 ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 font-semibold'
+                                : 'border-red-500/50 bg-red-500/10 text-red-400 font-semibold'
+                              : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
+                          }`}
+                        >{v}</button>
+                      ))}
                     </div>
                   </div>
                 </div>

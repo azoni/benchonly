@@ -26,8 +26,10 @@ import { useAuth } from '../context/AuthContext'
 import { workoutService, groupWorkoutService, scheduleService, trainerRequestService, creditService, CREDIT_COSTS } from '../services/firestore'
 import { format, isToday, isPast, isFuture, subDays, eachDayOfInterval, startOfDay } from 'date-fns'
 import { getDisplayDate, toDateString } from '../utils/dateUtils'
+import usePageTitle from '../utils/usePageTitle'
 
 export default function WorkoutsPage() {
+  usePageTitle('Workouts')
   const { user, userProfile, updateProfile, isGuest, isAppAdmin } = useAuth()
   const navigate = useNavigate()
   const [workouts, setWorkouts] = useState([])
@@ -266,7 +268,7 @@ export default function WorkoutsPage() {
       console.error('Error submitting request:', err)
       // Refund on failure
       if (!isAppAdmin) {
-        await creditService.add(user.uid, cost).catch(() => {})
+        await creditService.add(user.uid, cost)
         updateProfile({ credits })
       }
       alert('Failed to submit request. Please try again.')
@@ -296,17 +298,17 @@ export default function WorkoutsPage() {
   return (
     <div className="max-w-4xl mx-auto pb-24">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-display text-iron-50">Workouts</h1>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mb-6 gap-3">
+        <h1 className="text-2xl font-display text-iron-50 flex-shrink-0">Workouts</h1>
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             onClick={() => openTrainerRequest('custom_workout')}
-            className="btn-secondary flex items-center gap-2 relative"
+            className="btn-secondary flex items-center gap-1.5 relative text-sm"
             title="Request custom workout from a real trainer"
           >
             <ClipboardList className="w-4 h-4" />
             <span className="hidden sm:inline">Trainer</span>
-            <span className="text-[9px] px-1 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium leading-none">Beta</span>
+            <span className="text-[8px] px-1 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium leading-none hidden sm:inline">Beta</span>
           </button>
           <Link to="/workouts/generate" className="btn-secondary flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
