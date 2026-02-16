@@ -144,6 +144,24 @@ function buildContextString(context) {
     userContext.push(`RECURRING HABITS: ${r}`)
   }
 
+  // Form check history
+  if (context?.formChecks?.length) {
+    const fc = context.formChecks.map(f => {
+      let s = `${f.exercise}: ${f.score}/10 (${f.date})`
+      if (f.focusCue) s += ` — Focus: "${f.focusCue}"`
+      if (f.injuryRisks?.length) {
+        s += ` — Risks: ${f.injuryRisks.map(r => `${r.area} (${r.severity})`).join(', ')}`
+      }
+      return s
+    }).join('\n')
+    userContext.push(`FORM CHECK HISTORY:\n${fc}`)
+  }
+
+  // Admin/trainer notes
+  if (context?.adminNotes) {
+    userContext.push(`TRAINER NOTES:\n${context.adminNotes}`)
+  }
+
   return userContext.length ? `\n\nUser data:\n${userContext.join('\n\n')}` : ''
 }
 

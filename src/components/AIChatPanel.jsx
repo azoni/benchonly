@@ -6,8 +6,9 @@ import { useUIStore } from '../store';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { workoutService, goalService, healthService, userService, scheduleService, recurringActivityService, creditService, CREDIT_COSTS } from '../services/firestore';
-import { collection, query, where, limit, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, limit, getDocs, doc, getDoc, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { ouraService } from '../services/ouraService';
 
 export default function AIChatPanel() {
   const navigate = useNavigate();
@@ -243,6 +244,47 @@ export default function AIChatPanel() {
         exercises: w.exercises?.slice(0, 4).map(e => ({ name: e.name, sets: e.sets?.length || 0 })),
       }));
 
+      // ─── Load form checks, Oura, admin notes in parallel (non-blocking) ───
+      const [formCheckResult, ouraResult, notesResult] = await Promise.allSettled([
+        getDocs(query(
+          collection(db, 'formCheckJobs'),
+          where('userId', '==', user.uid),
+          where('status', '==', 'complete'),
+          orderBy('createdAt', 'desc'),
+          limit(5)
+        )).catch(() => {
+          // Fallback without orderBy (no composite index needed)
+          return getDocs(query(
+            collection(db, 'formCheckJobs'),
+            where('userId', '==', user.uid),
+            where('status', '==', 'complete'),
+            limit(5)
+          ))
+        }).then(snap => {
+          const items = [];
+          snap.forEach(d => {
+            const fc = d.data();
+            if (fc.analysis) items.push({
+              exercise: fc.analysis.exercise || 'Unknown',
+              score: fc.analysis.overallScore || 0,
+              summary: fc.analysis.overallSummary || '',
+              focusCue: fc.analysis.focusDrill?.cue || '',
+              injuryRisks: (fc.analysis.injuryRisks || []).filter(r => r.severity !== 'low').map(r => ({ area: r.area, severity: r.severity })),
+              date: fc.createdAt?.toDate?.()?.toISOString?.().split('T')[0] || '',
+            });
+          });
+          // Sort client-side (in case fallback query was used without orderBy)
+          items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+          return items;
+        }),
+        ouraService.getLatestScores(user.uid),
+        getDoc(doc(db, 'users', user.uid)).then(s => s.exists() ? s.data().adminNotes || '' : ''),
+      ]);
+
+      const formCheckSummary = formCheckResult.status === 'fulfilled' ? formCheckResult.value : [];
+      const ouraData = ouraResult.status === 'fulfilled' ? ouraResult.value : null;
+      const adminNotes = notesResult.status === 'fulfilled' ? notesResult.value : '';
+
       const builtContext = {
         profile,
         recentWorkoutsFull,
@@ -265,6 +307,9 @@ export default function AIChatPanel() {
         recurringActivities: recurring.filter(r => r.active).map(r => ({
           name: r.name, type: r.type, days: r.days,
         })),
+        ouraData,
+        formChecks: formCheckSummary,
+        adminNotes,
       };
 
       setContext(builtContext);

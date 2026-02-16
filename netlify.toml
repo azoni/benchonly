@@ -31,11 +31,8 @@
 [functions."ask-assistant"]
   timeout = 26
 
-[functions."analyze-form"]
-  timeout = 26
-
-[functions."analyze-form-background"]
-  timeout = 900
+# analyze-form-background runs as a Netlify Background Function (up to 15 min)
+# Named with -background suffix — no timeout config needed
 
 # Headers for security and caching
 [[headers]]

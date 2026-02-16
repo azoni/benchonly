@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { creditService } from '../services/firestore'
-import { doc, onSnapshot, collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore'
+import { collection, query, where, orderBy, limit, getDocs, doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import usePageTitle from '../utils/usePageTitle'
 import { apiUrl } from '../utils/platform'
@@ -198,6 +198,7 @@ export default function FormCheckPage() {
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
   const videoPreviewRef = useRef(null)
+  const listenerRef = useRef(null)
 
   const [step, setStep] = useState('upload')
   const [videoFile, setVideoFile] = useState(null)
@@ -217,14 +218,17 @@ export default function FormCheckPage() {
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [loadingHistoryId, setLoadingHistoryId] = useState(null)
 
   useEffect(() => { return () => { if (videoUrl) URL.revokeObjectURL(videoUrl) } }, [videoUrl])
+  useEffect(() => { return () => { if (listenerRef.current) listenerRef.current() } }, [])
 
   // Load past form checks
-  useEffect(() => {
+  const loadHistory = useCallback(() => {
     if (!user || user.uid === 'guest') return
     setHistoryLoading(true)
+
+    // Try the optimized query first (requires composite index)
+    // Falls back to simpler query if index doesn't exist
     const q = query(
       collection(db, 'formCheckJobs'),
       where('userId', '==', user.uid),
@@ -236,7 +240,7 @@ export default function FormCheckPage() {
       const items = []
       snap.forEach(doc => {
         const data = doc.data()
-        if (data.analysis) {
+        if (data.analysis && data.analysis.overallScore > 0) {
           items.push({
             id: doc.id,
             exercise: data.analysis.exercise || 'Unknown',
@@ -250,9 +254,40 @@ export default function FormCheckPage() {
       })
       setHistory(items)
     }).catch(err => {
-      console.error('Failed to load form check history:', err)
+      console.warn('Form check history needs composite index, trying fallback:', err.message)
+      // Fallback: simpler query without orderBy (no index needed)
+      const fallbackQ = query(
+        collection(db, 'formCheckJobs'),
+        where('userId', '==', user.uid),
+        where('status', '==', 'complete'),
+        limit(20)
+      )
+      getDocs(fallbackQ).then(snap => {
+        const items = []
+        snap.forEach(doc => {
+          const data = doc.data()
+          if (data.analysis && data.analysis.overallScore > 0) {
+            items.push({
+              id: doc.id,
+              exercise: data.analysis.exercise || 'Unknown',
+              score: data.analysis.overallScore || 0,
+              quality: data.quality || 'standard',
+              frameCount: data.frameCount || 0,
+              createdAt: data.createdAt?.toDate?.() || new Date(),
+              analysis: data.analysis,
+            })
+          }
+        })
+        // Sort client-side since we couldn't orderBy
+        items.sort((a, b) => b.createdAt - a.createdAt)
+        setHistory(items)
+      }).catch(err2 => {
+        console.error('Failed to load form check history:', err2)
+      })
     }).finally(() => setHistoryLoading(false))
   }, [user])
+
+  useEffect(() => { loadHistory() }, [loadHistory])
 
   // Keyboard nav for frames
   useEffect(() => {
@@ -311,8 +346,23 @@ export default function FormCheckPage() {
     const ctx = canvas.getContext('2d')
 
     const seekTo = (time) => new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Frame seek timed out')), 5000)
-      video.onseeked = () => { clearTimeout(timeout); resolve() }
+      const timeout = setTimeout(() => reject(new Error('Frame seek timed out')), 8000)
+      video.onseeked = () => {
+        clearTimeout(timeout)
+        // requestVideoFrameCallback is the reliable way to know a frame is decoded
+        if ('requestVideoFrameCallback' in video) {
+          video.requestVideoFrameCallback(() => resolve())
+        } else {
+          // Fallback: triple rAF + small delay for decode pipeline
+          requestAnimationFrame(() => 
+            requestAnimationFrame(() => 
+              requestAnimationFrame(() => 
+                setTimeout(resolve, 30)
+              )
+            )
+          )
+        }
+      }
       video.onerror = () => { clearTimeout(timeout); reject(new Error('Video error during seek')) }
       video.currentTime = time
     })
@@ -427,10 +477,46 @@ export default function FormCheckPage() {
       const extractedFrames = []
       for (let i = 0; i < totalFrames; i++) {
         const time = startTime + (i * interval)
-        await seekTo(time)
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
-        const base64 = dataUrl.split(',')[1]
+        let retries = 3
+        let dataUrl, base64
+
+        while (retries > 0) {
+          await seekTo(time + (retries < 3 ? 0.05 : 0))
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+          // Check if frame is mostly blank (gray/black) — sample pixels
+          const sampleData = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+          let variance = 0
+          const step = Math.max(4, Math.floor(sampleData.length / 400)) * 4
+          let sum = 0, count = 0
+          for (let p = 0; p < sampleData.length; p += step) {
+            sum += sampleData[p] + sampleData[p + 1] + sampleData[p + 2]
+            count++
+          }
+          const avg = sum / (count * 3)
+          for (let p = 0; p < sampleData.length; p += step) {
+            const v = (sampleData[p] + sampleData[p + 1] + sampleData[p + 2]) / 3 - avg
+            variance += v * v
+          }
+          variance /= count
+
+          // If variance is very low, frame is likely blank/gray — retry with decode wait
+          if (variance < 100 && retries > 1) {
+            retries--
+            await new Promise(r => setTimeout(r, 200))
+            continue
+          }
+
+          dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
+          base64 = dataUrl.split(',')[1]
+          break
+        }
+
+        if (!dataUrl) {
+          dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
+          base64 = dataUrl.split(',')[1]
+        }
+
         extractedFrames.push({ dataUrl, base64, timestamp: time, index: i + 1 })
         setExtractProgress(30 + Math.round(((i + 1) / totalFrames) * 70))
       }
@@ -455,6 +541,7 @@ export default function FormCheckPage() {
     const cost = isPremium ? FORM_CHECK_PREMIUM_COST : FRAME_PRESETS[quality].credits
 
     try {
+      // Client-side credit check (server will enforce too)
       if (!isAdmin) {
         const balance = await creditService.getBalance(user.uid)
         if (balance < cost) {
@@ -463,12 +550,28 @@ export default function FormCheckPage() {
         }
       }
 
+      // Generate unique job ID
+      const jobId = `fc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
       const token = await user.getIdToken()
 
-      const response = await fetch(apiUrl('analyze-form'), {
+      // Clean up any previous listener
+      if (listenerRef.current) { listenerRef.current(); listenerRef.current = null }
+
+      // Create initial job doc FIRST so onSnapshot has something to read
+      // (Firestore rules need resource.data.userId to exist for read access)
+      const jobRef = doc(db, 'formCheckJobs', jobId)
+      await setDoc(jobRef, {
+        userId: user.uid,
+        status: 'pending',
+        createdAt: new Date(),
+      })
+
+      // Fire background function — Netlify returns 202 immediately
+      const response = await fetch(apiUrl('analyze-form-background'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
+          jobId,
           frames: frames.map(f => f.base64),
           note: note.trim() || undefined,
           model: isPremium ? 'premium' : 'standard',
@@ -476,30 +579,31 @@ export default function FormCheckPage() {
         }),
       })
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.error || 'Failed to start analysis')
+      // Background returns 202, but catch hard failures (network, etc.)
+      if (!response.ok && response.status !== 202) {
+        throw new Error('Failed to start analysis. Please try again.')
       }
 
-      const { jobId } = await response.json()
-      if (!jobId) throw new Error('No job ID returned')
-
-      // Listen for result on Firestore
+      // Listen for result updates on Firestore
       let resolved = false
-      const jobRef = doc(db, 'formCheckJobs', jobId)
       const unsubscribe = onSnapshot(jobRef, (snap) => {
+        if (resolved) return
         const data = snap.data()
-        if (!data || resolved) return
+        if (!data) return
 
         if (data.status === 'complete') {
           resolved = true
           unsubscribe()
+          listenerRef.current = null
           setAnalysis(data.analysis)
           setActiveFrame(0)
           setStep('results')
+          // Refresh history
+          if (data.analysis?.overallScore > 0) loadHistory()
         } else if (data.status === 'error') {
           resolved = true
           unsubscribe()
+          listenerRef.current = null
           setError(data.error || 'Analysis failed. Please try again.')
           setStep('preview')
         }
@@ -509,18 +613,27 @@ export default function FormCheckPage() {
         resolved = true
         console.error('Firestore listener error:', err)
         unsubscribe()
+        listenerRef.current = null
         setError('Lost connection to analysis. Please try again.')
         setStep('preview')
       })
 
-      // Safety timeout — if no result after 2 minutes, stop waiting
+      listenerRef.current = unsubscribe
+
+      // Safety timeout — 3 minutes (background function has 15 min but OpenAI shouldn't take that long)
       setTimeout(() => {
         if (resolved) return
         resolved = true
         unsubscribe()
-        setError('Analysis is taking longer than expected. Please try again or use fewer frames.')
-        setStep('preview')
-      }, 120000)
+        listenerRef.current = null
+        setStep(prev => {
+          if (prev === 'analyzing') {
+            setError('Analysis is taking longer than expected. Please try again or use fewer frames.')
+            return 'preview'
+          }
+          return prev
+        })
+      }, 180000)
 
     } catch (err) {
       console.error('Form analysis error:', err)
@@ -530,6 +643,7 @@ export default function FormCheckPage() {
   }, [user, frames, note, model, quality, isAdmin])
 
   const reset = () => {
+    if (listenerRef.current) { listenerRef.current(); listenerRef.current = null }
     setStep('upload'); setVideoFile(null)
     setVideoUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null })
     setFrames([]); setNote(''); setModel('standard'); setQuality('standard')
@@ -539,41 +653,13 @@ export default function FormCheckPage() {
   const cfa = analysis?.frames?.[activeFrame]
   const mq = analysis?.movementQuality
 
-  // Load a past form check from history
-  const loadHistoryItem = useCallback(async (item) => {
-    setLoadingHistoryId(item.id)
-    try {
-      // Load frames from Firestore chunks
-      const frameSnaps = await getDocs(
-        query(collection(db, 'formCheckFrames'), where('jobId', '==', item.id))
-      )
-      const chunks = []
-      frameSnaps.forEach(snap => chunks.push(snap.data()))
-      chunks.sort((a, b) => a.chunkIndex - b.chunkIndex)
-
-      const loadedFrames = []
-      chunks.forEach(c => {
-        c.frames.forEach((base64, i) => {
-          loadedFrames.push({
-            dataUrl: base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`,
-            base64,
-            timestamp: 0,
-            index: loadedFrames.length + 1,
-          })
-        })
-      })
-
-      setFrames(loadedFrames)
-      setAnalysis(item.analysis)
-      setActiveFrame(0)
-      setShowAllRecs(false)
-      setStep('results')
-    } catch (err) {
-      console.error('Failed to load form check history:', err)
-      setError('Could not load past form check.')
-    } finally {
-      setLoadingHistoryId(null)
-    }
+  // Load a past form check — analysis only (no stored frames)
+  const loadHistoryItem = useCallback((item) => {
+    setFrames([])
+    setAnalysis(item.analysis)
+    setActiveFrame(0)
+    setShowAllRecs(false)
+    setStep('results')
   }, [])
 
   // ━━━ RENDER ━━━
@@ -744,7 +830,6 @@ export default function FormCheckPage() {
                     <button
                       key={item.id}
                       onClick={() => loadHistoryItem(item)}
-                      disabled={loadingHistoryId === item.id}
                       className="w-full p-3 flex items-center gap-3 hover:bg-iron-800/30 transition-colors text-left"
                     >
                       <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${scoreBg(item.score)}`}>
@@ -756,11 +841,7 @@ export default function FormCheckPage() {
                           {item.createdAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · {item.frameCount} frames · {item.quality}
                         </p>
                       </div>
-                      {loadingHistoryId === item.id ? (
-                        <Loader2 className="w-4 h-4 text-iron-500 animate-spin flex-shrink-0" />
-                      ) : (
-                        <ArrowRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
-                      )}
+                      <ArrowRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
                     </button>
                   ))}
                 </div>

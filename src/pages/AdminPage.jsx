@@ -27,11 +27,14 @@ import { db } from '../services/firebase'
 import { workoutService, goalService, creditService, trainerService, tokenUsageService } from '../services/firestore'
 import { analyticsService } from '../services/analyticsService'
 import { format, formatDistanceToNow } from 'date-fns'
+import usePageTitle from '../utils/usePageTitle'
+import AdminUserSummary from '../components/AdminUserSummary'
 
 const ADMIN_EMAILS = ['charltonuw@gmail.com']
 
 export default function AdminPage() {
   const navigate = useNavigate()
+  usePageTitle('Admin')
   const { user, userProfile, isRealAdmin, startImpersonating: startContextImpersonation, impersonating: contextImpersonating } = useAuth()
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
@@ -923,6 +926,9 @@ export default function AdminPage() {
                   )}
                 </div>
               </div>
+
+              {/* AI Summary */}
+              <AdminUserSummary userId={selectedUser.uid} userName={selectedUser.displayName} />
             </>
           ) : (
             <div className="card-steel p-12 rounded-xl text-center">

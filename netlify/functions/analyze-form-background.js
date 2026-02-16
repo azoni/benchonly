@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
-import { admin } from './utils/auth.js';
+import { verifyAuth, admin } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
-import { refundCredits } from './utils/credits.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 120000 });
@@ -62,61 +62,71 @@ SCORING: 1-3 dangerous/injury risk, 4-5 significant technique issues, 6-7 decent
 IMPORTANT: Write assessments as if talking directly to the lifter. Use "you/your" not "the lifter". Be concise but specific — reference what you actually see in the frames, not generic advice.`;
 
 /**
- * Background function — runs up to 15 min.
- * Called by analyze-form.js dispatcher with just a jobId.
- * Reads frames from Firestore, calls OpenAI, writes results back.
+ * Background function — Netlify returns 202 immediately, this runs for up to 15 min.
+ * Results are written to Firestore formCheckJobs/{jobId} for the client to listen on.
  */
 export async function handler(event) {
-  if (event.httpMethod !== 'POST') return { statusCode: 200 };
+  if (event.httpMethod !== 'POST') return { statusCode: 405 };
 
   let jobId, userId, creditCost = 0, isAdmin = false;
 
   try {
-    const body = JSON.parse(event.body);
-
-    // Verify internal call
-    if (body._internalKey !== process.env.OPENAI_API_KEY) {
-      console.error('[form-check-bg] Invalid internal key');
+    const auth = await verifyAuth(event);
+    if (!auth) {
+      console.error('[form-check-bg] Auth failed');
       return { statusCode: 200 };
     }
 
-    jobId = body.jobId;
+    const { jobId: jid, frames, note, targetUserId, model, quality } = JSON.parse(event.body);
+    jobId = jid;
+    userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
+    isAdmin = auth.isAdmin;
+
     if (!jobId || !db) {
       console.error('[form-check-bg] Missing jobId or db');
       return { statusCode: 200 };
     }
 
-    // Read job metadata from Firestore
-    const jobSnap = await db.collection('formCheckJobs').doc(jobId).get();
-    if (!jobSnap.exists) {
-      console.error('[form-check-bg] Job not found:', jobId);
+    const jobRef = db.collection('formCheckJobs').doc(jobId);
+
+    // Write initial processing status
+    await jobRef.set({
+      userId,
+      status: 'processing',
+      quality: quality || 'standard',
+      frameCount: frames?.length || 0,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Rate limit
+    const rateCheck = await checkRateLimit(userId, 'form-check');
+    if (!rateCheck.allowed) {
+      await jobRef.update({ status: 'error', error: 'Too many requests. Please wait a moment.' });
       return { statusCode: 200 };
     }
-    const job = jobSnap.data();
-    userId = job.userId;
-    isAdmin = job.isAdmin;
-    creditCost = job.creditCost || 0;
-    const { note, model, quality } = job;
+
+    // Credits
     const isPremium = model === 'premium' && isAdmin;
     const imageDetail = isPremium ? 'high' : 'low';
+    const QUALITY_COSTS = { quick: 10, standard: 15, detailed: 25 };
+    creditCost = isPremium ? 50 : (QUALITY_COSTS[quality] || 15);
 
-    // Read frames from Firestore chunks
-    const frameSnaps = await db.collection('formCheckFrames')
-      .where('jobId', '==', jobId)
-      .get();
+    const creditResult = await deductCredits(userId, 'form-check', creditCost, isAdmin);
+    if (!creditResult.success) {
+      await jobRef.update({ status: 'error', error: `Not enough credits. Need ${creditCost}, have ${creditResult.balance}.` });
+      return { statusCode: 200 };
+    }
 
-    const chunks = [];
-    frameSnaps.forEach(snap => chunks.push(snap.data()));
-    chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
-    const frames = [];
-    chunks.forEach(c => frames.push(...c.frames));
+    // Validate frames
+    if (!frames || !Array.isArray(frames) || frames.length === 0) {
+      await refundCredits(userId, creditCost, isAdmin);
+      await jobRef.update({ status: 'error', error: 'No frames provided.' });
+      return { statusCode: 200 };
+    }
 
-    if (frames.length === 0) {
-      await db.collection('formCheckJobs').doc(jobId).update({
-        status: 'error',
-        error: 'No frames found. Please try again.',
-      });
-      if (creditCost > 0 && userId) await refundCredits(userId, creditCost, isAdmin).catch(() => {});
+    if (frames.length > 25) {
+      await refundCredits(userId, creditCost, isAdmin);
+      await jobRef.update({ status: 'error', error: 'Too many frames (max 25).' });
       return { statusCode: 200 };
     }
 
@@ -138,9 +148,9 @@ export async function handler(event) {
       });
     });
 
-    logActivity({ type: 'form-check', title: 'Form Check', description: `Analyzing ${frames.length} frames (${quality || 'standard'})`, model: isPremium ? 'premium' : 'standard', metadata: { userId, frameCount: frames.length, quality: quality || 'standard', hasNote: !!note } });
+    logActivity({ type: 'form-check', title: 'Form Check (Background)', description: `Analyzing ${frames.length} frames (${quality || 'standard'})`, model: isPremium ? 'premium' : 'standard', metadata: { userId, frameCount: frames.length, quality: quality || 'standard', hasNote: !!note } });
 
-    // Call OpenAI
+    // Call OpenAI — 120s timeout, no pressure in background function
     const startMs = Date.now();
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -158,6 +168,7 @@ export async function handler(event) {
     const cost = (usage.prompt_tokens / 1e6) * 2.50 + (usage.completion_tokens / 1e6) * 10.00;
     const raw = response.choices[0]?.message?.content || '';
 
+    // Parse
     let analysis;
     try {
       const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
@@ -186,8 +197,7 @@ export async function handler(event) {
       console.error('[form-check-bg] Failed to log usage:', e);
     }
 
-    // Write result
-    const jobRef = db.collection('formCheckJobs').doc(jobId);
+    // Write result to Firestore
     if (!analysis) {
       await jobRef.update({
         status: 'complete',
@@ -207,16 +217,18 @@ export async function handler(event) {
       });
     }
 
-    // Frame chunks preserved in formCheckFrames for user history
+    console.log(`[form-check-bg] Complete: ${analysis?.exercise || 'Unknown'} ${analysis?.overallScore || 0}/10 (${responseTime}ms, ${frames.length} frames)`);
 
   } catch (error) {
     console.error('[form-check-bg] Error:', error);
     logError('analyze-form-background', error, 'high', { userId });
 
+    // Refund on failure
     if (creditCost > 0 && userId) {
       await refundCredits(userId, creditCost, isAdmin).catch(() => {});
     }
 
+    // Write error to Firestore so client knows
     if (jobId && db) {
       try {
         await db.collection('formCheckJobs').doc(jobId).update({
@@ -225,7 +237,7 @@ export async function handler(event) {
           completedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
       } catch (e) {
-        console.error('[form-check-bg] Failed to write error:', e);
+        console.error('[form-check-bg] Failed to write error to Firestore:', e);
       }
     }
   }
