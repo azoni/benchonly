@@ -323,6 +323,17 @@ export default function WorkoutDetailPage() {
     }
   }
 
+  const handleMarkIncomplete = async () => {
+    if (!confirm('Mark this workout as incomplete? It will go back to scheduled status.')) return
+    try {
+      await workoutService.update(id, { status: 'scheduled', completedAt: null })
+      setWorkout(prev => ({ ...prev, status: 'scheduled', completedAt: null }))
+    } catch (error) {
+      console.error('Error marking incomplete:', error)
+      alert('Failed to update workout status')
+    }
+  }
+
   const getRPEColor = (rpe) => {
     if (rpe >= 9) return 'text-red-400'
     if (rpe >= 7) return 'text-yellow-400'
@@ -768,6 +779,14 @@ export default function WorkoutDetailPage() {
                 </>
               )}
             </button>
+            {!isScheduled && !isGuest && (
+              <button
+                onClick={handleMarkIncomplete}
+                className="w-full mt-2 py-2 text-xs text-iron-500 hover:text-iron-300 transition-colors"
+              >
+                Mark as incomplete
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -940,14 +959,14 @@ export default function WorkoutDetailPage() {
                     </div>
                   )}
                   
-                  <div className="flex items-center gap-3 mt-1">
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-[10px] text-iron-500 uppercase tracking-wider">RPE</label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1">
+                      <label className="text-[10px] text-iron-500 uppercase tracking-wider w-6">RPE</label>
                       {[7, 8, 9, 10].map(v => (
                         <button
                           key={v}
                           onClick={() => updateSet(exerciseIndex, setIndex, 'rpe', set.rpe == v ? '' : String(v))}
-                          className={`w-8 h-7 text-xs rounded-md border transition-colors ${
+                          className={`w-7 h-7 text-xs rounded-md border transition-colors ${
                             set.rpe == v
                               ? 'border-flame-500 bg-flame-500/15 text-flame-400 font-semibold'
                               : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
@@ -955,9 +974,9 @@ export default function WorkoutDetailPage() {
                         >{v}</button>
                       ))}
                     </div>
-                    <div className="w-px h-5 bg-iron-700/50" />
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-[10px] text-iron-500 uppercase tracking-wider">Pain</label>
+                    <div className="w-px h-5 bg-iron-700/50 flex-shrink-0" />
+                    <div className="flex items-center gap-1">
+                      <label className="text-[10px] text-iron-500 uppercase tracking-wider w-7">Pain</label>
                       {[1, 2, 3, 4, 5].map(v => (
                         <button
                           key={v}
