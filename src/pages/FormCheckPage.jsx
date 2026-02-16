@@ -349,19 +349,14 @@ export default function FormCheckPage() {
       const timeout = setTimeout(() => reject(new Error('Frame seek timed out')), 8000)
       video.onseeked = () => {
         clearTimeout(timeout)
-        // requestVideoFrameCallback is the reliable way to know a frame is decoded
-        if ('requestVideoFrameCallback' in video) {
-          video.requestVideoFrameCallback(() => resolve())
-        } else {
-          // Fallback: triple rAF + small delay for decode pipeline
+        // Triple rAF + small delay ensures the decoded frame is painted to canvas
+        requestAnimationFrame(() => 
           requestAnimationFrame(() => 
             requestAnimationFrame(() => 
-              requestAnimationFrame(() => 
-                setTimeout(resolve, 30)
-              )
+              setTimeout(resolve, 20)
             )
           )
-        }
+        )
       }
       video.onerror = () => { clearTimeout(timeout); reject(new Error('Video error during seek')) }
       video.currentTime = time
