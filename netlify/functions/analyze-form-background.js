@@ -1,10 +1,12 @@
 import OpenAI from 'openai';
-import { verifyAuth, admin } from './utils/auth.js';
+import { admin } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
-import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
+import { refundCredits } from './utils/credits.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 120000 });
+
+const INTERNAL_KEY = process.env.INTERNAL_FUNCTION_KEY || 'form-check-internal';
 
 const SYSTEM_PROMPT = `You are an elite strength and conditioning coach with 20+ years of experience, analyzing exercise form from sequential video frames.
 
@@ -62,71 +64,58 @@ SCORING: 1-3 dangerous/injury risk, 4-5 significant technique issues, 6-7 decent
 IMPORTANT: Write assessments as if talking directly to the lifter. Use "you/your" not "the lifter". Be concise but specific — reference what you actually see in the frames, not generic advice.`;
 
 /**
- * Background function — Netlify returns 202 immediately, this runs for up to 15 min.
- * Results are written to Firestore formCheckJobs/{jobId} for the client to listen on.
+ * Background function — reads frames from Firestore, calls OpenAI, writes results.
+ * Invoked server-side by analyze-form.js dispatcher with just jobId + internal key.
  */
 export async function handler(event) {
   if (event.httpMethod !== 'POST') return { statusCode: 405 };
 
-  let jobId, userId, creditCost = 0, isAdmin = false;
+  let jobId, userId, creditCost = 0;
 
   try {
-    const auth = await verifyAuth(event);
-    if (!auth) {
-      console.error('[form-check-bg] Auth failed');
-      return { statusCode: 200 };
-    }
+    const body = JSON.parse(event.body);
+    jobId = body.jobId;
 
-    const { jobId: jid, frames, note, targetUserId, model, quality } = JSON.parse(event.body);
-    jobId = jid;
-    userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
-    isAdmin = auth.isAdmin;
+    // Verify internal key — this function is called server-to-server, not by clients
+    if (body._internalKey !== INTERNAL_KEY) {
+      console.error('[form-check-bg] Invalid internal key');
+      return { statusCode: 403 };
+    }
 
     if (!jobId || !db) {
       console.error('[form-check-bg] Missing jobId or db');
-      return { statusCode: 200 };
+      return { statusCode: 400 };
     }
 
+    // Read job doc
     const jobRef = db.collection('formCheckJobs').doc(jobId);
-
-    // Write initial processing status
-    await jobRef.set({
-      userId,
-      status: 'processing',
-      quality: quality || 'standard',
-      frameCount: frames?.length || 0,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    // Rate limit
-    const rateCheck = await checkRateLimit(userId, 'form-check');
-    if (!rateCheck.allowed) {
-      await jobRef.update({ status: 'error', error: 'Too many requests. Please wait a moment.' });
-      return { statusCode: 200 };
+    const jobSnap = await jobRef.get();
+    if (!jobSnap.exists) {
+      console.error('[form-check-bg] Job not found:', jobId);
+      return { statusCode: 404 };
     }
 
-    // Credits
-    const isPremium = model === 'premium' && isAdmin;
-    const imageDetail = isPremium ? 'high' : 'low';
-    const QUALITY_COSTS = { quick: 10, standard: 15, detailed: 25 };
-    creditCost = isPremium ? 50 : (QUALITY_COSTS[quality] || 15);
+    const job = jobSnap.data();
+    userId = job.userId;
+    creditCost = job.creditCost || 0;
+    const chunkCount = job.chunkCount || 0;
+    const imageDetail = job.imageDetail || 'low';
+    const quality = job.quality || 'standard';
+    const note = job.note || '';
+    const isPremium = job.model === 'premium';
 
-    const creditResult = await deductCredits(userId, 'form-check', creditCost, isAdmin);
-    if (!creditResult.success) {
-      await jobRef.update({ status: 'error', error: `Not enough credits. Need ${creditCost}, have ${creditResult.balance}.` });
-      return { statusCode: 200 };
+    // Read frame chunks from Firestore
+    const frames = [];
+    for (let i = 0; i < chunkCount; i++) {
+      const chunkSnap = await db.collection('formCheckFrames').doc(`${jobId}_chunk${i}`).get();
+      if (chunkSnap.exists) {
+        frames.push(...chunkSnap.data().frames);
+      }
     }
 
-    // Validate frames
-    if (!frames || !Array.isArray(frames) || frames.length === 0) {
-      await refundCredits(userId, creditCost, isAdmin);
-      await jobRef.update({ status: 'error', error: 'No frames provided.' });
-      return { statusCode: 200 };
-    }
-
-    if (frames.length > 25) {
-      await refundCredits(userId, creditCost, isAdmin);
-      await jobRef.update({ status: 'error', error: 'Too many frames (max 25).' });
+    if (frames.length === 0) {
+      await jobRef.update({ status: 'error', error: 'No frames found. Please try again.' });
+      if (creditCost > 0) await refundCredits(userId, creditCost, false).catch(() => {});
       return { statusCode: 200 };
     }
 
@@ -148,9 +137,9 @@ export async function handler(event) {
       });
     });
 
-    logActivity({ type: 'form-check', title: 'Form Check (Background)', description: `Analyzing ${frames.length} frames (${quality || 'standard'})`, model: isPremium ? 'premium' : 'standard', metadata: { userId, frameCount: frames.length, quality: quality || 'standard', hasNote: !!note } });
+    logActivity({ type: 'form-check', title: 'Form Check Processing', description: `${frames.length} frames (${quality})`, model: isPremium ? 'premium' : 'standard', metadata: { userId, jobId, frameCount: frames.length, quality } });
 
-    // Call OpenAI — 120s timeout, no pressure in background function
+    // Call OpenAI — 120s timeout, plenty of headroom in background
     const startMs = Date.now();
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -189,7 +178,7 @@ export async function handler(event) {
         totalTokens: usage.total_tokens,
         estimatedCost: cost,
         responseTimeMs: responseTime,
-        userMessage: `Form check (${quality || 'standard'}): ${frames.length} frames${note ? ` — ${note}` : ''}`,
+        userMessage: `Form check (${quality}): ${frames.length} frames${note ? ` — ${note}` : ''}`,
         assistantResponse: `${analysis?.exercise || 'Unknown'}: score ${analysis?.overallScore || 0}/10`,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -197,7 +186,7 @@ export async function handler(event) {
       console.error('[form-check-bg] Failed to log usage:', e);
     }
 
-    // Write result to Firestore
+    // Write result to Firestore — this triggers client's onSnapshot listener
     if (!analysis) {
       await jobRef.update({
         status: 'complete',
@@ -212,20 +201,24 @@ export async function handler(event) {
       await jobRef.update({
         status: 'complete',
         analysis,
-        tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+    }
+
+    // Clean up frame chunks
+    for (let i = 0; i < chunkCount; i++) {
+      db.collection('formCheckFrames').doc(`${jobId}_chunk${i}`).delete().catch(() => {});
     }
 
     console.log(`[form-check-bg] Complete: ${analysis?.exercise || 'Unknown'} ${analysis?.overallScore || 0}/10 (${responseTime}ms, ${frames.length} frames)`);
 
   } catch (error) {
     console.error('[form-check-bg] Error:', error);
-    logError('analyze-form-background', error, 'high', { userId });
+    logError('analyze-form-background', error, 'high', { userId, jobId });
 
     // Refund on failure
     if (creditCost > 0 && userId) {
-      await refundCredits(userId, creditCost, isAdmin).catch(() => {});
+      await refundCredits(userId, creditCost, false).catch(() => {});
     }
 
     // Write error to Firestore so client knows
@@ -237,7 +230,7 @@ export async function handler(event) {
           completedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
       } catch (e) {
-        console.error('[form-check-bg] Failed to write error to Firestore:', e);
+        console.error('[form-check-bg] Failed to write error:', e);
       }
     }
   }

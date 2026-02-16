@@ -561,8 +561,8 @@ export default function FormCheckPage() {
         createdAt: new Date(),
       })
 
-      // Fire background function — Netlify returns 202 immediately
-      const response = await fetch(apiUrl('analyze-form-background'), {
+      // Fire dispatcher — handles auth/credits/stores frames, invokes background
+      const response = await fetch(apiUrl('analyze-form'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -574,9 +574,10 @@ export default function FormCheckPage() {
         }),
       })
 
-      // Background returns 202, but catch hard failures (network, etc.)
-      if (!response.ok && response.status !== 202) {
-        throw new Error('Failed to start analysis. Please try again.')
+      // Dispatcher returns 200 with { jobId }, result comes via Firestore
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to start analysis. Please try again.')
       }
 
       // Listen for result updates on Firestore
