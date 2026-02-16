@@ -139,10 +139,12 @@ export async function handler(event, context) {
 
     logActivity({ type: 'form-check', title: 'Form Check Processing', description: `${frames.length} frames (${quality})`, model: isPremium ? 'premium' : 'standard', metadata: { userId, jobId, frameCount: frames.length, quality } });
 
-    console.log('[form-check-bg] Calling OpenAI...');
+    const aiModel = isPremium ? 'gpt-4o' : 'gpt-4o-mini';
+
+    console.log('[form-check-bg] Calling OpenAI...', aiModel);
     const startMs = Date.now();
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: aiModel,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
@@ -155,7 +157,9 @@ export async function handler(event, context) {
     console.log('[form-check-bg] OpenAI responded in', responseTime, 'ms');
 
     const usage = response.usage;
-    const cost = (usage.prompt_tokens / 1e6) * 2.50 + (usage.completion_tokens / 1e6) * 10.00;
+    const inputRate = isPremium ? 2.50 : 0.15;
+    const outputRate = isPremium ? 10.00 : 0.60;
+    const cost = (usage.prompt_tokens / 1e6) * inputRate + (usage.completion_tokens / 1e6) * outputRate;
     const raw = response.choices[0]?.message?.content || '';
 
     let analysis;
@@ -171,7 +175,7 @@ export async function handler(event, context) {
       await db.collection('tokenUsage').add({
         userId,
         feature: 'form-check',
-        model: 'gpt-4o',
+        model: aiModel,
         promptTokens: usage.prompt_tokens,
         completionTokens: usage.completion_tokens,
         totalTokens: usage.total_tokens,

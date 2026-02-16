@@ -202,9 +202,11 @@ export async function handler(event) {
 
     logActivity({ type: 'form-check', title: 'Form Check (Inline)', description: `${frames.length} frames (${quality || 'standard'})`, metadata: { userId, frameCount: frames.length, quality: quality || 'standard' } });
 
+    const aiModel = isPremium ? 'gpt-4o' : 'gpt-4o-mini';
+
     const startMs = Date.now();
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: aiModel,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
@@ -216,7 +218,9 @@ export async function handler(event) {
     const responseTime = Date.now() - startMs;
 
     const usage = response.usage;
-    const cost = (usage.prompt_tokens / 1e6) * 2.50 + (usage.completion_tokens / 1e6) * 10.00;
+    const inputRate = isPremium ? 2.50 : 0.15;
+    const outputRate = isPremium ? 10.00 : 0.60;
+    const cost = (usage.prompt_tokens / 1e6) * inputRate + (usage.completion_tokens / 1e6) * outputRate;
     const raw = response.choices[0]?.message?.content || '';
 
     let analysis;
@@ -231,7 +235,7 @@ export async function handler(event) {
     if (db) {
       try {
         await db.collection('tokenUsage').add({
-          userId, feature: 'form-check', model: 'gpt-4o',
+          userId, feature: 'form-check', model: aiModel,
           promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens, totalTokens: usage.total_tokens,
           estimatedCost: cost, responseTimeMs: responseTime,
           userMessage: `Form check (${quality || 'standard'}): ${frames.length} frames${note ? ' - ' + note : ''}`,

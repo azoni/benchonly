@@ -932,7 +932,7 @@ export default function FormCheckPage() {
           <div className="card-steel p-5 text-center">
             <Loader2 className="w-8 h-8 text-flame-400 animate-spin mx-auto mb-3" />
             <p className="text-iron-200 font-semibold mb-1">Analyzing your form...</p>
-            <p className="text-xs text-iron-500 mb-4">GPT-4o is reviewing each frame</p>
+            <p className="text-xs text-iron-500 mb-4">{model === 'premium' ? 'GPT-4o' : 'GPT-4o mini'} is reviewing each frame</p>
             <AnimatePresence mode="wait">
               <motion.p key={analyzingTip}
                 initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
