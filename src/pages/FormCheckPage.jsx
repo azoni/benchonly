@@ -1074,7 +1074,10 @@ export default function FormCheckPage() {
 
                 <div className="absolute top-3 left-3 flex items-center gap-2">
                   <span className="text-xs text-white bg-black/60 backdrop-blur-sm px-2 py-1 rounded-lg font-medium">{activeFrame + 1}/{frames.length}</span>
-                  {cfa && <span className={`text-xs font-bold px-2 py-1 rounded-lg backdrop-blur-sm ${scoreBg(cfa.formScore)} ${scoreColor(cfa.formScore)}`}>{cfa.formScore}/10</span>}
+                  {cfa && (cfa.formScore > 0
+                    ? <span className={`text-xs font-bold px-2 py-1 rounded-lg backdrop-blur-sm ${scoreBg(cfa.formScore)} ${scoreColor(cfa.formScore)}`}>{cfa.formScore}/10</span>
+                    : <span className="text-xs font-medium px-2 py-1 rounded-lg backdrop-blur-sm bg-iron-700/80 text-iron-400">Not scored</span>
+                  )}
                 </div>
                 {cfa?.phase && <div className="absolute top-3 right-3"><PhasePill phase={cfa.phase} /></div>}
               </div>
@@ -1102,8 +1105,8 @@ export default function FormCheckPage() {
                     const sc = fa?.formScore || 0
                     return (
                       <button key={i} onClick={() => setActiveFrame(i)} aria-label={`Frame ${i + 1}`}
-                        className={`flex-1 rounded-full transition-all ${i === activeFrame ? `h-3 ${scoreBgSolid(sc)} shadow-sm` : `h-2 ${sc > 0 ? scoreBgFaint(sc) : 'bg-iron-700'} hover:h-2.5`}`}
-                        title={`Frame ${i + 1}: ${fa?.phase || ''} (${sc}/10)`} />
+                        className={`flex-1 rounded-full transition-all ${i === activeFrame ? `h-3 ${sc > 0 ? scoreBgSolid(sc) : 'bg-iron-500'} shadow-sm` : `h-2 ${sc > 0 ? scoreBgFaint(sc) : 'bg-iron-700/50'} hover:h-2.5`}`}
+                        title={`Frame ${i + 1}: ${fa?.phase || ''} ${sc > 0 ? `(${sc}/10)` : '(not scored)'}`} />
                     )
                   })}
                 </div>
