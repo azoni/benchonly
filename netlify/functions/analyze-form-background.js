@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
-import { admin } from './utils/auth.js';
+import { verifyAuth, UNAUTHORIZED, getCorsHeaders, optionsResponse, admin } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
-import { refundCredits } from './utils/credits.js';
+import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 120000 });
@@ -63,11 +63,9 @@ SCORING: 1-3 dangerous/injury risk, 4-5 significant technique issues, 6-7 decent
 
 IMPORTANT: Write assessments as if talking directly to the lifter. Use "you/your" not "the lifter". Be concise but specific — reference what you actually see in the frames, not generic advice.`;
 
-/**
- * Background function — reads frames from Firestore, calls OpenAI, writes results.
- * Invoked server-side by analyze-form.js dispatcher with just jobId + internal key.
- */
-export async function handler(event) {
+export async function handler(event, context) {
+  console.log('[form-check-bg] Handler invoked');
+
   if (event.httpMethod !== 'POST') return { statusCode: 405 };
 
   let jobId, userId, creditCost = 0;
@@ -76,7 +74,8 @@ export async function handler(event) {
     const body = JSON.parse(event.body);
     jobId = body.jobId;
 
-    // Verify internal key — this function is called server-to-server, not by clients
+    console.log('[form-check-bg] Processing job:', jobId);
+
     if (body._internalKey !== INTERNAL_KEY) {
       console.error('[form-check-bg] Invalid internal key');
       return { statusCode: 403 };
@@ -87,7 +86,6 @@ export async function handler(event) {
       return { statusCode: 400 };
     }
 
-    // Read job doc
     const jobRef = db.collection('formCheckJobs').doc(jobId);
     const jobSnap = await jobRef.get();
     if (!jobSnap.exists) {
@@ -104,7 +102,8 @@ export async function handler(event) {
     const note = job.note || '';
     const isPremium = job.model === 'premium';
 
-    // Read frame chunks from Firestore
+    console.log('[form-check-bg] Job data:', { userId, chunkCount, quality, frameCount: job.frameCount });
+
     const frames = [];
     for (let i = 0; i < chunkCount; i++) {
       const chunkSnap = await db.collection('formCheckFrames').doc(`${jobId}_chunk${i}`).get();
@@ -113,13 +112,14 @@ export async function handler(event) {
       }
     }
 
+    console.log('[form-check-bg] Loaded', frames.length, 'frames from', chunkCount, 'chunks');
+
     if (frames.length === 0) {
       await jobRef.update({ status: 'error', error: 'No frames found. Please try again.' });
       if (creditCost > 0) await refundCredits(userId, creditCost, false).catch(() => {});
       return { statusCode: 200 };
     }
 
-    // Build OpenAI message
     const content = [];
     let userText = `Analyze these ${frames.length} sequential frames from a workout video.`;
     if (note) userText += `\n\nUser note: "${note}"`;
@@ -139,7 +139,7 @@ export async function handler(event) {
 
     logActivity({ type: 'form-check', title: 'Form Check Processing', description: `${frames.length} frames (${quality})`, model: isPremium ? 'premium' : 'standard', metadata: { userId, jobId, frameCount: frames.length, quality } });
 
-    // Call OpenAI — 120s timeout, plenty of headroom in background
+    console.log('[form-check-bg] Calling OpenAI...');
     const startMs = Date.now();
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -152,12 +152,12 @@ export async function handler(event) {
       temperature: 0.3,
     });
     const responseTime = Date.now() - startMs;
+    console.log('[form-check-bg] OpenAI responded in', responseTime, 'ms');
 
     const usage = response.usage;
     const cost = (usage.prompt_tokens / 1e6) * 2.50 + (usage.completion_tokens / 1e6) * 10.00;
     const raw = response.choices[0]?.message?.content || '';
 
-    // Parse
     let analysis;
     try {
       const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
@@ -167,7 +167,6 @@ export async function handler(event) {
       analysis = null;
     }
 
-    // Log usage
     try {
       await db.collection('tokenUsage').add({
         userId,
@@ -178,7 +177,7 @@ export async function handler(event) {
         totalTokens: usage.total_tokens,
         estimatedCost: cost,
         responseTimeMs: responseTime,
-        userMessage: `Form check (${quality}): ${frames.length} frames${note ? ` — ${note}` : ''}`,
+        userMessage: `Form check (${quality}): ${frames.length} frames${note ? ' - ' + note : ''}`,
         assistantResponse: `${analysis?.exercise || 'Unknown'}: score ${analysis?.overallScore || 0}/10`,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -186,7 +185,6 @@ export async function handler(event) {
       console.error('[form-check-bg] Failed to log usage:', e);
     }
 
-    // Write result to Firestore — this triggers client's onSnapshot listener
     if (!analysis) {
       await jobRef.update({
         status: 'complete',
@@ -205,23 +203,20 @@ export async function handler(event) {
       });
     }
 
-    // Clean up frame chunks
     for (let i = 0; i < chunkCount; i++) {
       db.collection('formCheckFrames').doc(`${jobId}_chunk${i}`).delete().catch(() => {});
     }
 
-    console.log(`[form-check-bg] Complete: ${analysis?.exercise || 'Unknown'} ${analysis?.overallScore || 0}/10 (${responseTime}ms, ${frames.length} frames)`);
+    console.log('[form-check-bg] Complete:', analysis?.exercise || 'Unknown', analysis?.overallScore || 0, '/10 in', responseTime, 'ms');
 
   } catch (error) {
     console.error('[form-check-bg] Error:', error);
     logError('analyze-form-background', error, 'high', { userId, jobId });
 
-    // Refund on failure
     if (creditCost > 0 && userId) {
       await refundCredits(userId, creditCost, false).catch(() => {});
     }
 
-    // Write error to Firestore so client knows
     if (jobId && db) {
       try {
         await db.collection('formCheckJobs').doc(jobId).update({

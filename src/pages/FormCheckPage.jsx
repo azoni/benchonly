@@ -561,7 +561,10 @@ export default function FormCheckPage() {
         createdAt: new Date(),
       })
 
-      // Fire dispatcher — handles auth/credits/stores frames, invokes background
+      // Set up listener + fetch in parallel
+      let resolved = false
+
+      // Call analyze-form — tries background, falls back to inline
       const response = await fetch(apiUrl('analyze-form'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -574,14 +577,27 @@ export default function FormCheckPage() {
         }),
       })
 
-      // Dispatcher returns 200 with { jobId }, result comes via Firestore
       if (!response.ok) {
         const err = await response.json().catch(() => ({}))
         throw new Error(err.error || 'Failed to start analysis. Please try again.')
       }
 
-      // Listen for result updates on Firestore
-      let resolved = false
+      const result = await response.json()
+
+      // If inline fallback returned the analysis directly, use it
+      if (result.analysis && !result.background) {
+        resolved = true
+        if (listenerRef.current) { listenerRef.current(); listenerRef.current = null }
+        setAnalysis(result.analysis)
+        setActiveFrame(0)
+        setStep('results')
+        if (result.analysis.overallScore > 0) loadHistory()
+        return
+      }
+
+      // Background path — wait for Firestore listener
+
+      // Firestore listener as backup (catches errors written by server)
       const unsubscribe = onSnapshot(jobRef, (snap) => {
         if (resolved) return
         const data = snap.data()
@@ -616,7 +632,7 @@ export default function FormCheckPage() {
 
       listenerRef.current = unsubscribe
 
-      // Safety timeout — 3 minutes (background function has 15 min but OpenAI shouldn't take that long)
+      // Safety timeout — 3 min for background processing
       setTimeout(() => {
         if (resolved) return
         resolved = true
