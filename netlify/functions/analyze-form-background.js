@@ -115,6 +115,7 @@ export async function handler(event, context) {
     const quality = job.quality || 'standard';
     const note = job.note || '';
     const isPremium = job.model === 'premium';
+    const timestamps = job.timestamps || [];
 
     console.log('[form-check-bg] Job data:', { userId, chunkCount, quality, frameCount: job.frameCount });
 
@@ -137,11 +138,14 @@ export async function handler(event, context) {
     const content = [];
     let userText = `Analyze these ${frames.length} sequential frames from a workout video.`;
     if (note) userText += `\n\nUser note: "${note}"`;
-    userText += `\n\nFrames are numbered 1-${frames.length} in chronological order, extracted evenly across the video (~1 per second).`;
+    const duration = timestamps?.length >= 2 ? timestamps[timestamps.length - 1] : null;
+    userText += `\n\nFrames are numbered 1-${frames.length} in chronological order${duration ? `, spanning ${duration}s of video` : ''}.`;
     content.push({ type: 'text', text: userText });
 
     frames.forEach((frame, i) => {
-      content.push({ type: 'text', text: `Frame ${i + 1}:` });
+      const ts = timestamps?.[i];
+      const label = ts != null ? `Frame ${i + 1} (${ts}s):` : `Frame ${i + 1}:`;
+      content.push({ type: 'text', text: label });
       content.push({
         type: 'image_url',
         image_url: {

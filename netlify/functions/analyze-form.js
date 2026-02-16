@@ -98,7 +98,7 @@ export async function handler(event) {
 
   try {
     const body = JSON.parse(event.body);
-    const { frames, note, targetUserId, model, quality } = body;
+    const { frames, timestamps, note, targetUserId, model, quality } = body;
     jobId = body.jobId;
     userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
 
@@ -151,6 +151,7 @@ export async function handler(event) {
         model: isPremium ? 'premium' : 'standard',
         imageDetail,
         creditCost,
+        timestamps: timestamps || [],
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: false });
 
@@ -200,11 +201,14 @@ export async function handler(event) {
     const content = [];
     let userText = `Analyze these ${frames.length} sequential frames from a workout video.`;
     if (note) userText += `\n\nUser note: "${note}"`;
-    userText += `\n\nFrames are numbered 1-${frames.length} in chronological order, extracted evenly across the video (~1 per second).`;
+    const duration = timestamps?.length >= 2 ? timestamps[timestamps.length - 1] : null;
+    userText += `\n\nFrames are numbered 1-${frames.length} in chronological order${duration ? `, spanning ${duration}s of video` : ''}.`;
     content.push({ type: 'text', text: userText });
 
     frames.forEach((frame, i) => {
-      content.push({ type: 'text', text: `Frame ${i + 1}:` });
+      const ts = timestamps?.[i];
+      const label = ts != null ? `Frame ${i + 1} (${ts}s):` : `Frame ${i + 1}:`;
+      content.push({ type: 'text', text: label });
       content.push({
         type: 'image_url',
         image_url: {
