@@ -347,18 +347,48 @@ export default function FormCheckPage() {
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
 
     const seekTo = (time) => new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Frame seek timed out')), 8000)
-      video.onseeked = () => {
+      const timeout = setTimeout(() => reject(new Error('Frame seek timed out')), 10000)
+      const onSeeked = () => {
         clearTimeout(timeout)
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => setTimeout(resolve, 20))
-          )
-        )
+        video.removeEventListener('seeked', onSeeked)
+        video.removeEventListener('error', onError)
+        requestAnimationFrame(() => setTimeout(resolve, 50))
       }
-      video.onerror = () => { clearTimeout(timeout); reject(new Error('Video error during seek')) }
+      const onError = () => {
+        clearTimeout(timeout)
+        video.removeEventListener('seeked', onSeeked)
+        video.removeEventListener('error', onError)
+        reject(new Error('Video error during seek'))
+      }
+      video.addEventListener('seeked', onSeeked)
+      video.addEventListener('error', onError)
       video.currentTime = time
     })
+
+    // Check if a canvas frame is actually decoded (not gray/blank)
+    const isRealFrame = () => {
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+      const step = Math.max(4, Math.floor(data.length / 500)) * 4
+      // Check 1: variance (gray frames have near-zero variance)
+      let sum = 0, count = 0
+      for (let p = 0; p < data.length; p += step) {
+        sum += data[p] + data[p + 1] + data[p + 2]
+        count++
+      }
+      const avg = sum / (count * 3)
+      let variance = 0
+      for (let p = 0; p < data.length; p += step) {
+        const v = (data[p] + data[p + 1] + data[p + 2]) / 3 - avg
+        variance += v * v
+      }
+      variance /= count
+      // Check 2: unique color count (gray frames have very few unique values)
+      const colors = new Set()
+      for (let p = 0; p < data.length; p += step) {
+        colors.add((data[p] >> 4) * 256 + (data[p + 1] >> 4) * 16 + (data[p + 2] >> 4))
+      }
+      return variance > 200 || colors.size > 20
+    }
 
     try {
       video.src = videoUrl
@@ -463,44 +493,31 @@ export default function FormCheckPage() {
       const extractedFrames = []
       for (let i = 0; i < totalFrames; i++) {
         const time = startTime + (i * interval)
-        let retries = 3
         let dataUrl, base64
+        let gotReal = false
 
-        while (retries > 0) {
-          await seekTo(time + (retries < 3 ? 0.05 : 0))
+        // Try up to 5 times with escalating decode waits
+        for (let attempt = 0; attempt < 5; attempt++) {
+          await seekTo(time + (attempt > 0 ? 0.02 * attempt : 0))
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-          const sampleData = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-          const step = Math.max(4, Math.floor(sampleData.length / 400)) * 4
-          let sum = 0, count = 0
-          for (let p = 0; p < sampleData.length; p += step) {
-            sum += sampleData[p] + sampleData[p + 1] + sampleData[p + 2]
-            count++
-          }
-          const avg = sum / (count * 3)
-          let variance = 0
-          for (let p = 0; p < sampleData.length; p += step) {
-            const v = (sampleData[p] + sampleData[p + 1] + sampleData[p + 2]) / 3 - avg
-            variance += v * v
-          }
-          variance /= count
-
-          if (variance < 100 && retries > 1) {
-            retries--
-            await new Promise(r => setTimeout(r, 200))
-            continue
+          if (isRealFrame()) {
+            gotReal = true
+            break
           }
 
-          dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
-          base64 = dataUrl.split(',')[1]
-          break
+          // Escalating wait: 100, 200, 300, 400ms
+          await new Promise(r => setTimeout(r, 100 * (attempt + 1)))
+          // Re-draw after waiting (frame may have decoded)
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+          if (isRealFrame()) {
+            gotReal = true
+            break
+          }
         }
 
-        if (!dataUrl) {
-          dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
-          base64 = dataUrl.split(',')[1]
-        }
-
+        dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
+        base64 = dataUrl.split(',')[1]
         extractedFrames.push({ dataUrl, base64, timestamp: time, index: i + 1 })
         setExtractProgress(30 + Math.round(((i + 1) / totalFrames) * 70))
       }
