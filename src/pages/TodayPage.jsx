@@ -84,6 +84,24 @@ export default function TodayPage() {
   const APP_UPDATES = [
     {
       date: 'Feb 2025',
+      title: 'Form Check Overhaul',
+      description: 'Movement quality scores, injury risk detection with severity levels, and a focus drill with a coaching cue for your next session.',
+      tag: 'AI',
+    },
+    {
+      date: 'Feb 2025',
+      title: 'Smarter Video Analysis',
+      description: 'Frame extraction now skips your setup and rest to focus on the actual lift. Drag-and-drop upload with video preview.',
+      tag: 'UX',
+    },
+    {
+      date: 'Feb 2025',
+      title: 'RPE Guides',
+      description: 'RPE explainers on the workout generator and tooltips on generated sets so you always know what the numbers mean.',
+      tag: 'UX',
+    },
+    {
+      date: 'Feb 2025',
       title: 'Human Trainer Workouts',
       description: 'Request a custom workout built by a real trainer, or send an existing workout for expert review.',
       tag: 'New',

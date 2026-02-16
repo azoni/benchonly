@@ -22,9 +22,12 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowRight,
+  Clock,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { creditService } from '../services/firestore'
+import { doc, onSnapshot, collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore'
+import { db } from '../services/firebase'
 import usePageTitle from '../utils/usePageTitle'
 import { apiUrl } from '../utils/platform'
 
@@ -211,8 +214,45 @@ export default function FormCheckPage() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
   const [analyzingTip, setAnalyzingTip] = useState(0)
   const [showAllRecs, setShowAllRecs] = useState(false)
+  const [history, setHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [loadingHistoryId, setLoadingHistoryId] = useState(null)
 
   useEffect(() => { return () => { if (videoUrl) URL.revokeObjectURL(videoUrl) } }, [videoUrl])
+
+  // Load past form checks
+  useEffect(() => {
+    if (!user || user.uid === 'guest') return
+    setHistoryLoading(true)
+    const q = query(
+      collection(db, 'formCheckJobs'),
+      where('userId', '==', user.uid),
+      where('status', '==', 'complete'),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    )
+    getDocs(q).then(snap => {
+      const items = []
+      snap.forEach(doc => {
+        const data = doc.data()
+        if (data.analysis) {
+          items.push({
+            id: doc.id,
+            exercise: data.analysis.exercise || 'Unknown',
+            score: data.analysis.overallScore || 0,
+            quality: data.quality || 'standard',
+            frameCount: data.frameCount || 0,
+            createdAt: data.createdAt?.toDate?.() || new Date(),
+            analysis: data.analysis,
+          })
+        }
+      })
+      setHistory(items)
+    }).catch(err => {
+      console.error('Failed to load form check history:', err)
+    }).finally(() => setHistoryLoading(false))
+  }, [user])
 
   // Keyboard nav for frames
   useEffect(() => {
@@ -424,6 +464,7 @@ export default function FormCheckPage() {
       }
 
       const token = await user.getIdToken()
+
       const response = await fetch(apiUrl('analyze-form'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -434,14 +475,53 @@ export default function FormCheckPage() {
           quality,
         }),
       })
+
       if (!response.ok) {
         const err = await response.json().catch(() => ({}))
-        throw new Error(err.error || 'Analysis failed')
+        throw new Error(err.error || 'Failed to start analysis')
       }
-      const data = await response.json()
-      setAnalysis(data.analysis)
-      setActiveFrame(0)
-      setStep('results')
+
+      const { jobId } = await response.json()
+      if (!jobId) throw new Error('No job ID returned')
+
+      // Listen for result on Firestore
+      let resolved = false
+      const jobRef = doc(db, 'formCheckJobs', jobId)
+      const unsubscribe = onSnapshot(jobRef, (snap) => {
+        const data = snap.data()
+        if (!data || resolved) return
+
+        if (data.status === 'complete') {
+          resolved = true
+          unsubscribe()
+          setAnalysis(data.analysis)
+          setActiveFrame(0)
+          setStep('results')
+        } else if (data.status === 'error') {
+          resolved = true
+          unsubscribe()
+          setError(data.error || 'Analysis failed. Please try again.')
+          setStep('preview')
+        }
+        // status === 'processing' — keep waiting
+      }, (err) => {
+        if (resolved) return
+        resolved = true
+        console.error('Firestore listener error:', err)
+        unsubscribe()
+        setError('Lost connection to analysis. Please try again.')
+        setStep('preview')
+      })
+
+      // Safety timeout — if no result after 2 minutes, stop waiting
+      setTimeout(() => {
+        if (resolved) return
+        resolved = true
+        unsubscribe()
+        setError('Analysis is taking longer than expected. Please try again or use fewer frames.')
+        setStep('preview')
+      }, 120000)
+
     } catch (err) {
       console.error('Form analysis error:', err)
       setError(err.message || 'Something went wrong. Please try again.')
@@ -458,6 +538,43 @@ export default function FormCheckPage() {
 
   const cfa = analysis?.frames?.[activeFrame]
   const mq = analysis?.movementQuality
+
+  // Load a past form check from history
+  const loadHistoryItem = useCallback(async (item) => {
+    setLoadingHistoryId(item.id)
+    try {
+      // Load frames from Firestore chunks
+      const frameSnaps = await getDocs(
+        query(collection(db, 'formCheckFrames'), where('jobId', '==', item.id))
+      )
+      const chunks = []
+      frameSnaps.forEach(snap => chunks.push(snap.data()))
+      chunks.sort((a, b) => a.chunkIndex - b.chunkIndex)
+
+      const loadedFrames = []
+      chunks.forEach(c => {
+        c.frames.forEach((base64, i) => {
+          loadedFrames.push({
+            dataUrl: base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`,
+            base64,
+            timestamp: 0,
+            index: loadedFrames.length + 1,
+          })
+        })
+      })
+
+      setFrames(loadedFrames)
+      setAnalysis(item.analysis)
+      setActiveFrame(0)
+      setShowAllRecs(false)
+      setStep('results')
+    } catch (err) {
+      console.error('Failed to load form check history:', err)
+      setError('Could not load past form check.')
+    } finally {
+      setLoadingHistoryId(null)
+    }
+  }, [])
 
   // ━━━ RENDER ━━━
 
@@ -594,6 +711,62 @@ export default function FormCheckPage() {
             className="btn-primary w-full py-3.5 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-base">
             <Camera className="w-5 h-5" /> Extract Frames
           </button>
+        </motion.div>
+      )}
+
+      {/* ━━━ HISTORY ━━━ */}
+      {step === 'upload' && history.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="mt-4">
+          <button
+            onClick={() => setHistoryOpen(!historyOpen)}
+            className="card-steel p-3 w-full flex items-center gap-3 hover:border-iron-600 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+              <Clock className="w-4 h-4 text-purple-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-medium text-iron-200">Past Form Checks</p>
+              <p className="text-xs text-iron-500">{history.length} analysis{history.length !== 1 ? 'es' : ''}</p>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-iron-500 transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          <AnimatePresence>
+            {historyOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="card-steel mt-1 divide-y divide-iron-800/50 max-h-72 overflow-y-auto">
+                  {history.map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => loadHistoryItem(item)}
+                      disabled={loadingHistoryId === item.id}
+                      className="w-full p-3 flex items-center gap-3 hover:bg-iron-800/30 transition-colors text-left"
+                    >
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${scoreBg(item.score)}`}>
+                        <span className={`text-sm font-bold ${scoreColor(item.score)}`}>{item.score}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-iron-200 truncate">{item.exercise}</p>
+                        <p className="text-[11px] text-iron-500">
+                          {item.createdAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · {item.frameCount} frames · {item.quality}
+                        </p>
+                      </div>
+                      {loadingHistoryId === item.id ? (
+                        <Loader2 className="w-4 h-4 text-iron-500 animate-spin flex-shrink-0" />
+                      ) : (
+                        <ArrowRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       )}
 
