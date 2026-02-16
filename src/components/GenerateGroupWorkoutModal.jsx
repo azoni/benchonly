@@ -16,7 +16,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
@@ -75,6 +75,7 @@ export default function GenerateGroupWorkoutModal({
   const [thinkingMessages, setThinkingMessages] = useState([]);
   const thinkingRef = useRef(null);
   const thinkingIntervalRef = useRef(null);
+  const listenerRef = useRef(null);
 
   useEffect(() => {
     if (isOpen && athletes?.length > 0) {
@@ -90,10 +91,11 @@ export default function GenerateGroupWorkoutModal({
     }
   }, [thinkingMessages]);
 
-  // Cleanup interval on unmount
+  // Cleanup interval and listener on unmount
   useEffect(() => {
     return () => {
       if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
+      if (listenerRef.current) { listenerRef.current(); listenerRef.current = null; }
     };
   }, []);
 
@@ -278,7 +280,7 @@ export default function GenerateGroupWorkoutModal({
       return;
     }
 
-    // Check credits — premium costs 100, standard costs 5 per athlete — admin bypasses
+    // Check credits
     const baseCost = model === 'premium' ? PREMIUM_CREDIT_COST : CREDIT_COSTS['generate-group-workout'] * selectedAthletes.length;
     const creditCost = baseCost;
     const credits = userProfile?.credits ?? 0;
@@ -294,8 +296,10 @@ export default function GenerateGroupWorkoutModal({
     addStep('Generating workouts', 'loading');
     startThinkingAnimation();
 
+    // Clean up previous listener
+    if (listenerRef.current) { listenerRef.current(); listenerRef.current = null; }
+
     try {
-      // Credits deducted server-side — just update local display
       if (!isAdmin) {
         updateProfile({ credits: credits - creditCost });
       }
@@ -310,19 +314,20 @@ export default function GenerateGroupWorkoutModal({
         recentWorkouts: athleteContexts[uid]?.recentWorkouts || [],
       }));
 
+      // Generate a job ID for polling
+      const jobId = `ggw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
       const authHeaders = await getAuthHeaders();
       const response = await fetch(apiUrl('generate-group-workout'), {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
           groupId: group.id, athletes: athleteData,
-          prompt, workoutDate,
-          model,
-          workoutFocus,
-          intensity,
+          prompt, workoutDate, model, workoutFocus, intensity,
           duration: duration !== 'auto' ? parseInt(duration) : null,
           exerciseCount: exerciseCount !== 'auto' ? parseInt(exerciseCount) : null,
           maxExercise: workoutFocus === '1rm-test' ? maxExercise : null,
+          jobId,
         }),
       });
 
@@ -332,33 +337,84 @@ export default function GenerateGroupWorkoutModal({
       }
 
       const data = await response.json();
-      setResult(data);
-      stopThinkingAnimation();
-      
-      // Add completion thinking message
-      setThinkingMessages(prev => [...prev, { 
-        text: `Done! Created ${data.createdWorkouts?.length} personalized workouts.`, 
-        icon: 'check', 
-        id: prev.length 
-      }]);
-      
-      addStep('Generating workouts', 'complete', 
-        `${data.createdWorkouts?.length} workouts created in ${data.usage?.responseMs}ms`
-      );
+
+      // If inline result came back directly (no background)
+      if (data.success && !data.background) {
+        setResult(data);
+        stopThinkingAnimation();
+        setThinkingMessages(prev => [...prev, { text: `Done! Created ${data.createdWorkouts?.length} personalized workouts.`, icon: 'check', id: prev.length }]);
+        addStep('Generating workouts', 'complete', `${data.createdWorkouts?.length} workouts created in ${data.usage?.responseMs}ms`);
+        setLoading(false);
+        return;
+      }
+
+      // Background path — set up Firestore listener
+      const actualJobId = data.jobId || jobId;
+      const jobRef = doc(db, 'groupWorkoutJobs', actualJobId);
+      let resolved = false;
+
+      const unsubscribe = onSnapshot(jobRef, (snap) => {
+        if (resolved) return;
+        const jobData = snap.data();
+        if (!jobData) return;
+
+        if (jobData.status === 'complete' && jobData.result) {
+          resolved = true;
+          unsubscribe();
+          listenerRef.current = null;
+          setResult(jobData.result);
+          stopThinkingAnimation();
+          setThinkingMessages(prev => [...prev, { text: `Done! Created ${jobData.result.createdWorkouts?.length} personalized workouts.`, icon: 'check', id: prev.length }]);
+          addStep('Generating workouts', 'complete', `${jobData.result.createdWorkouts?.length} workouts created`);
+          setLoading(false);
+        } else if (jobData.status === 'error') {
+          resolved = true;
+          unsubscribe();
+          listenerRef.current = null;
+          const errMsg = jobData.error || 'Generation failed';
+          setError(errMsg);
+          if (!isAdmin) updateProfile({ credits });
+          stopThinkingAnimation();
+          setThinkingMessages(prev => [...prev, { text: `Error: ${errMsg}`, icon: 'error', id: prev.length }]);
+          addStep('Generating workouts', 'error', errMsg);
+          setLoading(false);
+        }
+        // status === 'processing' or 'pending' — keep waiting
+      }, (err) => {
+        if (resolved) return;
+        resolved = true;
+        console.error('Firestore listener error:', err);
+        unsubscribe();
+        listenerRef.current = null;
+        setError('Lost connection. Please try again.');
+        if (!isAdmin) updateProfile({ credits });
+        stopThinkingAnimation();
+        setLoading(false);
+      });
+
+      listenerRef.current = unsubscribe;
+
+      // Safety timeout — 2 minutes
+      setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        unsubscribe();
+        listenerRef.current = null;
+        setError('Generation is taking too long. Please try again with fewer athletes or simpler settings.');
+        if (!isAdmin) updateProfile({ credits });
+        stopThinkingAnimation();
+        setLoading(false);
+      }, 120000);
 
     } catch (err) {
       console.error('Error:', err);
       setError(err.message);
-      // Server refunds on failure — restore local display
       if (!isAdmin) {
         updateProfile({ credits });
       }
       stopThinkingAnimation();
-      setThinkingMessages(prev => [...prev, { 
-        text: `Error: ${err.message}`, icon: 'error', id: prev.length 
-      }]);
+      setThinkingMessages(prev => [...prev, { text: `Error: ${err.message}`, icon: 'error', id: prev.length }]);
       addStep('Generating workouts', 'error', err.message);
-    } finally {
       setLoading(false);
     }
   };

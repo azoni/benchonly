@@ -25,6 +25,9 @@
 [functions."generate-group-workout"]
   timeout = 26
 
+[functions."generate-group-workout-background"]
+  type = "background"
+
 [functions."generate-program"]
   timeout = 26
 
