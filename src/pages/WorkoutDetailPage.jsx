@@ -76,6 +76,7 @@ export default function WorkoutDetailPage() {
   const [exercises, setExercises] = useState([])
   const [saving, setSaving] = useState(false)
   const [workoutNotes, setWorkoutNotes] = useState('')
+  const [workoutUserNotes, setWorkoutUserNotes] = useState('')
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
   const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
   const [swappingIdx, setSwappingIdx] = useState(null)
@@ -93,10 +94,12 @@ export default function WorkoutDetailPage() {
         }
         setWorkout(data)
         setWorkoutNotes(data?.notes || '')
+        setWorkoutUserNotes(data?.userNotes || '')
         if (data?.exercises) {
           setExercises(data.exercises.map(ex => ({
             ...ex,
             notes: ex.notes || '',
+            userNotes: ex.userNotes || '',
             sets: ex.sets?.map(set => ({ ...set })) || []
           })))
         }
@@ -203,6 +206,14 @@ export default function WorkoutDetailPage() {
     })
   }
 
+  const updateExerciseUserNotes = (exerciseIndex, userNotes) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      newExercises[exerciseIndex] = { ...newExercises[exerciseIndex], userNotes }
+      return newExercises
+    })
+  }
+
   const addSet = (exerciseIndex) => {
     setExercises(prev => {
       const newExercises = [...prev]
@@ -245,7 +256,7 @@ export default function WorkoutDetailPage() {
 
   // Build save payload preserving AI-generated fields
   const buildSavePayload = (exerciseData) => {
-    const payload = { exercises: exerciseData, notes: workoutNotes }
+    const payload = { exercises: exerciseData, notes: workoutNotes, userNotes: workoutUserNotes }
     if (workout?.coachingNotes) payload.coachingNotes = workout.coachingNotes
     if (workout?.personalNotes) payload.personalNotes = workout.personalNotes
     if (workout?.description) payload.description = workout.description
@@ -297,7 +308,7 @@ export default function WorkoutDetailPage() {
         const payload = buildSavePayload(filledExercises)
         await workoutService.complete(id, payload)
       }
-      setWorkout(prev => ({ ...prev, exercises: filledExercises, notes: workoutNotes, status: 'completed',
+      setWorkout(prev => ({ ...prev, exercises: filledExercises, notes: workoutNotes, userNotes: workoutUserNotes, status: 'completed',
         ...(workout?.coachingNotes && { coachingNotes: workout.coachingNotes }),
         ...(workout?.personalNotes && { personalNotes: workout.personalNotes }),
         ...(workout?.description && { description: workout.description }),
@@ -483,8 +494,16 @@ export default function WorkoutDetailPage() {
 
         {/* Workout Notes */}
         {workout.notes && (
-          <div className="card-steel p-4 mb-6">
+          <div className="card-steel p-4 mb-3">
             <p className="text-iron-300">{workout.notes}</p>
+          </div>
+        )}
+
+        {/* User Notes */}
+        {workout.userNotes && (
+          <div className="card-steel p-4 mb-6">
+            <p className="text-[10px] uppercase tracking-wider text-iron-500 mb-1.5">Your Notes</p>
+            <p className="text-sm text-iron-300 leading-relaxed">{workout.userNotes}</p>
           </div>
         )}
 
@@ -691,13 +710,25 @@ export default function WorkoutDetailPage() {
                 
                 {/* Exercise Notes */}
                 {exercise.notes && (
-                  <div className="px-4 pb-4">
+                  <div className="px-4 pb-2">
                     <div className="flex items-start gap-2 bg-iron-800/30 rounded-lg p-3">
                       <MessageSquare className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" />
                       <p className="text-sm text-iron-400">{exercise.notes}</p>
                     </div>
                   </div>
                 )}
+                {exercise.userNotes && (
+                  <div className="px-4 pb-4">
+                    <div className="flex items-start gap-2 bg-flame-500/5 border border-flame-500/10 rounded-lg p-3">
+                      <MessageSquare className="w-4 h-4 text-flame-400/60 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-iron-500 mb-0.5">Your Notes</p>
+                        <p className="text-sm text-iron-400">{exercise.userNotes}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {!exercise.notes && !exercise.userNotes && null}
               </div>
             )})}
           </div>
@@ -757,13 +788,21 @@ export default function WorkoutDetailPage() {
         </div>
       </div>
 
-      {/* Workout Notes */}
+      {/* Coach Notes (read-only) */}
+      {workout?.notes && (
+        <div className="card-steel p-4 mb-3">
+          <label className="block text-[10px] uppercase tracking-wider text-iron-500 mb-1.5">Coach Notes</label>
+          <p className="text-sm text-iron-300 leading-relaxed">{workout.notes}</p>
+        </div>
+      )}
+
+      {/* Your Notes */}
       <div className="card-steel p-4 mb-4">
-        <label className="block text-sm text-iron-400 mb-2">Workout Notes</label>
+        <label className="block text-sm text-iron-400 mb-2">Your Notes</label>
         <textarea
-          value={workoutNotes}
-          onChange={(e) => setWorkoutNotes(e.target.value)}
-          placeholder="How did the workout go?"
+          value={workoutUserNotes}
+          onChange={(e) => setWorkoutUserNotes(e.target.value)}
+          placeholder="How did the workout go? Anything feel off?"
           rows={2}
           className="w-full input-field text-sm resize-none"
         />
@@ -777,20 +816,70 @@ export default function WorkoutDetailPage() {
           
           return (
           <div key={exerciseIndex} className="card-steel p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="font-semibold text-iron-100 text-xl flex-1">{exercise.name}</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="font-semibold text-iron-100 text-lg flex-1">{exercise.name}</h3>
               {typeTag && (
                 <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
               )}
             </div>
             
-            <div className="space-y-4">
-              {exercise.sets?.map((set, setIndex) => (
-                <div key={setIndex} className="bg-iron-800/30 rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-lg font-medium text-iron-200">Set {setIndex + 1}</span>
+            {/* Fill All button */}
+            <button
+              onClick={() => {
+                setExercises(prev => {
+                  const newExercises = [...prev]
+                  const ex = { ...newExercises[exerciseIndex] }
+                  const exType = getExerciseType(ex)
+                  ex.sets = ex.sets.map(s => {
+                    const filled = { ...s }
+                    if (exType === 'time') {
+                      if (!filled.actualTime) filled.actualTime = s.prescribedTime || ''
+                    } else if (exType === 'bodyweight') {
+                      if (!filled.actualReps) filled.actualReps = s.prescribedReps || ''
+                    } else {
+                      if (!filled.actualWeight) filled.actualWeight = s.prescribedWeight || ''
+                      if (!filled.actualReps) filled.actualReps = s.prescribedReps || ''
+                    }
+                    return filled
+                  })
+                  newExercises[exerciseIndex] = ex
+                  return newExercises
+                })
+              }}
+              className="w-full mb-3 py-2 text-xs text-iron-500 hover:text-flame-400 bg-iron-800/40 hover:bg-iron-800 rounded-lg border border-iron-700/50 border-dashed transition-colors active:scale-[0.98]"
+            >
+              Fill all sets with targets
+            </button>
+            
+            <div className="space-y-3">
+              {exercise.sets?.map((set, setIndex) => {
+                const isFilled = type === 'time'
+                  ? !!set.actualTime
+                  : type === 'bodyweight'
+                    ? !!set.actualReps
+                    : !!(set.actualWeight && set.actualReps)
+                return (
+                <div key={setIndex} className={`rounded-xl p-3 transition-colors ${isFilled ? 'bg-green-900/10 border border-green-500/15' : 'bg-iron-800/30'}`}>
+                  <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded">
+                      <span className={`text-base font-medium ${isFilled ? 'text-green-400' : 'text-iron-200'}`}>Set {setIndex + 1}</span>
+                      {isFilled && <span className="text-green-400 text-xs">✓</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          if (type === 'time') {
+                            updateSet(exerciseIndex, setIndex, 'actualTime', set.prescribedTime || '')
+                          } else if (type === 'bodyweight') {
+                            updateSet(exerciseIndex, setIndex, 'actualReps', set.prescribedReps || '')
+                          } else {
+                            updateSet(exerciseIndex, setIndex, 'actualWeight', set.prescribedWeight || '')
+                            updateSet(exerciseIndex, setIndex, 'actualReps', set.prescribedReps || '')
+                          }
+                        }}
+                        className="text-sm text-iron-500 bg-iron-800 px-2 py-1 rounded hover:bg-iron-700 hover:text-flame-400 active:scale-95 transition-all"
+                        title="Tap to fill with target values"
+                      >
                         Target: {type === 'time' 
                           ? `${set.prescribedTime || '—'}s`
                           : type === 'bodyweight'
@@ -798,7 +887,7 @@ export default function WorkoutDetailPage() {
                             : `${set.prescribedWeight || '—'} × ${set.prescribedReps || '—'}`
                         }
                         {set.targetRpe ? ` @ RPE ${set.targetRpe}` : ''}
-                      </span>
+                      </button>
                       {exercise.sets.length > 1 && (
                         <button
                           onClick={() => removeSet(exerciseIndex, setIndex)}
@@ -835,16 +924,32 @@ export default function WorkoutDetailPage() {
                       />
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="grid grid-cols-2 gap-2 mb-2">
                       <div>
                         <label className="block text-xs text-flame-400 mb-1 font-medium">Weight</label>
-                        <input
-                          type="text"
-                          value={set.actualWeight || ''}
-                          onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
-                          placeholder={set.prescribedWeight || 'lbs'}
-                          className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
-                        />
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              const cur = parseFloat(set.actualWeight || set.prescribedWeight || 0)
+                              if (cur >= 5) updateSet(exerciseIndex, setIndex, 'actualWeight', String(Math.round(cur - 5)))
+                            }}
+                            className="w-9 h-11 rounded-lg bg-iron-700/80 text-iron-400 hover:text-iron-200 hover:bg-iron-700 active:scale-95 transition-all text-lg font-bold flex-shrink-0 flex items-center justify-center"
+                          >−</button>
+                          <input
+                            type="text"
+                            value={set.actualWeight || ''}
+                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
+                            placeholder={set.prescribedWeight || 'lbs'}
+                            className="w-full input-field text-lg py-2.5 px-2 text-center font-semibold"
+                          />
+                          <button
+                            onClick={() => {
+                              const cur = parseFloat(set.actualWeight || set.prescribedWeight || 0)
+                              updateSet(exerciseIndex, setIndex, 'actualWeight', String(Math.round(cur + 5)))
+                            }}
+                            className="w-9 h-11 rounded-lg bg-iron-700/80 text-iron-400 hover:text-iron-200 hover:bg-iron-700 active:scale-95 transition-all text-lg font-bold flex-shrink-0 flex items-center justify-center"
+                          >+</button>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
@@ -854,42 +959,50 @@ export default function WorkoutDetailPage() {
                           value={set.actualReps || ''}
                           onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
                           placeholder={set.prescribedReps || '—'}
-                          className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                          className="w-full input-field text-lg py-2.5 px-2 text-center font-semibold"
                         />
                       </div>
                     </div>
                   )}
                   
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs text-iron-500 mb-1">RPE</label>
-                      <select
-                        value={set.rpe || ''}
-                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'rpe', e.target.value)}
-                        className="w-full input-field py-2 px-3"
-                      >
-                        <option value="">—</option>
-                        {[6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].map(v => (
-                          <option key={v} value={v}>{v}</option>
+                      <div className="flex gap-1 flex-wrap">
+                        {[6, 7, 8, 9, 10].map(v => (
+                          <button
+                            key={v}
+                            onClick={() => updateSet(exerciseIndex, setIndex, 'rpe', set.rpe == v ? '' : String(v))}
+                            className={`px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${
+                              set.rpe == v
+                                ? 'border-flame-500 bg-flame-500/15 text-flame-400 font-medium'
+                                : 'border-iron-700 text-iron-500 hover:border-iron-600'
+                            }`}
+                          >{v}</button>
                         ))}
-                      </select>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs text-iron-500 mb-1">Pain</label>
-                      <select
-                        value={set.painLevel || 0}
-                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'painLevel', parseInt(e.target.value) || 0)}
-                        className="w-full input-field py-2 px-3"
-                      >
-                        <option value="0">None</option>
-                        {[1,2,3,4,5,6,7,8,9,10].map(v => (
-                          <option key={v} value={v}>{v}</option>
+                      <div className="flex gap-1 flex-wrap">
+                        {[0, 1, 2, 3, 4, 5].map(v => (
+                          <button
+                            key={v}
+                            onClick={() => updateSet(exerciseIndex, setIndex, 'painLevel', v)}
+                            className={`px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${
+                              (set.painLevel || 0) === v
+                                ? v === 0 ? 'border-green-500/50 bg-green-500/10 text-green-400 font-medium'
+                                  : v <= 2 ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 font-medium'
+                                  : 'border-red-500/50 bg-red-500/10 text-red-400 font-medium'
+                                : 'border-iron-700 text-iron-500 hover:border-iron-600'
+                            }`}
+                          >{v === 0 ? 'None' : v}</button>
                         ))}
-                      </select>
+                      </div>
                     </div>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
 
             {/* Add Set Button */}
@@ -903,13 +1016,21 @@ export default function WorkoutDetailPage() {
               Add Set
             </button>
             
-            {/* Exercise Notes */}
-            <div className="mt-4">
-              <label className="block text-xs text-iron-500 mb-1">Notes for {exercise.name}</label>
+            {/* Coach Notes (read-only) */}
+            {exercise.notes && (
+              <div className="mt-3 px-3 py-2 bg-iron-800/30 rounded-lg">
+                <label className="block text-[10px] uppercase tracking-wider text-iron-500 mb-1">Coach Notes</label>
+                <p className="text-xs text-iron-400 leading-relaxed">{exercise.notes}</p>
+              </div>
+            )}
+
+            {/* Your Notes */}
+            <div className="mt-3">
+              <label className="block text-xs text-iron-500 mb-1">Your notes for {exercise.name}</label>
               <textarea
-                value={exercise.notes || ''}
-                onChange={(e) => updateExerciseNotes(exerciseIndex, e.target.value)}
-                placeholder="How did this exercise feel?"
+                value={exercise.userNotes || ''}
+                onChange={(e) => updateExerciseUserNotes(exerciseIndex, e.target.value)}
+                placeholder="How did this feel? Any discomfort?"
                 rows={2}
                 className="w-full input-field text-sm resize-none"
               />

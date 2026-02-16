@@ -220,9 +220,11 @@ export default function AIChatPanel() {
         date: w.date,
         isGroup: w.isGroup || false,
         groupName: w.groupName,
+        userNotes: w.userNotes || '',
         exercises: (w.exercises || []).map(ex => ({
           name: ex.name,
           type: ex.type || 'weight',
+          userNotes: ex.userNotes || '',
           sets: (ex.sets || []).map(s => ({
             prescribedWeight: s.prescribedWeight || '',
             prescribedReps: s.prescribedReps || '',

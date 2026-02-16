@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
 import { 
   Activity, 
@@ -20,17 +20,21 @@ import {
   Trash2,
   Clock,
   Heart,
+  Copy,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { feedService } from '../services/feedService'
 import { friendService } from '../services/friendService'
-import { groupService } from '../services/firestore'
+import { groupService, workoutService } from '../services/firestore'
 import { collection, getDocs, query } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import { formatDuration } from '../utils/workoutUtils'
+import usePageTitle from '../utils/usePageTitle'
 
 export default function FeedPage() {
+  usePageTitle('Feed')
   const { user, isGuest, isAppAdmin, isRealAdmin, impersonating, realUser } = useAuth()
+  const navigate = useNavigate()
   const [feedItems, setFeedItems] = useState([])
   const [users, setUsers] = useState({})
   const [loading, setLoading] = useState(true)
@@ -46,6 +50,47 @@ export default function FeedPage() {
   const [userGroupIds, setUserGroupIds] = useState(new Set())
   const [feedFilter, setFeedFilter] = useState('all') // 'all' | 'friends' | 'mine'
   const [expandedItems, setExpandedItems] = useState(new Set())
+  const [copying, setCopying] = useState(null)
+
+  // Copy a workout from the feed as a new scheduled workout
+  const copyWorkout = async (item) => {
+    if (!user || isGuest || copying) return
+    setCopying(item.id)
+    try {
+      const summary = item.data?.exerciseSummary || []
+      if (!summary.length) {
+        alert('No exercise data to copy')
+        return
+      }
+      const exercises = summary.map(ex => ({
+        name: ex.name,
+        type: ex.topWeight ? 'weight' : 'bodyweight',
+        sets: Array.from({ length: ex.sets || 3 }, () => ({
+          prescribedWeight: ex.topWeight ? String(ex.topWeight) : '',
+          prescribedReps: ex.topReps ? String(ex.topReps) : '',
+          actualWeight: '',
+          actualReps: '',
+          rpe: '',
+          painLevel: 0,
+        })),
+        restSeconds: 90,
+        notes: '',
+      }))
+      const userName = users[item.userId]?.displayName || 'someone'
+      const result = await workoutService.create({
+        name: `${item.data?.name || 'Workout'} (from ${userName})`,
+        exercises,
+        date: new Date(),
+        workoutType: 'strength',
+      }, user.uid)
+      navigate(`/workouts/${result.id}`)
+    } catch (err) {
+      console.error('Copy failed:', err)
+      alert('Failed to copy workout')
+    } finally {
+      setCopying(null)
+    }
+  }
 
   // Visibility check — determines if current user can see a feed item
   const canSeeItem = (item) => {
@@ -441,6 +486,16 @@ export default function FeedPage() {
                   <MessageCircle className="w-4 h-4" />
                   {item.commentCount > 0 ? `${item.commentCount} comment${item.commentCount !== 1 ? 's' : ''}` : 'Comment'}
                 </button>
+                {(item.type === 'workout' || item.type === 'group_workout') && item.data?.exerciseSummary?.length > 0 && item.userId !== user?.uid && !isGuest && (
+                  <button
+                    onClick={() => copyWorkout(item)}
+                    disabled={copying === item.id}
+                    className="px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 bg-iron-800 text-iron-400 hover:bg-iron-700 hover:text-flame-400 transition-colors"
+                  >
+                    <Copy className="w-4 h-4" />
+                    {copying === item.id ? 'Copying...' : 'Copy Workout'}
+                  </button>
+                )}
                 {isAppAdmin && (
                   <button
                     onClick={() => handleDeleteFeedItem(item.id)}

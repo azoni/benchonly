@@ -26,7 +26,7 @@ export async function handler(event) {
   let creditCost = 5;
 
   try {
-    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId, duration, exerciseCount, maxExercise } = JSON.parse(event.body);
+    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId, duration, exerciseCount, maxExercise, includeWarmup } = JSON.parse(event.body);
     // Use targetUserId only if caller is admin (for impersonation)
     const userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
     // Enforce admin-only premium model
@@ -53,7 +53,7 @@ export async function handler(event) {
       painThresholdCount: 2,
     };
 
-    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings, duration, exerciseCount, maxExercise);
+    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings, duration, exerciseCount, maxExercise, includeWarmup);
 
     const systemPrompt = `You are an expert strength coach. Create a personalized workout.
 
@@ -69,7 +69,15 @@ If the user asks to "repeat", "same as", "copy", or reference a previous workout
 4. If user says "no substitutions" - NEVER substitute, only add warnings in notes
 
 WARM-UP GUIDANCE:
-For the first compound lift of the workout (e.g. bench press, squat, OHP), include warm-up ramp sets in the exercise "notes" field. Example format:
+If INCLUDE_WARMUP is true, the FIRST exercise in the workout should be a quick general warm-up:
+- Name it "Warm-up" with type "time"
+- Include 2-3 sets of dynamic movements (e.g. "Arm circles, leg swings, hip circles — 60s each")
+- Set prescribedTime to 60-90 seconds per set
+- Keep it under 5 minutes total
+- In the exercise "notes", describe the movements: "Light dynamic stretching: arm circles 20x, leg swings 10/side, hip circles 10/side, band pull-aparts 15x"
+If INCLUDE_WARMUP is false, skip the warm-up exercise entirely.
+
+For the first COMPOUND lift (bench, squat, OHP, deadlift), include ramp-up sets in the exercise "notes" field. Example:
 "Warm-up: Bar x10, 95x8, 135x5, 185x3 → working sets"
 Scale the warm-up to the working weight. Skip warm-up notes for isolation/accessory exercises.
 
@@ -97,12 +105,39 @@ STANDARD WORKOUT RULES:
 - Goals (prioritize goal lifts)
 - Recent workout history (build on what they've been doing)
 - Cardio/activity load (factor in overall training stress)
+- USER NOTES: Pay close attention to any user notes from recent workouts. These are the lifter's own observations (e.g. "shoulder felt tight", "grip was slipping", "felt strong today"). Use these to adjust exercise selection, weight, and volume.
 
-WEIGHT PROGRESSION LOGIC:
-- Completed all reps at target RPE 7-8: Add 5 lbs (upper) or 5-10 lbs (lower)
-- Completed all reps at RPE 6 or below: Add 5-10 lbs
-- Missed reps or RPE 9+: Keep same weight or reduce 5%
-- Pain reported on exercise: DO NOT increase weight, add note about monitoring
+EXERCISE SELECTION — THIS IS CRITICAL:
+Do NOT just repeat exercises the user has already done. Select the BEST exercises for the focus area. Mix exercises the user has data for with new ones they should try.
+
+EXERCISE DATABASE BY FOCUS:
+- PUSH: Bench Press, Incline DB Press, Overhead Press, Dips, Cable Flyes, Lateral Raises, Tricep Pushdowns, Close-Grip Bench, Push Press, DB Shoulder Press, Landmine Press, Skull Crushers
+- PULL: Barbell Rows, Pull-ups, Lat Pulldowns, Cable Rows, Face Pulls, Dumbbell Rows, T-Bar Rows, Chin-ups, Hammer Curls, Barbell Curls, Rear Delt Flyes, Meadows Rows
+- LEGS: Squats, Romanian Deadlifts, Leg Press, Bulgarian Split Squats, Leg Curls, Leg Extensions, Hip Thrusts, Walking Lunges, Calf Raises, Front Squats, Goblet Squats, Hack Squats
+- UPPER: Bench Press, Overhead Press, Barbell Rows, Pull-ups, Incline DB Press, Lateral Raises, Face Pulls, Dumbbell Rows, Tricep Pushdowns, Curls
+- FULL BODY: Squats, Bench Press, Barbell Rows, Overhead Press, Romanian Deadlifts, Pull-ups, Lunges, Dips, Face Pulls, Planks
+- BENCH FOCUS: Bench Press, Close-Grip Bench, Incline Bench, DB Bench, Paused Bench, Spoto Press, Floor Press, Cable Flyes, Tricep Pushdowns, Dips
+Pick from these AND the user's existing exercises. Prioritize compound movements first, accessories second.
+
+WEIGHT CALCULATION — CRITICAL:
+When setting weights, follow this priority:
+1. If user has e1RM data for the EXACT exercise: use 70-85% of e1RM based on intensity
+2. If user has data for a RELATED exercise, infer the weight:
+   - Incline Bench ≈ 75-80% of Flat Bench e1RM
+   - Overhead Press ≈ 60-65% of Bench Press e1RM
+   - Barbell Row ≈ 70-80% of Bench Press e1RM
+   - Front Squat ≈ 80-85% of Back Squat e1RM
+   - Romanian Deadlift ≈ 70-75% of Deadlift e1RM
+   - DB variations ≈ 40-45% of barbell e1RM (per hand)
+   - Close-grip/Paused variations ≈ 85-90% of standard e1RM
+3. If NO related data exists: use conservative defaults (45-95 lbs upper, 95-135 lbs lower) and note it.
+
+INTENSITY SCALING:
+- Light (RPE 5-6): Use 60-70% of e1RM, higher reps (10-15)
+- Moderate (RPE 7-8): Use 70-80% of e1RM, moderate reps (8-12)
+- Heavy (RPE 8-9): Use 80-88% of e1RM, lower reps (4-6)
+- Max (RPE 9-10): Use 85-95% of e1RM, very low reps (1-3)
+Round all weights to the nearest 5 lbs.
 
 NO TRAINING DATA:
 If the user has NO max lift data at all, set weights very conservatively: bar weight (45 lbs) to 65 lbs for upper body pressing, 95-135 lbs for lower body compounds. Add a prominent note in the workout "notes" field: "No training history available — all weights are set conservatively. Log this workout so future sessions can be personalized to your actual strength." For the 1RM test with no data, start the warm-up at the bar and increase in small increments.
@@ -330,11 +365,14 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
   }
 }
 
-function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null, maxExercise = null) {
+function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null, maxExercise = null, includeWarmup = true) {
   const painThresholdMin = settings.painThresholdMin || 3;
   const painThresholdCount = settings.painThresholdCount || 2;
   
   let s = '';
+
+  // Warm-up preference
+  s += `INCLUDE_WARMUP: ${includeWarmup ? 'true' : 'false'}\n\n`;
 
   // 1RM test mode
   if (focus === '1rm-test' && maxExercise) {
@@ -373,13 +411,13 @@ function buildContext(ctx, focus, intensity, settings = {}, duration = null, exe
 
   const lifts = Object.entries(ctx?.maxLifts || {});
   if (lifts.length) {
-    s += 'MAX LIFTS (use 70-85% for working sets):\n';
-    lifts.sort((a, b) => b[1].e1rm - a[1].e1rm).slice(0, 10).forEach(([n, d]) => {
+    s += 'MAX LIFTS (use intensity scaling above, infer weights for related exercises):\n';
+    lifts.sort((a, b) => b[1].e1rm - a[1].e1rm).slice(0, 15).forEach(([n, d]) => {
       s += `  ${n}: ${d.e1rm}lb e1RM (best: ${d.weight}lb x ${d.reps})\n`;
     });
     s += '\n';
   } else {
-    s += 'MAX LIFTS: No data - use conservative weights\n\n';
+    s += 'MAX LIFTS: No data - use conservative weights and note it\n\n';
   }
 
   // Filter pain to only significant patterns
@@ -471,6 +509,7 @@ function buildContext(ctx, focus, intensity, settings = {}, duration = null, exe
     ctx.recentWorkouts.slice(0, 5).forEach(w => {
       const dayName = w.dayOfWeek || '';
       s += `  [${w.date || 'Recent'}${dayName ? ` ${dayName}` : ''}] "${w.name || 'Workout'}"\n`;
+      if (w.userNotes) s += `    USER NOTES: "${w.userNotes}"\n`;
       (w.exercises || []).forEach(ex => {
         const sets = ex.sets || [];
         if (sets.length === 0) return;
@@ -487,6 +526,7 @@ function buildContext(ctx, focus, intensity, settings = {}, duration = null, exe
         }).join(', ');
         
         s += `    ${ex.name}: ${setDetails}\n`;
+        if (ex.userNotes) s += `      USER NOTE: "${ex.userNotes}"\n`;
       });
     });
     s += '\n';

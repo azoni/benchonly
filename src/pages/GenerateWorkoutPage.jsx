@@ -108,6 +108,7 @@ export default function GenerateWorkoutPage() {
   const [model, setModel] = useState('standard');
   const [duration, setDuration] = useState('auto');
   const [exerciseCount, setExerciseCount] = useState('auto');
+  const [includeWarmup, setIncludeWarmup] = useState(true);
   const [maxExercise, setMaxExercise] = useState('');
   const [workoutDate, setWorkoutDate] = useState(() => {
     const dateParam = searchParams.get('date')
@@ -382,7 +383,7 @@ export default function GenerateWorkoutPage() {
         headers: authHeaders,
         body: JSON.stringify({
           prompt, workoutFocus, intensity,
-          model,
+          model, includeWarmup,
           duration: duration !== 'auto' ? parseInt(duration) : null,
           exerciseCount: exerciseCount !== 'auto' ? parseInt(exerciseCount) : null,
           maxExercise: workoutFocus === '1rm-test' ? maxExercise : null,
@@ -974,6 +975,22 @@ export default function GenerateWorkoutPage() {
               </div>
               )}
               
+              {/* Warm-up toggle — hidden for 1RM test */}
+              {workoutFocus !== '1rm-test' && (
+              <div className="mb-4 flex items-center justify-between p-3 bg-iron-800/30 rounded-xl border border-iron-700/50">
+                <div>
+                  <p className="text-sm text-iron-300 font-medium">Include Warm-up</p>
+                  <p className="text-xs text-iron-500">Adds a quick warm-up before your first exercise</p>
+                </div>
+                <button
+                  onClick={() => setIncludeWarmup(!includeWarmup)}
+                  className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${includeWarmup ? 'bg-flame-500' : 'bg-iron-700'}`}
+                >
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${includeWarmup ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
                   <label className="block text-sm text-iron-400 mb-2">Workout Date</label>
