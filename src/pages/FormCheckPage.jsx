@@ -41,12 +41,13 @@ const JPEG_QUALITY = 0.5
 const FORM_CHECK_PREMIUM_COST = 50
 
 const ANALYZING_TIPS = [
+  'Tip: Trim your video to start right before the first rep',
   'Tip: Film from a 45° angle for the most useful analysis',
-  'Tip: Keep your phone at hip height for squats and deadlifts',
   'Tip: Side angle works best for bench press form',
+  'Tip: Keep your phone at hip height for squats and deadlifts',
   'Tip: Wear form-fitting clothes so joint positions are visible',
   'Tip: Good lighting makes a huge difference in analysis quality',
-  'Tip: Film entire reps — setup through lockout',
+  'Tip: Shorter clips (5-15s) give the best frame coverage',
 ]
 
 // ─── Score Utilities ───
@@ -331,7 +332,7 @@ export default function FormCheckPage() {
     else { v.pause(); setIsVideoPlaying(false) }
   }, [])
 
-  // ─── Frame Extraction (unchanged logic) ───
+  // ─── Frame Extraction ───
 
   const extractFrames = useCallback(async () => {
     if (!videoUrl) return
@@ -343,18 +344,15 @@ export default function FormCheckPage() {
     const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas) { setError('Could not initialize video processor.'); setStep('upload'); return }
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
 
     const seekTo = (time) => new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('Frame seek timed out')), 8000)
       video.onseeked = () => {
         clearTimeout(timeout)
-        // Triple rAF + small delay ensures the decoded frame is painted to canvas
-        requestAnimationFrame(() => 
-          requestAnimationFrame(() => 
-            requestAnimationFrame(() => 
-              setTimeout(resolve, 20)
-            )
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => setTimeout(resolve, 20))
           )
         )
       }
@@ -374,7 +372,7 @@ export default function FormCheckPage() {
         setError('Could not read video duration. Try a different file.'); setStep('upload'); return
       }
 
-      // Motion scan
+      // ─── Pass 1: Low-res motion scan ───
       const SCAN_WIDTH = 160
       const scanScale = Math.min(1, SCAN_WIDTH / video.videoWidth)
       canvas.width = Math.round(video.videoWidth * scanScale)
@@ -402,18 +400,14 @@ export default function FormCheckPage() {
         setExtractProgress(Math.round(((i + 1) / scanCount) * 30))
       }
 
+      // ─── Burst detection: find where the actual lift happens ───
       let startTime = 0, endTime = duration
       if (motionScores.length > maxFrames) {
-        // Sort scores to find threshold — actual lifting creates much more
-        // motion than setup shuffling (adjusting grip, getting in position)
         const sorted = [...motionScores].map(m => m.score).sort((a, b) => a - b)
         const median = sorted[Math.floor(sorted.length / 2)]
         const p75 = sorted[Math.floor(sorted.length * 0.75)]
-        // Threshold: frames above this are likely the actual exercise
-        // Use midpoint between median and 75th percentile
         const threshold = (median + p75) / 2
 
-        // Find contiguous runs of above-threshold motion (the "bursts")
         const bursts = []
         let currentBurst = null
         for (let i = 0; i < motionScores.length; i++) {
@@ -422,7 +416,6 @@ export default function FormCheckPage() {
             currentBurst.end = i
             currentBurst.totalScore += motionScores[i].score
           } else {
-            // Allow 1-frame gaps (brief pause between reps)
             if (currentBurst && i - currentBurst.end <= 2) {
               currentBurst.end = i
               currentBurst.totalScore += motionScores[i].score
@@ -434,19 +427,16 @@ export default function FormCheckPage() {
         }
         if (currentBurst) bursts.push(currentBurst)
 
-        // Pick the burst with the highest total motion
         let bestBurst = bursts.length > 0
           ? bursts.reduce((a, b) => a.totalScore > b.totalScore ? a : b)
           : null
 
         if (bestBurst) {
-          // Add 1 frame of context before/after the burst for setup/lockout
           const ws = Math.max(0, bestBurst.start - 1)
           const we = Math.min(motionScores.length - 1, bestBurst.end + 1)
           startTime = motionScores[ws].time
           endTime = motionScores[we].time
         } else {
-          // Fallback to old sliding window if no clear burst found
           const windowSize = Math.min(maxFrames, motionScores.length)
           let bestSum = 0, bestStart = 0
           for (let i = 0; i <= motionScores.length - windowSize; i++) {
@@ -461,6 +451,7 @@ export default function FormCheckPage() {
         }
       }
 
+      // ─── Pass 2: Full-res frame capture from the detected lift window ───
       const windowDuration = endTime - startTime
       const totalFrames = Math.max(1, Math.min(maxFrames, Math.floor(windowDuration)))
       const interval = windowDuration / totalFrames
@@ -479,9 +470,7 @@ export default function FormCheckPage() {
           await seekTo(time + (retries < 3 ? 0.05 : 0))
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-          // Check if frame is mostly blank (gray/black) — sample pixels
           const sampleData = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-          let variance = 0
           const step = Math.max(4, Math.floor(sampleData.length / 400)) * 4
           let sum = 0, count = 0
           for (let p = 0; p < sampleData.length; p += step) {
@@ -489,13 +478,13 @@ export default function FormCheckPage() {
             count++
           }
           const avg = sum / (count * 3)
+          let variance = 0
           for (let p = 0; p < sampleData.length; p += step) {
             const v = (sampleData[p] + sampleData[p + 1] + sampleData[p + 2]) / 3 - avg
             variance += v * v
           }
           variance /= count
 
-          // If variance is very low, frame is likely blank/gray — retry with decode wait
           if (variance < 100 && retries > 1) {
             retries--
             await new Promise(r => setTimeout(r, 200))
@@ -801,7 +790,7 @@ export default function FormCheckPage() {
           <div className="flex items-start gap-2.5 p-3 bg-iron-800/40 rounded-xl">
             <Info className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" />
             <p className="text-xs text-iron-500 leading-relaxed">
-              Video is processed on your device — only extracted frames are sent. We skip setup and rest to focus frames on the actual lift. Best with a side or 45° angle.
+              Video is processed on your device — only extracted frames are sent. For best results, trim your video to start near your first rep. Side or 45° angle recommended.
             </p>
           </div>
 
