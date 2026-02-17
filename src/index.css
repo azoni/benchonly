@@ -94,7 +94,7 @@
   
   /* Date input calendar icon */
   input[type="date"] {
-    @apply py-2 px-3 text-sm;
+    @apply py-2 px-3 text-sm min-w-0;
   }
   
   input[type="date"]::-webkit-calendar-picker-indicator {

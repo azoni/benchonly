@@ -587,7 +587,7 @@ export default function AdminPage() {
         </div>
 
         {/* User Details */}
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           {selectedUser ? (
             <>
               {/* Back button on mobile */}

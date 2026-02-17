@@ -50,6 +50,7 @@ export default function Layout() {
   const { user, userProfile, signOut, signInWithGoogle, isGuest, isRealAdmin, realUser, impersonating, stopImpersonating } = useAuth();
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [fabExpanded, setFabExpanded] = useState(false);
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
@@ -302,27 +303,51 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Mobile Floating Buttons */}
-      <div className="lg:hidden fixed bottom-6 right-4 z-30 flex flex-col gap-3"
+      {/* Mobile Floating Buttons — Speed Dial */}
+      <div className="lg:hidden fixed bottom-6 right-4 z-30 flex flex-col items-end gap-3"
         style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        {location.pathname !== '/form-check' && (
-          <button
-            onClick={() => navigate('/form-check')}
-            className="w-11 h-11 bg-iron-800 border border-iron-700 hover:bg-iron-700
-              rounded-full shadow-lg flex items-center justify-center transition-all relative"
-          >
-            <Video className="w-5 h-5 text-purple-400" />
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-500 text-[7px] font-bold text-white flex items-center justify-center">β</span>
-          </button>
-        )}
+        <AnimatePresence>
+          {fabExpanded && location.pathname !== '/form-check' && (
+            <motion.button
+              key="fab-formcheck"
+              initial={{ opacity: 0, scale: 0.3, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.3, y: 20 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => { navigate('/form-check'); setFabExpanded(false) }}
+              className="w-11 h-11 bg-iron-800 border border-iron-700
+                rounded-full shadow-lg flex items-center justify-center transition-colors relative"
+            >
+              <Video className="w-5 h-5 text-purple-400" />
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-500 text-[7px] font-bold text-white flex items-center justify-center">β</span>
+            </motion.button>
+          )}
+          {fabExpanded && (
+            <motion.button
+              key="fab-chat"
+              initial={{ opacity: 0, scale: 0.3, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.3, y: 20 }}
+              transition={{ duration: 0.2, delay: 0.05 }}
+              onClick={() => { toggleChat(); setFabExpanded(false) }}
+              className="w-11 h-11 bg-flame-500
+                rounded-full shadow-lg flex items-center justify-center transition-colors"
+            >
+              <MessageCircle className="w-5 h-5 text-white" />
+            </motion.button>
+          )}
+        </AnimatePresence>
         <button
-          onClick={toggleChat}
-          className="w-14 h-14 bg-flame-500 hover:bg-flame-600 
-            active:bg-flame-700 rounded-full shadow-lg shadow-flame-500/30 
-            flex items-center justify-center transition-all"
+          onClick={() => setFabExpanded(!fabExpanded)}
+          className={`w-14 h-14 rounded-full shadow-lg shadow-flame-500/30
+            flex items-center justify-center transition-all duration-200
+            ${fabExpanded ? 'bg-iron-700 rotate-0' : 'bg-flame-500 hover:bg-flame-600 active:bg-flame-700'}`}
         >
-          <MessageCircle className="w-6 h-6 text-white" />
+          {fabExpanded
+            ? <X className="w-6 h-6 text-white" />
+            : <MessageCircle className="w-6 h-6 text-white" />
+          }
         </button>
       </div>
 
