@@ -27,6 +27,7 @@ import { useAuth } from '../context/AuthContext'
 import { groupWorkoutService, groupService } from '../services/firestore'
 import { getDisplayDate } from '../utils/dateUtils'
 import usePageTitle from '../utils/usePageTitle'
+import ExerciseInfoModal from '../components/ExerciseInfoModal'
 
 // Calculate estimated 1RM using Epley formula
 const calculateE1RM = (weight, reps) => {
@@ -71,6 +72,7 @@ export default function GroupWorkoutPage() {
   const [personalNotes, setPersonalNotes] = useState('')
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
   const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
+  const [infoExercise, setInfoExercise] = useState(null)
 
   useEffect(() => {
     loadWorkout()
@@ -531,7 +533,13 @@ export default function GroupWorkoutPage() {
             <div key={exerciseIndex} className="card-steel overflow-hidden">
               <div className="p-4 border-b border-iron-800">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xl font-semibold text-iron-50">{exercise.name}</h3>
+                  <button
+                    onClick={() => setInfoExercise(exercise)}
+                    className="text-xl font-semibold text-iron-50 hover:text-flame-400 transition-colors flex items-center gap-2 text-left"
+                  >
+                    {exercise.name}
+                    <Info className="w-4 h-4 text-iron-500 flex-shrink-0" />
+                  </button>
                   {typeTag && (
                     <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
                   )}
@@ -757,7 +765,13 @@ export default function GroupWorkoutPage() {
           return (
           <div key={exerciseIndex} className="card-steel p-3">
             <div className="flex items-center gap-2 mb-3">
-              <h3 className="font-semibold text-iron-100 text-lg flex-1">{exercise.name}</h3>
+              <button
+                onClick={() => setInfoExercise(exercise)}
+                className="font-semibold text-iron-100 text-lg hover:text-flame-400 transition-colors flex items-center gap-1.5 text-left flex-1"
+              >
+                {exercise.name}
+                <Info className="w-3.5 h-3.5 text-iron-500 flex-shrink-0" />
+              </button>
               {typeTag && (
                 <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
               )}
@@ -983,6 +997,12 @@ export default function GroupWorkoutPage() {
           </div>
         </div>
       )}
+
+      <ExerciseInfoModal
+        exercise={infoExercise}
+        isOpen={!!infoExercise}
+        onClose={() => setInfoExercise(null)}
+      />
     </div>
   )
 }

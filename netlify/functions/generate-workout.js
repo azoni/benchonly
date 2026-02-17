@@ -197,6 +197,11 @@ EXERCISE TYPES:
 - "bodyweight": No external weight (pull-ups, push-ups, dips). Sets have prescribedReps only (NO prescribedWeight).
 - "time": Time-based exercises (planks, dead hangs, wall sits). Sets have prescribedTime (in seconds) only.
 
+EXERCISE INFO — for each exercise include:
+- "howTo": 1-2 sentence description of how to perform the exercise with correct form
+- "cues": Array of 2-3 short key form cues (brief phrases, not full sentences)
+- "substitutions": Array of 2-3 alternative exercises if equipment is unavailable or the exercise causes discomfort
+
 OUTPUT JSON only, no markdown:
 {
   "name": "Workout Name",
@@ -207,6 +212,9 @@ OUTPUT JSON only, no markdown:
     {
       "name": "Bench Press",
       "type": "weight",
+      "howTo": "Lie on a flat bench with eyes under the bar. Grip slightly wider than shoulder width, unrack, lower bar to mid-chest with elbows at ~45 degrees, press back up to lockout.",
+      "cues": ["Squeeze shoulder blades together", "Drive feet into floor", "Bar path: slight diagonal from chest to shoulders"],
+      "substitutions": ["DB Bench Press", "Floor Press", "Push-ups"],
       "sets": [
         { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 },
         { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 },
@@ -219,6 +227,9 @@ OUTPUT JSON only, no markdown:
     {
       "name": "Pull-ups",
       "type": "bodyweight",
+      "howTo": "Hang from a bar with overhand grip slightly wider than shoulders. Pull up until chin clears the bar, then lower with control to full arm extension.",
+      "cues": ["Initiate with lats, not arms", "Avoid swinging or kipping", "Full dead hang at bottom"],
+      "substitutions": ["Lat Pulldowns", "Chin-ups", "Band-Assisted Pull-ups"],
       "sets": [
         { "prescribedReps": 10, "targetRpe": 7 },
         { "prescribedReps": 10, "targetRpe": 7 },
@@ -230,6 +241,9 @@ OUTPUT JSON only, no markdown:
     {
       "name": "Dead Hang",
       "type": "time",
+      "howTo": "Grip a pull-up bar with overhand grip and hang with arms fully extended. Engage shoulders slightly (active hang) and hold.",
+      "cues": ["Shoulders away from ears", "Grip tight, breathe steady"],
+      "substitutions": ["Farmer's Walks", "Plate Pinch Hold"],
       "sets": [
         { "prescribedTime": 45, "targetRpe": 7 },
         { "prescribedTime": 45, "targetRpe": 7 },
@@ -254,7 +268,7 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
       ],
       response_format: { type: 'json_object' },
       temperature: 0.7,
-      max_tokens: 4000,
+      max_tokens: 4500,
     });
 
     const responseTime = Date.now() - startTime;
@@ -329,6 +343,9 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
         id: Date.now() + i,
         name: ex.name,
         type: ex.type || 'weight',
+        howTo: ex.howTo || '',
+        cues: Array.isArray(ex.cues) ? ex.cues : [],
+        substitutions: Array.isArray(ex.substitutions) ? ex.substitutions : [],
         sets: (ex.sets || []).map((s, j) => {
           const base = {
             id: Date.now() + i * 100 + j,

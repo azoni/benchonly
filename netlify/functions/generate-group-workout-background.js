@@ -55,7 +55,7 @@ export async function handler(event) {
     const userPrompt = `Create a group workout:\n\n${contextStr}\n\n${prompt ? `COACH REQUEST: ${prompt}` : 'Generate appropriate strength workout.'}`;
 
     // Scale tokens by athlete count
-    const maxTokens = Math.min(2000 + ((athletes?.length || 1) * 1000), 8000);
+    const maxTokens = Math.min(2500 + ((athletes?.length || 1) * 1000), 8000);
 
     const startTime = Date.now();
     const completion = await openai.chat.completions.create({
@@ -130,6 +130,9 @@ export async function handler(event) {
           id: Date.now() + i,
           name: ex.substitution?.replacement || ex.name,
           type: ex.type || 'weight',
+          howTo: ex.howTo || '',
+          cues: Array.isArray(ex.cues) ? ex.cues : [],
+          substitutions: Array.isArray(ex.substitutions) ? ex.substitutions : [],
           sets: (ex.sets || []).map((s, j) => {
             const base = {
               id: Date.now() + i * 100 + j,

@@ -96,7 +96,7 @@ export async function handler(event) {
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 23000 });
     const userPrompt = `Create a group workout:\n\n${contextStr}\n\n${prompt ? `COACH REQUEST: ${prompt}` : 'Generate appropriate strength workout.'}`;
-    const maxTokens = Math.min(2000 + (athletes.length * 1000), 8000);
+    const maxTokens = Math.min(2500 + (athletes.length * 1000), 8000);
 
     const startTime = Date.now();
     const completion = await openai.chat.completions.create({
@@ -171,6 +171,7 @@ async function saveWorkouts(result, athletes, coachId, groupId, groupAdmins, gro
       coachingNotes: result.coachingNotes || '', personalNotes: aw.personalNotes || '',
       exercises: (aw.exercises || []).map((ex, i) => ({
         id: Date.now() + i, name: ex.substitution?.replacement || ex.name, type: ex.type || 'weight',
+        howTo: ex.howTo || '', cues: Array.isArray(ex.cues) ? ex.cues : [], substitutions: Array.isArray(ex.substitutions) ? ex.substitutions : [],
         sets: (ex.sets || []).map((s, j) => {
           const base = { id: Date.now() + i * 100 + j, targetRpe: s.targetRpe || null, rpe: '', painLevel: 0, completed: false };
           if (ex.type === 'time') return { ...base, prescribedTime: String(s.prescribedTime || ''), actualTime: '' };
@@ -314,6 +315,11 @@ EXERCISE TYPES:
 - "bodyweight": prescribedReps only (NO prescribedWeight)
 - "time": prescribedTime (seconds) only
 
+EXERCISE INFO — for each exercise include:
+- "howTo": 1-2 sentence description of how to perform the exercise with correct form
+- "cues": Array of 2-3 short key form cues (brief phrases, not full sentences)
+- "substitutions": Array of 2-3 alternative exercises if equipment is unavailable or the exercise causes discomfort
+
 OUTPUT JSON only, no markdown:
 {
   "name": "Workout Name",
@@ -329,6 +335,9 @@ OUTPUT JSON only, no markdown:
       "exercises": [
         {
           "name": "Bench Press", "type": "weight",
+          "howTo": "Lie flat on bench, grip bar slightly wider than shoulders, lower to mid-chest at ~45° elbow angle, press to lockout.",
+          "cues": ["Shoulder blades squeezed", "Feet driving into floor", "Controlled descent"],
+          "substitutions": ["DB Bench Press", "Floor Press", "Push-ups"],
           "sets": [
             { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 7 },
             { "prescribedReps": 8, "prescribedWeight": 185, "targetRpe": 8 }

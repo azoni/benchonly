@@ -25,6 +25,7 @@ import {
   Trash2,
   Save,
   X,
+  Info,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
@@ -34,6 +35,7 @@ import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import usePageTitle from '../utils/usePageTitle'
 import { apiUrl } from '../utils/platform'
+import ExerciseInfoModal from '../components/ExerciseInfoModal'
 
 // Thinking messages that rotate during AI generation
 const THINKING_MESSAGES = [
@@ -72,6 +74,7 @@ export default function GenerateWorkoutPage() {
   const [editing, setEditing] = useState(false);
   const [swappingIdx, setSwappingIdx] = useState(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [infoExercise, setInfoExercise] = useState(null);
   
   const [analysisSteps, setAnalysisSteps] = useState([]);
   const [currentStep, setCurrentStep] = useState(null);
@@ -1127,7 +1130,13 @@ export default function GenerateWorkoutPage() {
                             />
                           ) : (
                             <div className="flex items-center gap-2">
-                              <h4 className="font-medium text-iron-100">{ex.name}</h4>
+                              <button
+                                onClick={() => setInfoExercise(ex)}
+                                className="font-medium text-iron-100 hover:text-flame-400 transition-colors flex items-center gap-1.5 text-left"
+                              >
+                                {ex.name}
+                                <Info className="w-3.5 h-3.5 text-iron-500 flex-shrink-0" />
+                              </button>
                               {typeTag && (
                                 <span className={`text-xs px-1.5 py-0.5 rounded ${typeTag.color}`}>{typeTag.label}</span>
                               )}
@@ -1217,6 +1226,11 @@ export default function GenerateWorkoutPage() {
           )}
         </div>
       </div>
+      <ExerciseInfoModal
+        exercise={infoExercise}
+        isOpen={!!infoExercise}
+        onClose={() => setInfoExercise(null)}
+      />
     </div>
   );
 }
