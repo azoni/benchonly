@@ -74,18 +74,22 @@ export default function ExerciseInfoModal({ exercise, isOpen, onClose }) {
 
                 {!hasInfo && !exercise.notes && (
                   <p className="text-sm text-iron-500 text-center py-2">
-                    No instructions available.
+                    Watch a tutorial to learn proper form for this exercise.
                   </p>
                 )}
               </div>
 
-              {/* Watch Video — compact */}
+              {/* Watch Video */}
               <div className="px-4 pb-4 pt-1">
                 <a
                   href={youtubeUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 text-sm py-2.5 px-4 rounded-xl bg-iron-800 border border-iron-700 text-iron-200 hover:bg-iron-700 transition-colors"
+                  className={`w-full flex items-center justify-center gap-2 text-sm py-2.5 px-4 rounded-xl transition-colors ${
+                    hasInfo
+                      ? 'bg-iron-800 border border-iron-700 text-iron-200 hover:bg-iron-700'
+                      : 'bg-flame-500/15 border border-flame-500/30 text-flame-300 hover:bg-flame-500/25'
+                  }`}
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   Watch Tutorial

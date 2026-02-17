@@ -21,6 +21,7 @@ import { workoutService, trainerRequestService } from '../services/firestore';
 import CardioForm from '../components/CardioForm';
 import { getTodayString, parseLocalDate, toDateString } from '../utils/dateUtils';
 import { normalizeRepRange } from '../utils/workoutUtils';
+import { useUIStore } from '../store';
 
 const RPE_INFO = {
   title: 'Rate of Perceived Exertion (RPE)',
@@ -87,6 +88,7 @@ export default function NewWorkoutPage() {
   const [searchParams] = useSearchParams();
   const { id: editId } = useParams(); // For edit mode
   const { user, userProfile, updateProfile } = useAuth();
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!!editId);
   const [rpeModalOpen, setRpeModalOpen] = useState(false);
@@ -1115,7 +1117,7 @@ export default function NewWorkoutPage() {
       </div>
 
       {/* Save Button */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-iron-950 via-iron-950/95 to-transparent">
+      <div className={`fixed bottom-0 right-0 p-4 bg-gradient-to-t from-iron-950 via-iron-950/95 to-transparent left-0 ${sidebarOpen ? 'lg:left-64' : 'lg:left-20'} transition-[left] duration-300`}>
         <div className="max-w-3xl mx-auto flex gap-3">
           <button
             onClick={() => navigate(-1)}

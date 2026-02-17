@@ -22,12 +22,14 @@ import {
   AlertCircle,
   ThumbsUp,
   Eye,
+  HelpCircle,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { groupWorkoutService, groupService } from '../services/firestore'
 import { getDisplayDate } from '../utils/dateUtils'
 import usePageTitle from '../utils/usePageTitle'
 import ExerciseInfoModal from '../components/ExerciseInfoModal'
+import { useUIStore } from '../store'
 
 // Calculate estimated 1RM using Epley formula
 const calculateE1RM = (weight, reps) => {
@@ -62,6 +64,7 @@ export default function GroupWorkoutPage() {
   const location = useLocation()
   usePageTitle('Group Workout')
   const { user } = useAuth()
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen)
   const [workout, setWorkout] = useState(null)
   const [group, setGroup] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -535,9 +538,10 @@ export default function GroupWorkoutPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setInfoExercise(exercise)}
-                    className="text-xl font-semibold text-iron-50 hover:text-flame-400 transition-colors text-left"
+                    className="text-xl font-semibold text-iron-50 hover:text-flame-400 transition-colors text-left flex items-center gap-1.5"
                   >
                     {exercise.name}
+                    <HelpCircle className="w-3.5 h-3.5 text-iron-600 flex-shrink-0" />
                   </button>
                   {typeTag && (
                     <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
@@ -665,7 +669,7 @@ export default function GroupWorkoutPage() {
 
         {/* Action Button */}
         {canLog && (
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
+          <div className={`fixed bottom-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800 left-0 ${sidebarOpen ? 'lg:left-64' : 'lg:left-20'} transition-[left] duration-300`}>
             <button
               onClick={() => setIsLogging(true)}
               className={`w-full py-4 text-lg flex items-center justify-center gap-2 ${isCompleted ? 'btn-secondary' : 'btn-primary'}`}
@@ -766,9 +770,10 @@ export default function GroupWorkoutPage() {
             <div className="flex items-center gap-2 mb-3">
               <button
                 onClick={() => setInfoExercise(exercise)}
-                className="font-semibold text-iron-100 text-lg hover:text-flame-400 transition-colors text-left flex-1"
+                className="font-semibold text-iron-100 text-lg hover:text-flame-400 transition-colors text-left flex-1 flex items-center gap-1.5"
               >
                 {exercise.name}
+                <HelpCircle className="w-3.5 h-3.5 text-iron-600 flex-shrink-0" />
               </button>
               {typeTag && (
                 <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
@@ -954,7 +959,7 @@ export default function GroupWorkoutPage() {
       </div>
 
       {/* Bottom Actions */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800">
+      <div className={`fixed bottom-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800 left-0 ${sidebarOpen ? 'lg:left-64' : 'lg:left-20'} transition-[left] duration-300`}>
         <div className="flex gap-3 mb-3">
           <button onClick={() => setIsLogging(false)} className="btn-secondary flex-1 py-3">Cancel</button>
           <button onClick={handleSaveProgress} disabled={saving} className="btn-secondary flex-1 py-3">Save Progress</button>
