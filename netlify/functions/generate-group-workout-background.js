@@ -90,7 +90,14 @@ export async function handler(event) {
               const template = ex.sets[0];
               const baseEx = (result.baseExercises || []).find(b => b.name === ex.name);
               const targetSets = baseEx?.defaultSets || (ex.type === 'time' ? 3 : 4);
-              ex.sets = Array.from({ length: targetSets }, () => ({ ...template }));
+              ex.sets = Array.from({ length: targetSets }, (_, i) => {
+                const s = { ...template };
+                if (i === 0 && targetSets >= 3 && s.prescribedWeight) {
+                  const w = parseFloat(s.prescribedWeight);
+                  if (w > 0) s.prescribedWeight = String(Math.round((w * 0.85) / 5) * 5);
+                }
+                return s;
+              });
             }
             return ex;
           });

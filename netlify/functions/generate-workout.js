@@ -147,11 +147,12 @@ WEIGHT CEILING — CRITICAL:
 - Working sets should feel HARD but COMPLETABLE. Never prescribe weights the user cannot physically lift.
 
 INTENSITY SCALING (% of e1RM):
-- Light (RPE 5-6): 60-70% of e1RM, reps 10-15. Example: 325 e1RM → 195-225 lbs
-- Moderate (RPE 7-8): 70-80% of e1RM, reps 6-10. Example: 325 e1RM → 225-260 lbs
-- Heavy (RPE 8-9): 80-88% of e1RM, reps 3-6. Example: 325 e1RM → 260-285 lbs
-- Max (RPE 9-10): 85-92% of e1RM, reps 1-3. Example: 325 e1RM → 275-300 lbs
+- Light (RPE 5-6): 60-70% of e1RM, reps 10-15
+- Moderate (RPE 7-8): 70-80% of e1RM, reps 6-10
+- Heavy (RPE 8-9): 80-88% of e1RM, reps 3-6
+- Max (RPE 9-10): 85-92% of e1RM, reps 1-3
 Round all weights to the nearest 5 lbs.
+IMPORTANT: The user's context below includes pre-computed TARGET weight ranges for each lift. USE THOSE RANGES — do not calculate your own.
 
 NO TRAINING DATA:
 If the user has NO max lift data at all, set weights very conservatively: bar weight (45 lbs) to 65 lbs for upper body pressing, 95-135 lbs for lower body compounds. Add a prominent note in the workout "notes" field: "No training history available — all weights are set conservatively. Log this workout so future sessions can be personalized to your actual strength." For the 1RM test with no data, start the warm-up at the bar and increase in small increments.
@@ -443,17 +444,39 @@ function buildContext(ctx, focus, intensity, settings = {}, duration = null, exe
     s += `FOCUS: Hotel/travel workout — minimal or no equipment. Assume only bodyweight and maybe a single set of light dumbbells or resistance band. Keep it 20-35 min. Prioritize compound movements and circuits. Set type to 'bodyweight' or 'time' for exercises without weights.\n`;
   } else if (focus && focus !== 'auto') {
     s += `FOCUS: ${focus}\n`;
+  } else {
+    // Auto-detect: analyze recent workouts to suggest what focus is needed
+    const recentFocuses = (ctx?.recentWorkouts || []).slice(0, 5).map(w => (w.name || '').toLowerCase());
+    const hadPush = recentFocuses.some(n => /push|bench|chest|press|tricep/i.test(n));
+    const hadPull = recentFocuses.some(n => /pull|back|row|bicep/i.test(n));
+    const hadLegs = recentFocuses.some(n => /leg|squat|deadlift|hamstring|glute/i.test(n));
+    const suggestions = [];
+    if (!hadPush) suggestions.push('push');
+    if (!hadPull) suggestions.push('pull');
+    if (!hadLegs) suggestions.push('legs');
+    if (suggestions.length > 0) {
+      s += `FOCUS: auto — recent workouts suggest ${suggestions.join(' or ')} is overdue. Prioritize accordingly.\n`;
+    } else {
+      s += `FOCUS: auto — pick the best focus based on recent workout pattern.\n`;
+    }
   }
   
   const intMap = { light: 'Light (RPE 5-6)', moderate: 'Moderate (RPE 7-8)', heavy: 'Heavy (RPE 8-9)', max: 'Max (RPE 9-10)' };
   s += `INTENSITY: ${intMap[intensity] || 'Moderate'}\n\n`;
 
+  // Intensity ranges for pre-computing target weights
+  const intRanges = { light: [0.60, 0.70], moderate: [0.70, 0.80], heavy: [0.80, 0.88], max: [0.85, 0.92] };
+  const range = intRanges[intensity] || intRanges.moderate;
+
   const lifts = Object.entries(ctx?.maxLifts || {});
   if (lifts.length) {
-    s += 'MAX LIFTS (use intensity scaling above, infer weights for related exercises):\n';
+    s += 'MAX LIFTS — with TARGET WEIGHT RANGE for this session\'s intensity:\n';
     lifts.sort((a, b) => b[1].e1rm - a[1].e1rm).slice(0, 15).forEach(([n, d]) => {
-      s += `  ${n}: ${d.e1rm}lb e1RM (best: ${d.weight}lb x ${d.reps})\n`;
+      const lo = Math.round((d.e1rm * range[0]) / 5) * 5;
+      const hi = Math.round((d.e1rm * range[1]) / 5) * 5;
+      s += `  ${n}: e1RM ${d.e1rm}lb (best: ${d.weight}x${d.reps}) → TARGET: ${lo}-${hi} lbs\n`;
     });
+    s += '  ↑ Use these TARGET ranges for working sets. For exercises not listed, infer from related lifts.\n';
     s += '\n';
   } else {
     s += 'MAX LIFTS: No data - use conservative weights and note it\n\n';

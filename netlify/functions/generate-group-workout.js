@@ -145,7 +145,14 @@ function expandSingleSets(result) {
           const t = ex.sets[0];
           const baseEx = (result.baseExercises || []).find(b => b.name === ex.name);
           const n = baseEx?.defaultSets || (ex.type === 'time' ? 3 : 4);
-          ex.sets = Array.from({ length: n }, () => ({ ...t }));
+          ex.sets = Array.from({ length: n }, (_, i) => {
+            const s = { ...t };
+            if (i === 0 && n >= 3 && s.prescribedWeight) {
+              const w = parseFloat(s.prescribedWeight);
+              if (w > 0) s.prescribedWeight = String(Math.round((w * 0.85) / 5) * 5);
+            }
+            return s;
+          });
         }
         return ex;
       });
@@ -226,6 +233,32 @@ STANDARD WORKOUT RULES:
 5. Factor in cardio/activity load when considering recovery
 6. Include coaching notes explaining your reasoning
 
+EXERCISE DATABASE BY FOCUS:
+- PUSH: Bench Press, Incline DB Press, Overhead Press, Dips, Cable Flyes, Lateral Raises, Tricep Pushdowns, Close-Grip Bench, Push Press, DB Shoulder Press, Landmine Press, Skull Crushers
+- PULL: Barbell Rows, Pull-ups, Lat Pulldowns, Cable Rows, Face Pulls, Dumbbell Rows, T-Bar Rows, Chin-ups, Hammer Curls, Barbell Curls, Rear Delt Flyes
+- LEGS: Squats, Romanian Deadlifts, Leg Press, Bulgarian Split Squats, Leg Curls, Leg Extensions, Hip Thrusts, Walking Lunges, Calf Raises, Front Squats, Goblet Squats
+- UPPER: Bench Press, Overhead Press, Barbell Rows, Pull-ups, Incline DB Press, Lateral Raises, Face Pulls, Dumbbell Rows, Tricep Pushdowns, Curls
+- FULL BODY: Squats, Bench Press, Barbell Rows, Overhead Press, Romanian Deadlifts, Pull-ups, Lunges, Dips, Face Pulls, Planks
+- BENCH FOCUS: Bench Press, Close-Grip Bench, Incline Bench, DB Bench, Paused Bench, Spoto Press, Floor Press, Cable Flyes, Tricep Pushdowns, Dips
+Pick exercises from these AND the athletes' existing exercises. Prioritize compound movements.
+
+WEIGHT CALCULATION — USE EACH ATHLETE'S DATA:
+When setting weights, follow this priority:
+1. If athlete has e1RM data for the EXACT exercise: use intensity scaling below
+2. If athlete has data for a RELATED exercise, infer:
+   - Incline Bench ≈ 75-80% of Flat Bench e1RM
+   - Overhead Press ≈ 60-65% of Bench Press e1RM
+   - Barbell Row ≈ 70-80% of Bench Press e1RM
+   - Front Squat ≈ 80-85% of Back Squat e1RM
+   - Romanian Deadlift ≈ 70-75% of Deadlift e1RM
+   - DB variations ≈ 40-45% of barbell e1RM (per hand)
+3. If NO related data: conservative defaults and note it
+
+GROUP COACHING:
+- personalNotes MUST be athlete-specific — reference their recent performance, strengths, or areas to improve
+- If one athlete is significantly stronger, note pairing for work-in logistics
+- Call out specific form cues or RPE targets that differ per athlete
+
 WEIGHT CEILING — CRITICAL:
 - NEVER prescribe working set weight above 90% of e1RM, EVER. The only exception is a 1RM test.
 - e1RM means estimated 1-rep max. You CANNOT do your e1RM for triples. A 325lb e1RM means ~295 for a triple at RPE 9-10.
@@ -233,11 +266,12 @@ WEIGHT CEILING — CRITICAL:
 - Working sets should feel HARD but COMPLETABLE. Prescribing weights the athlete cannot physically lift destroys trust.
 
 INTENSITY SCALING (% of e1RM):
-- Light (RPE 5-6): 60-70% of e1RM, reps 10-15. Example: 325 e1RM → 195-225 lbs
-- Moderate (RPE 7-8): 70-80% of e1RM, reps 6-10. Example: 325 e1RM → 225-260 lbs
-- Heavy (RPE 8-9): 80-88% of e1RM, reps 3-6. Example: 325 e1RM → 260-285 lbs
-- Max (RPE 9-10): 85-92% of e1RM, reps 1-3. Example: 325 e1RM → 275-300 lbs
+- Light (RPE 5-6): 60-70% of e1RM, reps 10-15
+- Moderate (RPE 7-8): 70-80% of e1RM, reps 6-10
+- Heavy (RPE 8-9): 80-88% of e1RM, reps 3-6
+- Max (RPE 9-10): 85-92% of e1RM, reps 1-3
 Round all weights to the nearest 5 lbs.
+IMPORTANT: Each athlete's data below includes pre-computed TARGET weight ranges. USE THOSE RANGES — do not calculate your own.
 
 WEIGHT PROGRESSION FROM LAST SESSION:
 - Completed all reps at RPE 7-8: Add 5 lbs (upper) or 5-10 lbs (lower)
@@ -304,10 +338,17 @@ function buildGroupContext(athletes, settings = {}, focus = 'auto', intensity = 
   s += `INCLUDE_WARMUP: ${includeWarmup ? 'true' : 'false'}\n`;
   s += `INCLUDE_STRETCHES: ${includeStretches ? 'true' : 'false'}\n`;
 
+  const intRanges = { light: [0.60, 0.70], moderate: [0.70, 0.80], heavy: [0.80, 0.88], max: [0.85, 0.92] };
+  const range = intRanges[intensity] || intRanges.moderate;
+
   if (focus === '1rm-test' && maxExercise) {
     s += `\nFOCUS: 1RM TEST for ${maxExercise}\nGenerate a max-attempt session following the 1RM TEST PROTOCOL.\n`;
   } else {
-    if (focus && focus !== 'auto') s += `\nFOCUS: ${focus === 'no-equipment' ? 'Bodyweight only' : focus}\n`;
+    if (focus && focus !== 'auto') {
+      s += `\nFOCUS: ${focus === 'no-equipment' ? 'Bodyweight only' : focus}\n`;
+    } else {
+      s += `\nFOCUS: auto — pick the best focus based on athletes' recent workout patterns.\n`;
+    }
     const intMap = { light: 'Light (RPE 5-6)', moderate: 'Moderate (RPE 7-8)', heavy: 'Heavy (RPE 8-9)', max: 'Max (RPE 9-10)' };
     s += `INTENSITY: ${intMap[intensity] || 'Moderate'}\n`;
     if (duration) s += `TARGET DURATION: ${duration} minutes.\n`;
@@ -319,11 +360,23 @@ function buildGroupContext(athletes, settings = {}, focus = 'auto', intensity = 
     s += `--- ${a.name} (ID: ${a.id}) ---\n`;
     const lifts = Object.entries(a.maxLifts || {});
     if (lifts.length) {
-      s += 'Maxes: ' + lifts.sort((x, y) => y[1].e1rm - x[1].e1rm).slice(0, 6).map(([n, d]) => `${n} ${d.e1rm}lb (${d.weight}x${d.reps})`).join(', ') + '\n';
+      s += 'Maxes (with TARGET weight range for this intensity):\n';
+      lifts.sort((x, y) => y[1].e1rm - x[1].e1rm).slice(0, 6).forEach(([n, d]) => {
+        const lo = Math.round((d.e1rm * range[0]) / 5) * 5;
+        const hi = Math.round((d.e1rm * range[1]) / 5) * 5;
+        s += `  ${n}: e1RM ${d.e1rm}lb (${d.weight}x${d.reps}) → TARGET: ${lo}-${hi} lbs\n`;
+      });
     } else { s += 'Maxes: No data (use conservative weights)\n'; }
 
     const pain = Object.entries(a.painHistory || {}).filter(([_, d]) => d.maxPain >= painMin || d.count >= painCount);
-    if (pain.length) s += 'PAIN: ' + pain.map(([n, d]) => `${n} (${d.maxPain}/10, ${d.count}x)`).join(', ') + '\n';
+    if (pain.length) {
+      s += 'PAIN: ' + pain.map(([n, d]) => {
+        let status = `${d.maxPain}/10, ${d.count}x`;
+        if (d.recentCount > 0) status += ` ACTIVE ${d.lastDaysAgo}d ago`;
+        else if (d.lastDaysAgo != null) status += ` last ${d.lastDaysAgo}d ago`;
+        return `${n} (${status})`;
+      }).join(', ') + '\n';
+    }
 
     const rpe = Object.entries(a.rpeAverages || {});
     if (rpe.length) {
