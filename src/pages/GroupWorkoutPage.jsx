@@ -72,8 +72,6 @@ export default function GroupWorkoutPage() {
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
   const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
 
-  console.log('[DEBUG] GroupWorkoutPage mounted, id:', id, 'URL:', window.location.pathname);
-
   useEffect(() => {
     loadWorkout()
   }, [id])

@@ -316,6 +316,7 @@ export default function Layout() {
               exit={{ opacity: 0, scale: 0.3, y: 20 }}
               transition={{ duration: 0.2 }}
               onClick={() => { navigate('/form-check'); setFabExpanded(false) }}
+              aria-label="Form Check (Beta)"
               className="w-11 h-11 bg-iron-800 border border-iron-700
                 rounded-full shadow-lg flex items-center justify-center transition-colors relative"
             >
@@ -331,6 +332,7 @@ export default function Layout() {
               exit={{ opacity: 0, scale: 0.3, y: 20 }}
               transition={{ duration: 0.2, delay: 0.05 }}
               onClick={() => { toggleChat(); setFabExpanded(false) }}
+              aria-label="Open AI Chat"
               className="w-11 h-11 bg-flame-500
                 rounded-full shadow-lg flex items-center justify-center transition-colors"
             >
@@ -340,6 +342,8 @@ export default function Layout() {
         </AnimatePresence>
         <button
           onClick={() => setFabExpanded(!fabExpanded)}
+          aria-label={fabExpanded ? 'Close menu' : 'Open actions menu'}
+          aria-expanded={fabExpanded}
           className={`w-14 h-14 rounded-full shadow-lg shadow-flame-500/30
             flex items-center justify-center transition-all duration-200
             ${fabExpanded ? 'bg-iron-700 rotate-0' : 'bg-flame-500 hover:bg-flame-600 active:bg-flame-700'}`}

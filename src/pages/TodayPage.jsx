@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -178,10 +178,10 @@ export default function TodayPage() {
     return FORMULAS[calcFormula].calc(w, r)
   }
   const oneRM = calcOneRM()
-  const percentChart = oneRM ? [
+  const percentChart = useMemo(() => oneRM ? [
     { reps: 1, pct: 100 }, { reps: 2, pct: 97 }, { reps: 3, pct: 94 },
     { reps: 5, pct: 89 }, { reps: 8, pct: 81 }, { reps: 10, pct: 75 }, { reps: 12, pct: 69 },
-  ].map(r => ({ ...r, weight: Math.round(oneRM * r.pct / 100) })) : null
+  ].map(r => ({ ...r, weight: Math.round(oneRM * r.pct / 100) })) : null, [oneRM])
 
   const now = new Date()
   const hour = now.getHours()
@@ -555,95 +555,6 @@ export default function TodayPage() {
         )
       })()}
 
-      {/* Pending Reviews */}
-      {pendingReviews.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="mb-6"
-        >
-          <h3 className="text-xs text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Eye className="w-3.5 h-3.5" />
-            Needs Your Review
-          </h3>
-          <div className="space-y-2">
-            {pendingReviews.slice(0, 3).map(review => (
-              <div key={review.id} className="card-steel p-3 border-amber-500/20 bg-amber-500/5 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                  <Eye className="w-5 h-5 text-amber-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-iron-100 truncate">{review.name || 'Group Workout'}</p>
-                  <p className="text-xs text-iron-500">Coach logged for you</p>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button
-                    onClick={() => handleQuickApprove(review.id)}
-                    className="p-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-colors"
-                  >
-                    <ThumbsUp className="w-4 h-4" />
-                  </button>
-                  <Link
-                    to={`/workouts/group/${review.id}`}
-                    className="p-2 bg-iron-800 hover:bg-iron-700 text-iron-300 rounded-lg transition-colors"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Notifications */}
-      {notifications.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="mb-6"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs text-cyan-400 uppercase tracking-wider flex items-center gap-2">
-              <MessageCircle className="w-3.5 h-3.5" />
-              New Activity ({notifications.length})
-            </h3>
-            <button
-              onClick={async () => {
-                await notificationService.markAllAsRead(user.uid)
-                setNotifications([])
-              }}
-              className="text-xs text-iron-500 hover:text-iron-300"
-            >
-              Dismiss all
-            </button>
-          </div>
-          <div className="space-y-2">
-            {notifications.slice(0, 3).map(notif => (
-              <Link
-                key={notif.id}
-                to="/feed"
-                onClick={() => notificationService.markAsRead(notif.id)}
-                className="card-steel p-3 border-cyan-500/20 bg-cyan-500/5 flex items-center gap-3"
-              >
-                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
-                  <MessageCircle className="w-5 h-5 text-cyan-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-iron-100 truncate">
-                    {notif.fromUserName || 'Someone'} commented on your {notif.feedType === 'workout' ? 'workout' : notif.feedType === 'group_workout' ? 'group workout' : 'activity'}
-                  </p>
-                  <p className="text-xs text-iron-500 truncate">"{notif.commentText}"</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
-              </Link>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
       {/* Today's Workout — the hero section */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -674,7 +585,7 @@ export default function TodayPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold text-lg text-iron-100 truncate">{workout.name}</h3>
-                  <span className="px-2 py-0.5 text-xs font-medium bg-cyan-500/20 text-cyan-400 rounded flex-shrink-0">Group</span>
+                  <span className="px-2 py-0.5 text-xs font-medium bg-cyan-500/20 text-cyan-400 rounded-full flex-shrink-0">Group</span>
                 </div>
                 <p className="text-sm text-iron-500 mt-0.5">
                   {workout.exercises?.length || 0} exercises
@@ -762,7 +673,7 @@ export default function TodayPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-lg text-iron-100 truncate">{todayProgramDay.label}</h3>
-                  <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-500/20 text-amber-400 flex-shrink-0">
+                  <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400 flex-shrink-0">
                     {todayProgramDay.type}
                   </span>
                 </div>
@@ -864,6 +775,97 @@ export default function TodayPage() {
         )}
       </motion.div>
 
+      {/* Pending Reviews */}
+      {pendingReviews.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="mb-6"
+        >
+          <h3 className="text-xs text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Eye className="w-3.5 h-3.5" />
+            Needs Your Review
+          </h3>
+          <div className="space-y-2">
+            {pendingReviews.slice(0, 3).map(review => (
+              <div key={review.id} className="card-steel p-3 border-amber-500/20 bg-amber-500/5 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                  <Eye className="w-5 h-5 text-amber-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-iron-100 truncate">{review.name || 'Group Workout'}</p>
+                  <p className="text-xs text-iron-500">Coach logged for you</p>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => handleQuickApprove(review.id)}
+                    aria-label="Approve review"
+                    className="p-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-colors"
+                  >
+                    <ThumbsUp className="w-4 h-4" />
+                  </button>
+                  <Link
+                    to={`/workouts/group/${review.id}`}
+                    aria-label="View review details"
+                    className="p-2 bg-iron-800 hover:bg-iron-700 text-iron-300 rounded-lg transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Notifications */}
+      {notifications.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="mb-6"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+              <MessageCircle className="w-3.5 h-3.5" />
+              New Activity ({notifications.length})
+            </h3>
+            <button
+              onClick={async () => {
+                await notificationService.markAllAsRead(user.uid)
+                setNotifications([])
+              }}
+              className="text-xs text-iron-500 hover:text-iron-300"
+            >
+              Dismiss all
+            </button>
+          </div>
+          <div className="space-y-2">
+            {notifications.slice(0, 3).map(notif => (
+              <Link
+                key={notif.id}
+                to="/feed"
+                onClick={() => notificationService.markAsRead(notif.id)}
+                className="card-steel p-3 border-cyan-500/20 bg-cyan-500/5 flex items-center gap-3"
+              >
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
+                  <MessageCircle className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-iron-100 truncate">
+                    {notif.fromUserName || 'Someone'} commented on your {notif.feedType === 'workout' ? 'workout' : notif.feedType === 'group_workout' ? 'group workout' : 'activity'}
+                  </p>
+                  <p className="text-xs text-iron-500 truncate">"{notif.commentText}"</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-iron-600 flex-shrink-0" />
+              </Link>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
       {/* This Week */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -922,7 +924,8 @@ export default function TodayPage() {
                   </span>
                   <button
                     onClick={handleDayClick}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium transition-colors ${
+                    aria-label={`${format(dayDate, 'EEEE d')}${hadWorkout ? ', completed' : hasScheduled ? ', scheduled' : ''}`}
+                    className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center text-xs font-medium transition-colors relative ${
                       isCurrentDay
                         ? hadWorkout
                           ? 'bg-green-500/20 text-green-400 ring-2 ring-flame-500/30'
@@ -937,6 +940,7 @@ export default function TodayPage() {
                     } ${(dayWorkout || isEmpty) ? 'cursor-pointer hover:ring-2 hover:ring-flame-500/30' : 'cursor-default'}`}
                   >
                     {format(dayDate, 'd')}
+                    {hadWorkout && <Check className="w-2.5 h-2.5 absolute -bottom-0.5" />}
                   </button>
                 </div>
               )
@@ -1016,6 +1020,8 @@ export default function TodayPage() {
       >
         <button
           onClick={() => setNewsOpen(!newsOpen)}
+          aria-expanded={newsOpen}
+          aria-label="What's New — latest features and updates"
           className="card-steel p-4 w-full flex items-center gap-3 hover:border-iron-600 transition-colors"
         >
           <div className="w-9 h-9 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
@@ -1059,6 +1065,8 @@ export default function TodayPage() {
       >
         <button
           onClick={() => setCalcOpen(!calcOpen)}
+          aria-expanded={calcOpen}
+          aria-label="1RM Calculator — estimate your one-rep max"
           className="card-steel p-4 w-full flex items-center gap-3 hover:border-iron-600 transition-colors"
         >
           <div className="w-9 h-9 rounded-lg bg-flame-500/20 flex items-center justify-center flex-shrink-0">
@@ -1130,16 +1138,16 @@ export default function TodayPage() {
                 </div>
 
                 <div className="bg-iron-800/50 rounded-lg overflow-hidden">
-                  <div className="grid grid-cols-3 text-[10px] font-medium text-iron-500 uppercase tracking-wider">
-                    <div className="p-1.5 text-center">Reps</div>
-                    <div className="p-1.5 text-center">%1RM</div>
-                    <div className="p-1.5 text-center">Weight</div>
+                  <div className="grid grid-cols-3 text-xs font-medium text-iron-500 uppercase tracking-wider">
+                    <div className="px-2 py-2 text-center">Reps</div>
+                    <div className="px-2 py-2 text-center">%1RM</div>
+                    <div className="px-2 py-2 text-center">Weight</div>
                   </div>
                   {percentChart.map(({ reps, pct, weight }) => (
                     <div key={reps} className={`grid grid-cols-3 text-sm ${reps === 1 ? 'bg-flame-500/10' : ''}`}>
-                      <div className={`p-1.5 text-center ${reps === 1 ? 'text-flame-400 font-medium' : 'text-iron-400'}`}>{reps}</div>
-                      <div className={`p-1.5 text-center ${reps === 1 ? 'text-flame-400 font-medium' : 'text-iron-500'}`}>{pct}%</div>
-                      <div className={`p-1.5 text-center ${reps === 1 ? 'text-flame-400 font-medium' : 'text-iron-200'}`}>{weight} lbs</div>
+                      <div className={`px-2 py-2 text-center ${reps === 1 ? 'text-flame-400 font-medium' : 'text-iron-400'}`}>{reps}</div>
+                      <div className={`px-2 py-2 text-center ${reps === 1 ? 'text-flame-400 font-medium' : 'text-iron-500'}`}>{pct}%</div>
+                      <div className={`px-2 py-2 text-center ${reps === 1 ? 'text-flame-400 font-medium' : 'text-iron-200'}`}>{weight} lbs</div>
                     </div>
                   ))}
                 </div>
@@ -1258,6 +1266,7 @@ export default function TodayPage() {
           <button
             onClick={handleSubmitFeedback}
             disabled={!feedbackText.trim() || feedbackSending}
+            aria-label={feedbackSending ? 'Sending feedback' : feedbackSent ? 'Feedback sent' : 'Send feedback'}
             className="self-end px-3 py-2 rounded-lg bg-flame-500 hover:bg-flame-600 disabled:bg-iron-700 disabled:text-iron-500 text-white transition-colors flex-shrink-0"
           >
             {feedbackSending ? <Loader2 className="w-4 h-4 animate-spin" /> : feedbackSent ? <Check className="w-4 h-4" /> : <Send className="w-4 h-4" />}
