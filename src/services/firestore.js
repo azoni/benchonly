@@ -1794,7 +1794,10 @@ export const trainerRequestService = {
     // Build max lifts + pain from workouts
     const maxLifts = {};
     const painHistory = {};
+    const now = new Date();
     workouts.slice(0, 20).forEach(w => {
+      const workoutDate = w.date?.toDate ? w.date.toDate() : w.date ? new Date(w.date) : null;
+      const daysSince = workoutDate && !isNaN(workoutDate.getTime()) ? Math.floor((now - workoutDate) / (1000 * 60 * 60 * 24)) : null;
       (w.exercises || []).forEach(ex => {
         if (!ex.name) return;
         (ex.sets || []).forEach(s => {
@@ -1808,9 +1811,15 @@ export const trainerRequestService = {
             }
           }
           if (pain > 0) {
-            if (!painHistory[ex.name]) painHistory[ex.name] = { maxPain: 0, count: 0 };
+            if (!painHistory[ex.name]) painHistory[ex.name] = { maxPain: 0, count: 0, lastDaysAgo: null, recentCount: 0 };
             painHistory[ex.name].count++;
             painHistory[ex.name].maxPain = Math.max(painHistory[ex.name].maxPain, pain);
+            if (daysSince !== null) {
+              if (painHistory[ex.name].lastDaysAgo === null || daysSince < painHistory[ex.name].lastDaysAgo) {
+                painHistory[ex.name].lastDaysAgo = daysSince;
+              }
+              if (daysSince <= 30) painHistory[ex.name].recentCount++;
+            }
           }
         });
       });

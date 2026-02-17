@@ -236,15 +236,39 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
     }
 
     // Post-processing: expand exercises that only have 1 set (AI sometimes gets lazy)
-    // If an exercise has only 1 set, duplicate it to 3 or 4 sets
+    // If an exercise has only 1 set, duplicate it to 3 or 4 sets with basic progression
     if (workout.exercises && Array.isArray(workout.exercises)) {
       workout.exercises = workout.exercises.map(ex => {
         if (ex.sets && ex.sets.length === 1) {
           const template = ex.sets[0];
           const targetSets = ex.type === 'time' ? 3 : 4;
-          ex.sets = Array.from({ length: targetSets }, () => ({ ...template }));
+          ex.sets = Array.from({ length: targetSets }, (_, i) => {
+            const s = { ...template };
+            // First set is a lighter ramp-up for weight exercises
+            if (i === 0 && targetSets >= 3 && s.prescribedWeight) {
+              const w = parseFloat(s.prescribedWeight);
+              if (w > 0) s.prescribedWeight = String(Math.round((w * 0.85) / 5) * 5);
+            }
+            return s;
+          });
         }
         return ex;
+      });
+    }
+
+    // Weight ceiling validation: cap prescribed weights at 90% of e1RM
+    const maxLifts = context?.maxLifts || {};
+    if (workout.exercises && Array.isArray(workout.exercises)) {
+      workout.exercises.forEach(ex => {
+        if (ex.type !== 'weight' || !ex.sets) return;
+        const liftData = maxLifts[ex.name];
+        if (!liftData?.e1rm) return;
+        const cap = Math.round((liftData.e1rm * 0.9) / 5) * 5;
+        ex.sets.forEach(s => {
+          if (s.prescribedWeight && parseFloat(s.prescribedWeight) > cap) {
+            s.prescribedWeight = String(cap);
+          }
+        });
       });
     }
 
@@ -495,7 +519,14 @@ function buildContext(ctx, focus, intensity, settings = {}, duration = null, exe
   // Include Oura Ring recovery data
   if (ctx?.ouraData) {
     const { latest, averages } = ctx.ouraData;
-    s += 'OURA RING DATA (adjust workout intensity based on recovery):\n';
+    // Check data freshness
+    const ouraDate = latest?.readiness?.day || latest?.sleep?.day;
+    let stale = false;
+    if (ouraDate) {
+      const daysOld = Math.floor((Date.now() - new Date(ouraDate).getTime()) / (1000 * 60 * 60 * 24));
+      stale = daysOld > 7;
+    }
+    s += `OURA RING DATA${stale ? ' (⚠ DATA >7 DAYS OLD — may not reflect current recovery)' : ''} (adjust workout intensity based on recovery):\n`;
     if (latest?.readiness?.score) {
       s += `  Readiness Score: ${latest.readiness.score}/100`;
       if (latest.readiness.score < 70) s += ' (LOW - consider reducing intensity)';

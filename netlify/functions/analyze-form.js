@@ -86,7 +86,8 @@ export async function handler(event) {
 
   try {
     const body = JSON.parse(event.body);
-    const { frames, timestamps, note, targetUserId, model, quality } = body;
+    const { frames, timestamps, note: rawNote, exercise, targetUserId, model, quality } = body;
+    const note = rawNote ? rawNote.replace(/[\n\r]/g, ' ').slice(0, 200).trim() : '';
     jobId = body.jobId;
     userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
 
@@ -136,6 +137,7 @@ export async function handler(event) {
         frameCount: frames.length,
         chunkCount: chunks.length,
         note: note || '',
+        exercise: exercise || '',
         model: isPremium ? 'premium' : 'standard',
         imageDetail,
         creditCost,
@@ -188,6 +190,7 @@ export async function handler(event) {
 
     const content = [];
     let userText = `Analyze these ${frames.length} sequential frames from a workout video.`;
+    if (exercise) userText += `\n\nExercise: ${exercise}. Focus your analysis on form cues specific to this movement.`;
     if (note) userText += `\n\nUser note: "${note}"`;
     const duration = timestamps?.length >= 2 ? timestamps[timestamps.length - 1] : null;
     userText += `\n\nFrames are numbered 1-${frames.length} in chronological order${duration ? `, spanning ${duration}s of video` : ''}.`;
@@ -233,6 +236,17 @@ export async function handler(event) {
     try {
       const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
       analysis = JSON.parse(cleaned);
+      // Validate and coerce response fields
+      if (analysis) {
+        analysis.overallScore = Number(analysis.overallScore) || 0;
+        analysis.repsDetected = Number(analysis.repsDetected) || 1;
+        if (!Array.isArray(analysis.keyStrengths)) analysis.keyStrengths = [];
+        if (!Array.isArray(analysis.keyIssues)) analysis.keyIssues = [];
+        if (!Array.isArray(analysis.recommendations)) analysis.recommendations = [];
+        if (!Array.isArray(analysis.injuryRisks)) analysis.injuryRisks = [];
+        if (!Array.isArray(analysis.frames)) analysis.frames = [];
+        analysis.frames = analysis.frames.map(f => ({ ...f, formScore: Number(f.formScore) || 0 }));
+      }
     } catch (parseErr) {
       console.error('Failed to parse form analysis JSON:', parseErr.message);
       analysis = null;

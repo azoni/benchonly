@@ -206,6 +206,7 @@ export default function FormCheckPage() {
   const [videoUrl, setVideoUrl] = useState(null)
   const [frames, setFrames] = useState([])
   const [note, setNote] = useState('')
+  const [exercise, setExercise] = useState('')
   const [model, setModel] = useState('standard')
   const [quality, setQuality] = useState('standard')
   const [extractProgress, setExtractProgress] = useState(0)
@@ -579,6 +580,7 @@ export default function FormCheckPage() {
           frames: frames.map(f => f.base64),
           timestamps: frames.map(f => Math.round(f.timestamp * 10) / 10),
           note: note.trim() || undefined,
+          exercise: exercise || undefined,
           model: isPremium ? 'premium' : 'standard',
           quality,
         }),
@@ -764,8 +766,26 @@ export default function FormCheckPage() {
           <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileSelect} className="hidden" aria-label="Upload video" />
 
           <div>
+            <label className="text-sm text-iron-400 mb-1.5 block">Exercise (optional)</label>
+            <select value={exercise} onChange={(e) => setExercise(e.target.value)}
+              className="input-field w-full" aria-label="Exercise selection">
+              <option value="">Auto-detect</option>
+              <option value="Bench Press">Bench Press</option>
+              <option value="Squat">Squat</option>
+              <option value="Deadlift">Deadlift</option>
+              <option value="Overhead Press">Overhead Press</option>
+              <option value="Barbell Row">Barbell Row</option>
+              <option value="Pull-up">Pull-up</option>
+              <option value="Romanian Deadlift">Romanian Deadlift</option>
+              <option value="Front Squat">Front Squat</option>
+              <option value="Hip Thrust">Hip Thrust</option>
+              <option value="Lunges">Lunges</option>
+            </select>
+          </div>
+
+          <div>
             <label className="text-sm text-iron-400 mb-1.5 block">Note (optional)</label>
-            <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200}
               placeholder="e.g., checking squat depth, elbow pain on bench..."
               className="input-field w-full" aria-label="Analysis note" />
           </div>
@@ -1076,8 +1096,8 @@ export default function FormCheckPage() {
 
                 <div className="absolute top-3 left-3 flex items-center gap-2">
                   <span className="text-xs text-white bg-black/60 backdrop-blur-sm px-2 py-1 rounded-lg font-medium">{activeFrame + 1}/{frames.length}</span>
-                  {cfa && (cfa.formScore > 0
-                    ? <span className={`text-xs font-bold px-2 py-1 rounded-lg backdrop-blur-sm ${scoreBg(cfa.formScore)} ${scoreColor(cfa.formScore)}`}>{cfa.formScore}/10</span>
+                  {cfa && (Number(cfa.formScore) > 0
+                    ? <span className={`text-xs font-bold px-2 py-1 rounded-lg backdrop-blur-sm ${scoreBg(Number(cfa.formScore))} ${scoreColor(Number(cfa.formScore))}`}>{cfa.formScore}/10</span>
                     : <span className="text-xs font-medium px-2 py-1 rounded-lg backdrop-blur-sm bg-iron-700/80 text-iron-400">Not scored</span>
                   )}
                 </div>
