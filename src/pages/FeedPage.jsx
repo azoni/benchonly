@@ -49,6 +49,7 @@ export default function FeedPage() {
   const [friendSet, setFriendSet] = useState(new Set())
   const [userGroupIds, setUserGroupIds] = useState(new Set())
   const [feedFilter, setFeedFilter] = useState('all') // 'all' | 'friends' | 'mine'
+  const [typeFilter, setTypeFilter] = useState('all') // 'all' | 'workout' | 'cardio' | 'personal_record' | 'goal_completed'
   const [expandedItems, setExpandedItems] = useState(new Set())
   const [copying, setCopying] = useState(null)
 
@@ -289,14 +290,22 @@ export default function FeedPage() {
     ? visibleItems.filter(item => friendSet.has(item.userId) || item.userId === user?.uid)
     : visibleItems.filter(item => item.userId === user?.uid) // 'mine'
 
+  const typeFilteredItems = typeFilter === 'all'
+    ? tabFilteredItems
+    : typeFilter === 'workout'
+    ? tabFilteredItems.filter(item => item.type === 'workout' || item.type === 'group_workout')
+    : typeFilter === 'goal_completed'
+    ? tabFilteredItems.filter(item => item.type === 'goal_completed' || item.type === 'goal_created')
+    : tabFilteredItems.filter(item => item.type === typeFilter)
+
   const filteredItems = searchQuery
-    ? tabFilteredItems.filter(item => {
+    ? typeFilteredItems.filter(item => {
         const userName = users[item.userId]?.displayName?.toLowerCase() || ''
         const activityName = item.data?.name?.toLowerCase() || ''
         const q = searchQuery.toLowerCase()
         return userName.includes(q) || activityName.includes(q)
       })
-    : tabFilteredItems
+    : typeFilteredItems
 
   if (isGuest) {
     return (
@@ -346,7 +355,7 @@ export default function FeedPage() {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 mb-6">
+      <div className="flex items-center gap-2 mb-3">
         {[
           { key: 'all', label: 'All', icon: Globe },
           { key: 'friends', label: 'Friends', icon: Users },
@@ -364,6 +373,27 @@ export default function FeedPage() {
             <tab.icon className="w-3.5 h-3.5" />
             {tab.label}
           </button>
+        ))}
+      </div>
+
+      {/* Type Filter */}
+      <div className="flex items-center gap-1.5 mb-6 overflow-x-auto pb-1">
+        {[
+          { key: 'all', label: 'All' },
+          { key: 'workout', label: 'Workouts' },
+          { key: 'cardio', label: 'Cardio' },
+          { key: 'personal_record', label: 'PRs' },
+          { key: 'goal_completed', label: 'Goals' },
+        ].map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTypeFilter(t.key)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+              typeFilter === t.key
+                ? 'bg-iron-700 text-iron-100'
+                : 'text-iron-500 hover:text-iron-300'
+            }`}
+          >{t.label}</button>
         ))}
       </div>
 

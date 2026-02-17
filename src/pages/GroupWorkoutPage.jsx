@@ -90,6 +90,7 @@ export default function GroupWorkoutPage() {
             ...ex,
             type: getExerciseType(ex),
             notes: ex.notes || '',
+            userNotes: ex.userNotes || '',
             sets: ex.sets?.map(set => ({ ...set })) || []
           })))
         }
@@ -585,6 +586,7 @@ export default function GroupWorkoutPage() {
                           ) : !isCompleted ? (
                             <span className="text-2xl font-bold text-iron-100">
                               {set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'}
+                              {set.targetRpe && <span className="text-sm text-iron-500 font-normal ml-2">@ RPE {set.targetRpe}</span>}
                             </span>
                           ) : (
                             <>
@@ -606,25 +608,42 @@ export default function GroupWorkoutPage() {
                             </>
                           )}
                         </div>
-                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                          {set.targetRpe && !set.rpe && (
-                            <span className="text-xs text-iron-500">Target RPE {set.targetRpe}</span>
-                          )}
-                          {set.rpe && <span className={`text-sm font-semibold ${getRPEColor(set.rpe)}`}>RPE {set.rpe}</span>}
-                          {set.painLevel > 0 && (
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(set.painLevel)}`}>Pain {set.painLevel}</span>
-                          )}
-                        </div>
                       </div>
                     </div>
                   )
                 })}
               </div>
+              {/* Exercise-level RPE & Pain */}
+              {isCompleted && (exercise.rpe || exercise.painLevel > 0 || exercise.sets?.some(s => s.rpe || s.painLevel > 0)) && (
+                <div className="px-4 pb-2 flex items-center gap-3">
+                  {(exercise.rpe || exercise.sets?.some(s => s.rpe)) && (
+                    <span className={`text-sm font-semibold ${getRPEColor(exercise.rpe || Math.max(...(exercise.sets || []).map(s => parseFloat(s.rpe) || 0)))}`}>
+                      RPE {exercise.rpe || Math.max(...(exercise.sets || []).map(s => parseFloat(s.rpe) || 0))}
+                    </span>
+                  )}
+                  {(exercise.painLevel > 0 || exercise.sets?.some(s => s.painLevel > 0)) && (
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(exercise.painLevel || Math.max(...(exercise.sets || []).map(s => s.painLevel || 0)))}`}>
+                      Pain {exercise.painLevel || Math.max(...(exercise.sets || []).map(s => s.painLevel || 0))}
+                    </span>
+                  )}
+                </div>
+              )}
               {exercise.notes && (
-                <div className="px-4 pb-4">
+                <div className="px-4 pb-2">
                   <div className="flex items-start gap-2 bg-iron-800/30 rounded-lg p-3">
                     <MessageSquare className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" />
                     <p className="text-sm text-iron-400">{exercise.notes}</p>
+                  </div>
+                </div>
+              )}
+              {exercise.userNotes && (
+                <div className="px-4 pb-4">
+                  <div className="flex items-start gap-2 bg-flame-500/5 border border-flame-500/10 rounded-lg p-3">
+                    <MessageSquare className="w-4 h-4 text-flame-400/60 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-iron-500 mb-0.5">Your Notes</p>
+                      <p className="text-sm text-iron-400">{exercise.userNotes}</p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -852,40 +871,6 @@ export default function GroupWorkoutPage() {
                       </div>
                     </div>
                   )}
-
-                  {/* RPE & Pain pills */}
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="flex items-center gap-1">
-                      <label className="text-[10px] text-iron-500 uppercase tracking-wider w-6">RPE</label>
-                      {[7, 8, 9, 10].map(v => (
-                        <button
-                          key={v}
-                          onClick={() => updateSet(exerciseIndex, setIndex, 'rpe', set.rpe == v ? '' : String(v))}
-                          className={`w-7 h-7 text-xs rounded-md border transition-colors ${
-                            set.rpe == v
-                              ? 'border-flame-500 bg-flame-500/15 text-flame-400 font-semibold'
-                              : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
-                          }`}
-                        >{v}</button>
-                      ))}
-                    </div>
-                    <div className="w-px h-5 bg-iron-700/50 flex-shrink-0" />
-                    <div className="flex items-center gap-1">
-                      <label className="text-[10px] text-iron-500 uppercase tracking-wider w-7">Pain</label>
-                      {[1, 2, 3, 4, 5].map(v => (
-                        <button
-                          key={v}
-                          onClick={() => updateSet(exerciseIndex, setIndex, 'painLevel', (set.painLevel || 0) === v ? 0 : v)}
-                          className={`w-7 h-7 text-xs rounded-md border transition-colors ${
-                            (set.painLevel || 0) === v
-                              ? v <= 2 ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 font-semibold'
-                                : 'border-red-500/50 bg-red-500/10 text-red-400 font-semibold'
-                              : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
-                          }`}
-                        >{v}</button>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               )})}
             </div>
@@ -900,6 +885,51 @@ export default function GroupWorkoutPage() {
               <Plus className="w-4 h-4" />
               Add Set
             </button>
+
+            {/* RPE & Pain — per exercise */}
+            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-iron-800/50">
+              <div className="flex items-center gap-1">
+                <label className="text-[10px] text-iron-500 uppercase tracking-wider w-6">RPE</label>
+                {[7, 8, 9, 10].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      setExercises(prev => {
+                        const n = [...prev]
+                        n[exerciseIndex] = { ...n[exerciseIndex], rpe: n[exerciseIndex].rpe == v ? '' : String(v) }
+                        return n
+                      })
+                    }}
+                    className={`w-7 h-7 text-xs rounded-md border transition-colors ${
+                      exercise.rpe == v
+                        ? 'border-flame-500 bg-flame-500/15 text-flame-400 font-semibold'
+                        : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
+                    }`}
+                  >{v}</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1">
+                <label className="text-[10px] text-iron-500 uppercase tracking-wider w-7">Pain</label>
+                {[1, 2, 3, 4, 5].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      setExercises(prev => {
+                        const n = [...prev]
+                        n[exerciseIndex] = { ...n[exerciseIndex], painLevel: (n[exerciseIndex].painLevel || 0) === v ? 0 : v }
+                        return n
+                      })
+                    }}
+                    className={`w-7 h-7 text-xs rounded-md border transition-colors ${
+                      (exercise.painLevel || 0) === v
+                        ? v <= 2 ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 font-semibold'
+                          : 'border-red-500/50 bg-red-500/10 text-red-400 font-semibold'
+                        : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
+                    }`}
+                  >{v}</button>
+                ))}
+              </div>
+            </div>
 
             {/* Exercise Notes */}
             <textarea

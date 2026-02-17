@@ -22,6 +22,8 @@ import {
   Layers,
   Megaphone,
   Heart,
+  Send,
+  Loader2,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -80,6 +82,12 @@ export default function TodayPage() {
 
   // News & Updates state
   const [newsOpen, setNewsOpen] = useState(false)
+
+  // Feedback state
+  const [feedbackText, setFeedbackText] = useState('')
+  const [feedbackCategory, setFeedbackCategory] = useState('general')
+  const [feedbackSending, setFeedbackSending] = useState(false)
+  const [feedbackSent, setFeedbackSent] = useState(false)
 
   const APP_UPDATES = [
     {
@@ -445,6 +453,31 @@ export default function TodayPage() {
   const hasTodayWorkout = todayWorkouts.length > 0 || todayGroupWorkouts.length > 0 || todaySchedules.length > 0 || todayProgramDay
   const allCompleted = todayWorkouts.length > 0 && todayWorkouts.every(w => w.status === 'completed' || w.status !== 'scheduled')
 
+  const handleSubmitFeedback = async () => {
+    if (!feedbackText.trim() || !user) return
+    setFeedbackSending(true)
+    try {
+      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
+      const { db } = await import('../services/firebase')
+      await addDoc(collection(db, 'feedback'), {
+        userId: user.uid,
+        userName: userProfile?.displayName || user?.displayName || 'Unknown',
+        category: feedbackCategory,
+        message: feedbackText.trim(),
+        status: 'new',
+        createdAt: serverTimestamp(),
+      })
+      setFeedbackText('')
+      setFeedbackSent(true)
+      setTimeout(() => setFeedbackSent(false), 3000)
+    } catch (e) {
+      console.error('Failed to submit feedback:', e)
+      alert('Failed to send feedback. Please try again.')
+    } finally {
+      setFeedbackSending(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
@@ -654,25 +687,26 @@ export default function TodayPage() {
         ))}
 
         {/* Personal workouts for today */}
-        {todayWorkouts.map(workout => (
+        {todayWorkouts.map(workout => {
+          const isDone = workout.status === 'completed' || workout.status !== 'scheduled'
+          const isProgram = !!workout.programId
+          const borderColor = isDone ? 'border-green-500/20 hover:border-green-500/40'
+            : isProgram ? 'border-purple-500/20 hover:border-purple-500/40'
+            : 'border-flame-500/20 hover:border-flame-500/40'
+          const iconBg = isDone ? 'bg-green-500/10' : isProgram ? 'bg-purple-500/10' : 'bg-flame-500/10'
+          const iconColor = isDone ? 'text-green-400' : isProgram ? 'text-purple-400' : 'text-flame-400'
+          return (
           <Link
             key={workout.id}
             to={`/workouts/${workout.id}`}
-            className={`card-steel p-5 mb-3 transition-colors block ${
-              workout.status === 'completed' || workout.status !== 'scheduled'
-                ? 'border-green-500/20 hover:border-green-500/40'
-                : 'border-flame-500/20 hover:border-flame-500/40'
-            }`}
+            className={`card-steel p-5 mb-3 transition-colors block ${borderColor}`}
           >
             <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-                workout.status === 'completed' || workout.status !== 'scheduled'
-                  ? 'bg-green-500/10' : 'bg-flame-500/10'
-              }`}>
-                {workout.status === 'completed' || workout.status !== 'scheduled' ? (
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+                {isDone ? (
                   <Check className="w-7 h-7 text-green-400" />
                 ) : (
-                  <Dumbbell className="w-7 h-7 text-flame-400" />
+                  <Dumbbell className={`w-7 h-7 ${iconColor}`} />
                 )}
               </div>
               <div className="flex-1 min-w-0">
@@ -681,13 +715,14 @@ export default function TodayPage() {
                   {workout.workoutType === 'cardio'
                     ? `${workout.duration} min`
                     : `${workout.exercises?.length || 0} exercises`}
-                  {(workout.status === 'completed' || workout.status !== 'scheduled') && ' · Completed'}
+                  {isDone && ' · Completed'}
+                  {isProgram && !isDone && ' · Program'}
                 </p>
               </div>
               <ChevronRight className="w-5 h-5 text-iron-600" />
             </div>
           </Link>
-        ))}
+        )})}
 
         {/* Recurring schedules for today (no doc to link to) */}
         {todaySchedules.length > 0 && todayGroupWorkouts.length === 0 && todayWorkouts.length === 0 && (
@@ -1189,6 +1224,48 @@ export default function TodayPage() {
         </motion.div>
       ) : null
       })()}
+
+      {/* Feedback & Bugs */}
+      {!isGuest && (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+        className="mt-6 card-steel p-4"
+      >
+        <h3 className="text-sm font-semibold text-iron-300 mb-3">Feedback & Bugs</h3>
+        <div className="flex gap-2 mb-2">
+          {['bug', 'feature', 'general'].map(cat => (
+            <button
+              key={cat}
+              onClick={() => setFeedbackCategory(cat)}
+              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors capitalize ${
+                feedbackCategory === cat
+                  ? cat === 'bug' ? 'border-red-500/50 bg-red-500/10 text-red-400 font-semibold'
+                    : cat === 'feature' ? 'border-blue-500/50 bg-blue-500/10 text-blue-400 font-semibold'
+                    : 'border-flame-500/50 bg-flame-500/10 text-flame-400 font-semibold'
+                  : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
+              }`}
+            >{cat}</button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <textarea
+            value={feedbackText}
+            onChange={(e) => setFeedbackText(e.target.value)}
+            placeholder={feedbackCategory === 'bug' ? "Describe the bug..." : feedbackCategory === 'feature' ? "What would you like to see?" : "Any thoughts or feedback..."}
+            rows={2}
+            className="flex-1 input-field text-sm resize-none"
+          />
+          <button
+            onClick={handleSubmitFeedback}
+            disabled={!feedbackText.trim() || feedbackSending}
+            className="self-end px-3 py-2 rounded-lg bg-flame-500 hover:bg-flame-600 disabled:bg-iron-700 disabled:text-iron-500 text-white transition-colors flex-shrink-0"
+          >
+            {feedbackSending ? <Loader2 className="w-4 h-4 animate-spin" /> : feedbackSent ? <Check className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+          </button>
+        </div>
+        {feedbackSent && <p className="text-xs text-green-400 mt-1.5">Thanks for your feedback!</p>}
+      </motion.div>
+      )}
 
       {/* Special Event Modal */}
       {showEventModal && activeEvent && (

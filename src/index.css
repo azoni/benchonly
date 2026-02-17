@@ -93,6 +93,10 @@
   }
   
   /* Date input calendar icon */
+  input[type="date"] {
+    @apply py-2 px-3 text-sm;
+  }
+  
   input[type="date"]::-webkit-calendar-picker-indicator {
     filter: invert(0.7);
     cursor: pointer;

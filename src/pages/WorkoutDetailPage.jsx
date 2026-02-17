@@ -214,6 +214,14 @@ export default function WorkoutDetailPage() {
     })
   }
 
+  const updateExerciseField = (exerciseIndex, field, value) => {
+    setExercises(prev => {
+      const newExercises = [...prev]
+      newExercises[exerciseIndex] = { ...newExercises[exerciseIndex], [field]: value }
+      return newExercises
+    })
+  }
+
   const addSet = (exerciseIndex) => {
     setExercises(prev => {
       const newExercises = [...prev]
@@ -366,7 +374,7 @@ export default function WorkoutDetailPage() {
 
   const isScheduled = workout.status === 'scheduled'
   const hasPartialData = isScheduled && (workout.userNotes || workout.exercises?.some(ex => 
-    ex.userNotes || ex.sets?.some(s => s.actualWeight || s.actualReps || s.actualTime || s.rpe)
+    ex.userNotes || ex.rpe || ex.painLevel > 0 || ex.sets?.some(s => s.actualWeight || s.actualReps || s.actualTime || s.rpe)
   ))
   const isCardio = workout.workoutType === 'cardio'
   const backLabel = location.state?.fromLabel || 'Back'
@@ -676,6 +684,7 @@ export default function WorkoutDetailPage() {
                               /* SCHEDULED: Show target prominently */
                               <div className="text-2xl font-bold text-iron-100">
                                 {set.prescribedWeight || '—'} lbs <span className="text-iron-500">×</span> {set.prescribedReps || '—'} reps
+                                {set.targetRpe && <span className="text-sm text-iron-500 font-normal ml-2">@ RPE {set.targetRpe}</span>}
                               </div>
                             ) : (
                               /* COMPLETED: Show target small, actual big */
@@ -700,27 +709,27 @@ export default function WorkoutDetailPage() {
                               </>
                             )}
                           </div>
-                          
-                          {/* RPE & Pain */}
-                          {!isScheduled && (
-                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                              {set.rpe && (
-                                <span className={`text-sm font-semibold ${getRPEColor(set.rpe)}`}>
-                                  RPE {set.rpe}
-                                </span>
-                              )}
-                              {set.painLevel > 0 && (
-                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(set.painLevel)}`}>
-                                  Pain {set.painLevel}
-                                </span>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </div>
                     )
                   })}
                 </div>
+                
+                {/* Exercise-level RPE & Pain */}
+                {!isScheduled && (exercise.rpe || exercise.painLevel > 0 || exercise.sets?.some(s => s.rpe || s.painLevel > 0)) && (
+                  <div className="px-4 pb-2 flex items-center gap-3">
+                    {(exercise.rpe || exercise.sets?.some(s => s.rpe)) && (
+                      <span className={`text-sm font-semibold ${getRPEColor(exercise.rpe || Math.max(...(exercise.sets || []).map(s => parseFloat(s.rpe) || 0)))}`}>
+                        RPE {exercise.rpe || Math.max(...(exercise.sets || []).map(s => parseFloat(s.rpe) || 0))}
+                      </span>
+                    )}
+                    {(exercise.painLevel > 0 || exercise.sets?.some(s => s.painLevel > 0)) && (
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPainColor(exercise.painLevel || Math.max(...(exercise.sets || []).map(s => s.painLevel || 0)))}`}>
+                        Pain {exercise.painLevel || Math.max(...(exercise.sets || []).map(s => s.painLevel || 0))}
+                      </span>
+                    )}
+                  </div>
+                )}
                 
                 {/* Exercise Notes */}
                 {exercise.notes && (
@@ -958,39 +967,6 @@ export default function WorkoutDetailPage() {
                       </div>
                     </div>
                   )}
-                  
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="flex items-center gap-1">
-                      <label className="text-[10px] text-iron-500 uppercase tracking-wider w-6">RPE</label>
-                      {[7, 8, 9, 10].map(v => (
-                        <button
-                          key={v}
-                          onClick={() => updateSet(exerciseIndex, setIndex, 'rpe', set.rpe == v ? '' : String(v))}
-                          className={`w-7 h-7 text-xs rounded-md border transition-colors ${
-                            set.rpe == v
-                              ? 'border-flame-500 bg-flame-500/15 text-flame-400 font-semibold'
-                              : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
-                          }`}
-                        >{v}</button>
-                      ))}
-                    </div>
-                    <div className="w-px h-5 bg-iron-700/50 flex-shrink-0" />
-                    <div className="flex items-center gap-1">
-                      <label className="text-[10px] text-iron-500 uppercase tracking-wider w-7">Pain</label>
-                      {[1, 2, 3, 4, 5].map(v => (
-                        <button
-                          key={v}
-                          onClick={() => updateSet(exerciseIndex, setIndex, 'painLevel', (set.painLevel || 0) === v ? 0 : v)}
-                          className={`w-7 h-7 text-xs rounded-md border transition-colors ${
-                            (set.painLevel || 0) === v
-                              ? v <= 2 ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 font-semibold'
-                                : 'border-red-500/50 bg-red-500/10 text-red-400 font-semibold'
-                              : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
-                          }`}
-                        >{v}</button>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               )})}
             </div>
@@ -1005,6 +981,39 @@ export default function WorkoutDetailPage() {
               <Plus className="w-4 h-4" />
               Add Set
             </button>
+
+            {/* RPE & Pain — per exercise */}
+            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-iron-800/50">
+              <div className="flex items-center gap-1">
+                <label className="text-[10px] text-iron-500 uppercase tracking-wider w-6">RPE</label>
+                {[7, 8, 9, 10].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => updateExerciseField(exerciseIndex, 'rpe', exercise.rpe == v ? '' : String(v))}
+                    className={`w-7 h-7 text-xs rounded-md border transition-colors ${
+                      exercise.rpe == v
+                        ? 'border-flame-500 bg-flame-500/15 text-flame-400 font-semibold'
+                        : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
+                    }`}
+                  >{v}</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1">
+                <label className="text-[10px] text-iron-500 uppercase tracking-wider w-7">Pain</label>
+                {[1, 2, 3, 4, 5].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => updateExerciseField(exerciseIndex, 'painLevel', (exercise.painLevel || 0) === v ? 0 : v)}
+                    className={`w-7 h-7 text-xs rounded-md border transition-colors ${
+                      (exercise.painLevel || 0) === v
+                        ? v <= 2 ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 font-semibold'
+                          : 'border-red-500/50 bg-red-500/10 text-red-400 font-semibold'
+                        : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
+                    }`}
+                  >{v}</button>
+                ))}
+              </div>
+            </div>
             
             {/* Coach Notes (read-only) */}
             {exercise.notes && (

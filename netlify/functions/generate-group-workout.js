@@ -22,7 +22,7 @@ export async function handler(event) {
   let creditCost = 0;
 
   try {
-    const { groupId, athletes, prompt, workoutDate, model, workoutFocus, intensity, duration, exerciseCount, maxExercise, jobId } = JSON.parse(event.body);
+    const { groupId, athletes, prompt, workoutDate, model, workoutFocus, intensity, duration, exerciseCount, maxExercise, includeWarmup = true, includeStretches = false, jobId } = JSON.parse(event.body);
     const coachId = auth.uid;
 
     creditCost = model === 'premium' ? 100 : (athletes?.length || 1) * 5;
@@ -55,7 +55,7 @@ export async function handler(event) {
       }
     } catch (e) { console.error('Failed to fetch group:', e); }
 
-    const contextStr = buildGroupContext(athletes, { painThresholdMin: 3, painThresholdCount: 2 }, workoutFocus, intensity, duration, exerciseCount, maxExercise);
+    const contextStr = buildGroupContext(athletes, { painThresholdMin: 3, painThresholdCount: 2 }, workoutFocus, intensity, duration, exerciseCount, maxExercise, includeWarmup, includeStretches);
     const systemPrompt = buildSystemPrompt();
 
     // ─── Store job and invoke background function ───
@@ -249,7 +249,12 @@ NO TRAINING DATA:
 If an athlete has NO max lift data, set weights very conservatively (bar weight or 50-65 lbs upper, 95-135 lbs lower). Note: "No training history — weights set conservatively."
 
 WARM-UP GUIDANCE:
-For the first compound lift, include warm-up ramp sets in exercise "notes" per athlete.
+If the context specifies INCLUDE_WARMUP: true, add a "Warm-up" exercise as the FIRST exercise with type "time", 2-3 sets of 60-90 seconds of dynamic movements. Describe in "notes".
+If INCLUDE_WARMUP is false, skip it but still include warm-up ramp sets in the "notes" of the first compound lift per athlete.
+
+STRETCHING GUIDANCE:
+If the context specifies INCLUDE_STRETCHES: true, add a "Cool-down Stretches" exercise as the LAST exercise with type "time", 2-3 sets of 45-60 seconds of static stretches targeting muscles worked. Describe in "notes".
+If INCLUDE_STRETCHES is false, skip it.
 
 DURATION & EXERCISE COUNT:
 If specified, respect it. Adjust total volume to fit.
@@ -292,10 +297,12 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects matching defaultSets
 For pain substitutions: "substitution": { "reason": "shoulder pain", "original": "Bench Press", "replacement": "Floor Press" }`;
 }
 
-function buildGroupContext(athletes, settings = {}, focus = 'auto', intensity = 'moderate', duration = null, exerciseCount = null, maxExercise = null) {
+function buildGroupContext(athletes, settings = {}, focus = 'auto', intensity = 'moderate', duration = null, exerciseCount = null, maxExercise = null, includeWarmup = true, includeStretches = false) {
   const painMin = settings.painThresholdMin || 3;
   const painCount = settings.painThresholdCount || 2;
   let s = `GROUP: ${athletes.length} athletes\n`;
+  s += `INCLUDE_WARMUP: ${includeWarmup ? 'true' : 'false'}\n`;
+  s += `INCLUDE_STRETCHES: ${includeStretches ? 'true' : 'false'}\n`;
 
   if (focus === '1rm-test' && maxExercise) {
     s += `\nFOCUS: 1RM TEST for ${maxExercise}\nGenerate a max-attempt session following the 1RM TEST PROTOCOL.\n`;

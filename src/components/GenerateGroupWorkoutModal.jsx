@@ -66,6 +66,8 @@ export default function GenerateGroupWorkoutModal({
   const [duration, setDuration] = useState('auto');
   const [exerciseCount, setExerciseCount] = useState('auto');
   const [maxExercise, setMaxExercise] = useState('');
+  const [includeWarmup, setIncludeWarmup] = useState(true);
+  const [includeStretches, setIncludeStretches] = useState(false);
   
   // Analysis tracking
   const [analysisSteps, setAnalysisSteps] = useState([]);
@@ -327,6 +329,7 @@ export default function GenerateGroupWorkoutModal({
           duration: duration !== 'auto' ? parseInt(duration) : null,
           exerciseCount: exerciseCount !== 'auto' ? parseInt(exerciseCount) : null,
           maxExercise: workoutFocus === '1rm-test' ? maxExercise : null,
+          includeWarmup, includeStretches,
           jobId,
         }),
       });
@@ -439,6 +442,8 @@ export default function GenerateGroupWorkoutModal({
   const handleClose = () => {
     setPrompt('');
     setModel('standard');
+    setIncludeWarmup(true);
+    setIncludeStretches(false);
     setResult(null);
     setError(null);
     setAnalysisSteps([]);
@@ -828,6 +833,24 @@ export default function GenerateGroupWorkoutModal({
                         </div>
                       </div>
                     </div>
+
+                    {/* Warm-up & Stretches toggles */}
+                    {workoutFocus !== '1rm-test' && (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setIncludeWarmup(!includeWarmup)}
+                        className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors text-center ${
+                          includeWarmup ? 'border-flame-500/50 bg-flame-500/10 text-flame-400 font-semibold' : 'border-iron-700 text-iron-500 hover:border-iron-600'
+                        }`}
+                      >Warm-up</button>
+                      <button
+                        onClick={() => setIncludeStretches(!includeStretches)}
+                        className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors text-center ${
+                          includeStretches ? 'border-flame-500/50 bg-flame-500/10 text-flame-400 font-semibold' : 'border-iron-700 text-iron-500 hover:border-iron-600'
+                        }`}
+                      >Stretches</button>
+                    </div>
+                    )}
 
                     {/* Athletes */}
                     <div>

@@ -109,6 +109,7 @@ export default function GenerateWorkoutPage() {
   const [duration, setDuration] = useState('auto');
   const [exerciseCount, setExerciseCount] = useState('auto');
   const [includeWarmup, setIncludeWarmup] = useState(true);
+  const [includeStretches, setIncludeStretches] = useState(false);
   const [maxExercise, setMaxExercise] = useState('');
   const [workoutDate, setWorkoutDate] = useState(() => {
     const dateParam = searchParams.get('date')
@@ -383,7 +384,7 @@ export default function GenerateWorkoutPage() {
         headers: authHeaders,
         body: JSON.stringify({
           prompt, workoutFocus, intensity,
-          model, includeWarmup,
+          model, includeWarmup, includeStretches,
           duration: duration !== 'auto' ? parseInt(duration) : null,
           exerciseCount: exerciseCount !== 'auto' ? parseInt(exerciseCount) : null,
           maxExercise: workoutFocus === '1rm-test' ? maxExercise : null,
@@ -816,11 +817,11 @@ export default function GenerateWorkoutPage() {
               </div>
             </div>
           ) : !generatedWorkout ? (
-            <div className="card-steel rounded-xl p-6">
-              <h3 className="font-medium text-iron-200 mb-4">Workout Options</h3>
+            <div className="card-steel rounded-xl p-4">
+              <h3 className="font-medium text-iron-200 mb-3">Workout Options</h3>
               
               {!loadingContext && Object.keys(userContext.maxLifts).length === 0 && (
-                <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
+                <div className="mb-3 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-sm text-amber-300">No training data yet</p>
@@ -829,18 +830,18 @@ export default function GenerateWorkoutPage() {
                 </div>
               )}
               
-              <div className="mb-4">
-                <label className="block text-sm text-iron-400 mb-2">Describe your workout (optional)</label>
+              <div className="mb-3">
+                <label className="block text-sm text-iron-400 mb-1.5">Describe your workout (optional)</label>
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="e.g., 'Heavy bench day with tricep accessories' or 'Similar to last week but more volume'"
-                  className="input-field w-full min-h-[80px] resize-none"
+                  placeholder="e.g., 'Heavy bench day with tricep accessories'"
+                  className="input-field w-full min-h-[60px] resize-none text-sm"
                 />
               </div>
               
-              <div className="mb-4">
-                <label className="block text-sm text-iron-400 mb-2">Style</label>
+              <div className="mb-3">
+                <label className="block text-sm text-iron-400 mb-1.5">Style</label>
                 <div className="flex flex-wrap gap-2">
                   {focusOptions.map(opt => (
                     <button
@@ -894,24 +895,21 @@ export default function GenerateWorkoutPage() {
 
               {/* Intensity — hidden for 1RM test */}
               {workoutFocus !== '1rm-test' && (
-              <div className="mb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <label className="text-sm text-iron-400">Intensity</label>
-                  <span className="text-[10px] text-iron-600 bg-iron-800/80 px-1.5 py-0.5 rounded" title="Rate of Perceived Exertion — 10 is max effort, 8 means you had ~2 more reps in you">RPE = effort out of 10</span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="mb-3">
+                <label className="text-sm text-iron-400 mb-1.5 block">Intensity</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {intensityOptions.map(opt => (
                     <button
                       key={opt.value}
                       onClick={() => setIntensity(opt.value)}
-                      className={`px-3 py-2 text-sm rounded-lg border transition-colors text-center
+                      className={`px-2 py-1.5 text-xs rounded-lg border transition-colors text-center
                         ${intensity === opt.value
                           ? 'border-flame-500 bg-flame-500/10 text-flame-400'
                           : 'border-iron-700 text-iron-400 hover:border-iron-600'
                         }`}
                     >
                       <div className="font-medium">{opt.label}</div>
-                      <div className="text-xs text-iron-500">{opt.desc}</div>
+                      <div className="text-[10px] text-iron-500">{opt.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -920,13 +918,12 @@ export default function GenerateWorkoutPage() {
 
               {/* Duration & Exercises — hidden for 1RM test */}
               {workoutFocus !== '1rm-test' && (
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-sm text-iron-400 mb-2">Duration</label>
+                  <label className="block text-sm text-iron-400 mb-1.5">Duration</label>
                   <div className="flex flex-wrap gap-1.5">
                     {[
                       { value: 'auto', label: 'Auto' },
-                      { value: '15', label: '15m' },
                       { value: '20', label: '20m' },
                       { value: '30', label: '30m' },
                       { value: '45', label: '45m' },
@@ -948,7 +945,7 @@ export default function GenerateWorkoutPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-iron-400 mb-2">Exercises</label>
+                  <label className="block text-sm text-iron-400 mb-1.5">Exercises</label>
                   <div className="flex flex-wrap gap-1.5">
                     {[
                       { value: 'auto', label: 'Auto' },
@@ -975,25 +972,27 @@ export default function GenerateWorkoutPage() {
               </div>
               )}
               
-              {/* Warm-up toggle — hidden for 1RM test */}
+              {/* Warm-up & Stretches — hidden for 1RM test */}
               {workoutFocus !== '1rm-test' && (
-              <div className="mb-4 flex items-center justify-between p-3 bg-iron-800/30 rounded-xl border border-iron-700/50">
-                <div>
-                  <p className="text-sm text-iron-300 font-medium">Include Warm-up</p>
-                  <p className="text-xs text-iron-500">Adds a quick warm-up before your first exercise</p>
-                </div>
+              <div className="flex gap-2 mb-3">
                 <button
                   onClick={() => setIncludeWarmup(!includeWarmup)}
-                  className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${includeWarmup ? 'bg-flame-500' : 'bg-iron-700'}`}
-                >
-                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${includeWarmup ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
-                </button>
+                  className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors text-center ${
+                    includeWarmup ? 'border-flame-500/50 bg-flame-500/10 text-flame-400 font-semibold' : 'border-iron-700 text-iron-500 hover:border-iron-600'
+                  }`}
+                >Warm-up</button>
+                <button
+                  onClick={() => setIncludeStretches(!includeStretches)}
+                  className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors text-center ${
+                    includeStretches ? 'border-flame-500/50 bg-flame-500/10 text-flame-400 font-semibold' : 'border-iron-700 text-iron-500 hover:border-iron-600'
+                  }`}
+                >Stretches</button>
               </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
-                  <label className="block text-sm text-iron-400 mb-2">Workout Date</label>
+                  <label className="block text-sm text-iron-400 mb-1.5">Workout Date</label>
                   <input
                     type="date"
                     value={workoutDate}
@@ -1002,7 +1001,7 @@ export default function GenerateWorkoutPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-iron-400 mb-2">AI Model</label>
+                  <label className="block text-sm text-iron-400 mb-1.5">AI Model</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => setModel('standard')}

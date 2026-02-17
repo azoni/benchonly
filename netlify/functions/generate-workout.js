@@ -26,7 +26,7 @@ export async function handler(event) {
   let creditCost = 5;
 
   try {
-    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId, duration, exerciseCount, maxExercise, includeWarmup } = JSON.parse(event.body);
+    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId, duration, exerciseCount, maxExercise, includeWarmup, includeStretches } = JSON.parse(event.body);
     // Use targetUserId only if caller is admin (for impersonation)
     const userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
     // Enforce admin-only premium model
@@ -53,7 +53,7 @@ export async function handler(event) {
       painThresholdCount: 2,
     };
 
-    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings, duration, exerciseCount, maxExercise, includeWarmup);
+    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings, duration, exerciseCount, maxExercise, includeWarmup, includeStretches);
 
     const systemPrompt = `You are an expert strength coach. Create a personalized workout.
 
@@ -76,6 +76,14 @@ If INCLUDE_WARMUP is true, the FIRST exercise in the workout should be a quick g
 - Keep it under 5 minutes total
 - In the exercise "notes", describe the movements: "Light dynamic stretching: arm circles 20x, leg swings 10/side, hip circles 10/side, band pull-aparts 15x"
 If INCLUDE_WARMUP is false, skip the warm-up exercise entirely.
+
+STRETCHING GUIDANCE:
+If INCLUDE_STRETCHES is true, add a "Cool-down Stretches" exercise as the LAST exercise:
+- Name it "Cool-down Stretches" with type "time"
+- Include 2-3 sets of static stretches (30-60s holds targeting muscles worked)
+- Set prescribedTime to 45-60 seconds per set
+- In the exercise "notes", list specific stretches: e.g. "Chest doorway stretch 30s/side, Lat stretch 30s/side, Hip flexor stretch 30s/side, Hamstring stretch 30s/side"
+If INCLUDE_STRETCHES is false, skip the stretching exercise entirely.
 
 For the first COMPOUND lift (bench, squat, OHP, deadlift), include ramp-up sets in the exercise "notes" field. Example:
 "Warm-up: Bar x10, 95x8, 135x5, 185x3 → working sets"
@@ -121,7 +129,7 @@ Pick from these AND the user's existing exercises. Prioritize compound movements
 
 WEIGHT CALCULATION — CRITICAL:
 When setting weights, follow this priority:
-1. If user has e1RM data for the EXACT exercise: use 70-85% of e1RM based on intensity
+1. If user has e1RM data for the EXACT exercise: use intensity scaling below
 2. If user has data for a RELATED exercise, infer the weight:
    - Incline Bench ≈ 75-80% of Flat Bench e1RM
    - Overhead Press ≈ 60-65% of Bench Press e1RM
@@ -132,11 +140,17 @@ When setting weights, follow this priority:
    - Close-grip/Paused variations ≈ 85-90% of standard e1RM
 3. If NO related data exists: use conservative defaults (45-95 lbs upper, 95-135 lbs lower) and note it.
 
-INTENSITY SCALING:
-- Light (RPE 5-6): Use 60-70% of e1RM, higher reps (10-15)
-- Moderate (RPE 7-8): Use 70-80% of e1RM, moderate reps (8-12)
-- Heavy (RPE 8-9): Use 80-88% of e1RM, lower reps (4-6)
-- Max (RPE 9-10): Use 85-95% of e1RM, very low reps (1-3)
+WEIGHT CEILING — CRITICAL:
+- NEVER prescribe working set weight above 90% of e1RM, EVER. The only exception is a 1RM test.
+- e1RM means estimated 1-rep max. You CANNOT do your e1RM for triples. A 325lb e1RM means ~295 for a hard triple.
+- If user did 295x3 last session, do NOT jump to 305-325x3. Add 5 lbs max (300x3) or keep the same.
+- Working sets should feel HARD but COMPLETABLE. Never prescribe weights the user cannot physically lift.
+
+INTENSITY SCALING (% of e1RM):
+- Light (RPE 5-6): 60-70% of e1RM, reps 10-15. Example: 325 e1RM → 195-225 lbs
+- Moderate (RPE 7-8): 70-80% of e1RM, reps 6-10. Example: 325 e1RM → 225-260 lbs
+- Heavy (RPE 8-9): 80-88% of e1RM, reps 3-6. Example: 325 e1RM → 260-285 lbs
+- Max (RPE 9-10): 85-92% of e1RM, reps 1-3. Example: 325 e1RM → 275-300 lbs
 Round all weights to the nearest 5 lbs.
 
 NO TRAINING DATA:
@@ -365,14 +379,15 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
   }
 }
 
-function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null, maxExercise = null, includeWarmup = true) {
+function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null, maxExercise = null, includeWarmup = true, includeStretches = false) {
   const painThresholdMin = settings.painThresholdMin || 3;
   const painThresholdCount = settings.painThresholdCount || 2;
   
   let s = '';
 
   // Warm-up preference
-  s += `INCLUDE_WARMUP: ${includeWarmup ? 'true' : 'false'}\n\n`;
+  s += `INCLUDE_WARMUP: ${includeWarmup ? 'true' : 'false'}\n`;
+  s += `INCLUDE_STRETCHES: ${includeStretches ? 'true' : 'false'}\n\n`;
 
   // 1RM test mode
   if (focus === '1rm-test' && maxExercise) {

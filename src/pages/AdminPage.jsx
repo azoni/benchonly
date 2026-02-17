@@ -20,7 +20,7 @@ import {
   Save,
   Zap
 } from 'lucide-react'
-import { ClipboardList, Loader2 } from 'lucide-react'
+import { ClipboardList, Loader2, MessageCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { collection, getDocs, query, orderBy, limit, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../services/firebase'
@@ -47,13 +47,17 @@ export default function AdminPage() {
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [showWorkoutModal, setShowWorkoutModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
-  const [activeTab, setActiveTab] = useState('users') // 'users', 'activity', 'usage', 'settings', or 'trainers'
+  const [activeTab, setActiveTab] = useState('users') // 'users', 'activity', 'usage', 'settings', 'trainers', or 'feedback'
   const [activityData, setActivityData] = useState(null)
 
   // Trainer management state
   const [trainerApplications, setTrainerApplications] = useState([])
   const [trainerAppsLoading, setTrainerAppsLoading] = useState(false)
   const [trainerActionLoading, setTrainerActionLoading] = useState(null)
+
+  // Feedback state
+  const [feedbackItems, setFeedbackItems] = useState([])
+  const [feedbackLoading, setFeedbackLoading] = useState(false)
   
   // AI Settings state
   const [aiSettings, setAiSettings] = useState({
@@ -238,7 +242,32 @@ export default function AdminPage() {
     if (activeTab === 'trainers' && trainerApplications.length === 0) {
       loadTrainerApplications()
     }
+    if (activeTab === 'feedback' && feedbackItems.length === 0) {
+      loadFeedback()
+    }
   }, [activeTab])
+
+  const loadFeedback = async () => {
+    setFeedbackLoading(true)
+    try {
+      const q = query(collection(db, 'feedback'), orderBy('createdAt', 'desc'), limit(50))
+      const snap = await getDocs(q)
+      setFeedbackItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    } catch (e) {
+      console.error('Failed to load feedback:', e)
+    } finally {
+      setFeedbackLoading(false)
+    }
+  }
+
+  const updateFeedbackStatus = async (feedbackId, status) => {
+    try {
+      await updateDoc(doc(db, 'feedback', feedbackId), { status })
+      setFeedbackItems(prev => prev.map(f => f.id === feedbackId ? { ...f, status } : f))
+    } catch (e) {
+      console.error('Failed to update feedback:', e)
+    }
+  }
 
   const loadTrainerApplications = async () => {
     setTrainerAppsLoading(true)
@@ -511,6 +540,17 @@ export default function AdminPage() {
         >
           <ClipboardList className="w-4 h-4" />
           Trainers
+        </button>
+        <button
+          onClick={() => setActiveTab('feedback')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
+            activeTab === 'feedback'
+              ? 'bg-flame-500 text-white'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <MessageCircle className="w-4 h-4" />
+          Feedback
         </button>
       </div>
 
@@ -1631,6 +1671,64 @@ export default function AdminPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ═══════ FEEDBACK TAB ═══════ */}
+      {activeTab === 'feedback' && (
+        <div className="max-w-2xl space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg text-iron-100">User Feedback</h2>
+            <button onClick={loadFeedback} className="text-xs text-iron-500 hover:text-iron-300 transition-colors">
+              Refresh
+            </button>
+          </div>
+          {feedbackLoading ? (
+            <div className="flex items-center gap-2 text-sm text-iron-500 py-8">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading feedback...
+            </div>
+          ) : feedbackItems.length === 0 ? (
+            <div className="card-steel p-8 text-center">
+              <MessageCircle className="w-10 h-10 text-iron-700 mx-auto mb-2" />
+              <p className="text-sm text-iron-500">No feedback yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {feedbackItems.map(fb => (
+                <div key={fb.id} className={`card-steel p-4 border-l-2 ${
+                  fb.category === 'bug' ? 'border-l-red-500' : fb.category === 'feature' ? 'border-l-blue-500' : 'border-l-flame-500'
+                }`}>
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 text-[10px] uppercase tracking-wider rounded font-semibold ${
+                        fb.category === 'bug' ? 'bg-red-500/15 text-red-400'
+                        : fb.category === 'feature' ? 'bg-blue-500/15 text-blue-400'
+                        : 'bg-flame-500/15 text-flame-400'
+                      }`}>{fb.category}</span>
+                      <span className="text-sm text-iron-300 font-medium">{fb.userName || 'Unknown'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs text-iron-600">
+                        {fb.createdAt?.toDate ? format(fb.createdAt.toDate(), 'MMM d, h:mm a') : ''}
+                      </span>
+                      <select
+                        value={fb.status || 'new'}
+                        onChange={(e) => updateFeedbackStatus(fb.id, e.target.value)}
+                        className="text-xs bg-iron-800 border border-iron-700 rounded px-1.5 py-0.5 text-iron-400"
+                      >
+                        <option value="new">New</option>
+                        <option value="read">Read</option>
+                        <option value="done">Done</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-sm text-iron-300 whitespace-pre-wrap">{fb.message}</p>
+                  <p className="text-[10px] text-iron-600 mt-1">{fb.userId}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
