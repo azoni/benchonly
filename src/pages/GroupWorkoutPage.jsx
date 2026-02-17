@@ -535,10 +535,9 @@ export default function GroupWorkoutPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setInfoExercise(exercise)}
-                    className="text-xl font-semibold text-iron-50 hover:text-flame-400 transition-colors flex items-center gap-2 text-left"
+                    className="text-xl font-semibold text-iron-50 hover:text-flame-400 transition-colors text-left"
                   >
                     {exercise.name}
-                    <Info className="w-4 h-4 text-iron-500 flex-shrink-0" />
                   </button>
                   {typeTag && (
                     <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
@@ -767,10 +766,9 @@ export default function GroupWorkoutPage() {
             <div className="flex items-center gap-2 mb-3">
               <button
                 onClick={() => setInfoExercise(exercise)}
-                className="font-semibold text-iron-100 text-lg hover:text-flame-400 transition-colors flex items-center gap-1.5 text-left flex-1"
+                className="font-semibold text-iron-100 text-lg hover:text-flame-400 transition-colors text-left flex-1"
               >
                 {exercise.name}
-                <Info className="w-3.5 h-3.5 text-iron-500 flex-shrink-0" />
               </button>
               {typeTag && (
                 <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>

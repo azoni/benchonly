@@ -26,7 +26,6 @@ import {
   Sparkles,
   RefreshCw,
   Loader2,
-  Info,
 } from 'lucide-react'
 import { workoutService } from '../services/firestore'
 import { getAuthHeaders } from '../services/api'
@@ -623,10 +622,9 @@ export default function WorkoutDetailPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setInfoExercise(exercise)}
-                      className="text-xl font-bold text-iron-50 hover:text-flame-400 transition-colors flex items-center gap-2 text-left flex-1"
+                      className="text-xl font-bold text-iron-50 hover:text-flame-400 transition-colors text-left flex-1"
                     >
                       {exercise.name}
-                      <Info className="w-4 h-4 text-iron-500 flex-shrink-0" />
                     </button>
                     {isTimeExercise && (
                       <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded">Time</span>
@@ -859,10 +857,9 @@ export default function WorkoutDetailPage() {
             <div className="flex items-center gap-2 mb-3">
               <button
                 onClick={() => setInfoExercise(exercise)}
-                className="font-semibold text-iron-100 text-lg hover:text-flame-400 transition-colors flex items-center gap-1.5 text-left flex-1"
+                className="font-semibold text-iron-100 text-lg hover:text-flame-400 transition-colors text-left flex-1"
               >
                 {exercise.name}
-                <Info className="w-3.5 h-3.5 text-iron-500 flex-shrink-0" />
               </button>
               {typeTag && (
                 <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>

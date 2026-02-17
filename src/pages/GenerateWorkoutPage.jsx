@@ -25,7 +25,6 @@ import {
   Trash2,
   Save,
   X,
-  Info,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
@@ -1132,10 +1131,9 @@ export default function GenerateWorkoutPage() {
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => setInfoExercise(ex)}
-                                className="font-medium text-iron-100 hover:text-flame-400 transition-colors flex items-center gap-1.5 text-left"
+                                className="font-medium text-iron-100 hover:text-flame-400 transition-colors text-left"
                               >
                                 {ex.name}
-                                <Info className="w-3.5 h-3.5 text-iron-500 flex-shrink-0" />
                               </button>
                               {typeTag && (
                                 <span className={`text-xs px-1.5 py-0.5 rounded ${typeTag.color}`}>{typeTag.label}</span>
