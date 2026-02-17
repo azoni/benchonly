@@ -30,6 +30,7 @@ import { friendService, FRIEND_STATUS } from '../services/friendService'
 import { toDateString } from '../utils/dateUtils'
 import { collection, getDocs } from 'firebase/firestore'
 import { db } from '../services/firebase'
+import usePageTitle from '../utils/usePageTitle'
 
 function FriendButton({ friendStatus, loading, onAction }) {
   if (!friendStatus) return null
@@ -58,6 +59,7 @@ function FriendButton({ friendStatus, loading, onAction }) {
 
 export default function ProfilePage() {
   const { userId: handle } = useParams() // Can be username or uid
+  usePageTitle('Profile')
   const { user: currentUser, isRealAdmin } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -188,26 +190,39 @@ export default function ProfilePage() {
 
       // Calculate maxes from workout history
       const maxes = { bench: 0, squat: 0, deadlift: 0 }
+      const bestSets = { bench: null, squat: null, deadlift: null }
+      
+      const calcE1RM = (w, r) => {
+        if (!w || !r || r < 1) return 0
+        if (r === 1) return w
+        return Math.round(w * (1 + r / 30))
+      }
       
       allCompletedWorkouts.forEach(workout => {
         if (workout.exercises) {
           workout.exercises.forEach(exercise => {
             const name = exercise.name?.toLowerCase() || ''
+            let liftKey = null
+            
+            if (name.includes('bench') && !name.includes('incline') && !name.includes('decline')) {
+              liftKey = 'bench'
+            } else if (name.includes('squat') && !name.includes('front') && !name.includes('hack')) {
+              liftKey = 'squat'
+            } else if (name.includes('deadlift') && !name.includes('romanian') && !name.includes('rdl') && !name.includes('stiff')) {
+              liftKey = 'deadlift'
+            }
+            
+            if (!liftKey) return
             
             exercise.sets?.forEach(set => {
               const weight = parseFloat(set.actualWeight) || parseFloat(set.prescribedWeight) || 0
+              const reps = parseInt(set.actualReps) || parseInt(set.prescribedReps) || 1
               
-              // Match bench press variations
-              if (name.includes('bench') && !name.includes('incline') && !name.includes('decline')) {
-                maxes.bench = Math.max(maxes.bench, weight)
-              }
-              // Match squat variations
-              else if (name.includes('squat') && !name.includes('front') && !name.includes('hack')) {
-                maxes.squat = Math.max(maxes.squat, weight)
-              }
-              // Match deadlift variations
-              else if (name.includes('deadlift') && !name.includes('romanian') && !name.includes('rdl') && !name.includes('stiff')) {
-                maxes.deadlift = Math.max(maxes.deadlift, weight)
+              maxes[liftKey] = Math.max(maxes[liftKey], weight)
+              
+              const e1rm = calcE1RM(weight, reps)
+              if (!bestSets[liftKey] || e1rm > bestSets[liftKey].e1rm) {
+                bestSets[liftKey] = { weight, reps, e1rm }
               }
             })
           })
@@ -219,7 +234,8 @@ export default function ProfilePage() {
         bench: maxes.bench,
         squat: maxes.squat,
         deadlift: maxes.deadlift,
-        total: maxes.bench + maxes.squat + maxes.deadlift
+        total: maxes.bench + maxes.squat + maxes.deadlift,
+        bestSets,
       })
 
       // Load goals
@@ -811,37 +827,31 @@ export default function ProfilePage() {
       {/* Maxes */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="card-steel p-4 text-center">
-            <p className="text-xs text-iron-500 mb-1">Bench Press</p>
-            <p className="text-2xl font-display text-flame-400">
-              {stats.bench > 0 ? `${stats.bench}` : '—'}
-            </p>
-            <p className="text-xs text-iron-600">lbs</p>
-          </div>
-          
-          <div className="card-steel p-4 text-center">
-            <p className="text-xs text-iron-500 mb-1">Squat</p>
-            <p className="text-2xl font-display text-purple-400">
-              {stats.squat > 0 ? `${stats.squat}` : '—'}
-            </p>
-            <p className="text-xs text-iron-600">lbs</p>
-          </div>
-          
-          <div className="card-steel p-4 text-center">
-            <p className="text-xs text-iron-500 mb-1">Deadlift</p>
-            <p className="text-2xl font-display text-green-400">
-              {stats.deadlift > 0 ? `${stats.deadlift}` : '—'}
-            </p>
-            <p className="text-xs text-iron-600">lbs</p>
-          </div>
-          
-          <div className="card-steel p-4 text-center">
-            <p className="text-xs text-iron-500 mb-1">Total</p>
-            <p className="text-2xl font-display text-yellow-400">
-              {stats.total > 0 ? `${stats.total}` : '—'}
-            </p>
-            <p className="text-xs text-iron-600">lbs</p>
-          </div>
+          {[
+            { label: 'Bench Press', key: 'bench', color: 'text-flame-400', value: stats.bench },
+            { label: 'Squat', key: 'squat', color: 'text-purple-400', value: stats.squat },
+            { label: 'Deadlift', key: 'deadlift', color: 'text-green-400', value: stats.deadlift },
+            { label: 'Total', key: 'total', color: 'text-yellow-400', value: stats.total },
+          ].map(lift => {
+            const best = lift.key !== 'total' ? stats.bestSets?.[lift.key] : null
+            const hasE1rm = best && best.e1rm && best.reps > 1
+            return (
+              <div key={lift.key} className="card-steel p-4 text-center relative group cursor-default">
+                <p className="text-xs text-iron-500 mb-1">{lift.label}</p>
+                <p className={`text-2xl font-display ${lift.color}`}>
+                  {lift.value > 0 ? `${lift.value}` : '—'}
+                </p>
+                <p className="text-xs text-iron-600">lbs</p>
+                {hasE1rm && (
+                  <div className="absolute inset-0 bg-iron-900/95 rounded-xl flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none">
+                    <p className="text-[10px] text-iron-500 uppercase tracking-wider">Est. 1RM</p>
+                    <p className={`text-2xl font-display ${lift.color}`}>{best.e1rm}</p>
+                    <p className="text-[10px] text-iron-500">from {best.weight}×{best.reps}</p>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
