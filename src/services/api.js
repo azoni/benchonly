@@ -133,6 +133,55 @@ class APIService {
     }
   }
 
+  async askAssistantStream(message, context = {}, onDelta, onComplete, onError) {
+    try {
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${this.baseUrl}/ask-assistant-stream`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ message, context }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Stream failed (${response.status})`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.error) {
+              onError(data.error);
+            } else if (data.done) {
+              if (data.usage) {
+                tokenUsageService.log(data.usage).catch(console.error);
+              }
+              onComplete(data);
+            } else if (data.delta) {
+              onDelta(data.delta);
+            }
+          } catch {}
+        }
+      }
+    } catch (error) {
+      console.error('Stream error:', error);
+      onError(error.message || 'Stream failed');
+    }
+  }
+
   // Get token usage from Firestore
   async getTokenUsage() {
     return tokenUsageService.getSummary();

@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, Loader2, Sparkles, Bot, User, Plus, Dumbbell } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, Bot, User, Plus, Dumbbell, ChevronDown } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { useUIStore } from '../store';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { workoutService, goalService, healthService, userService, scheduleService, recurringActivityService, creditService, CREDIT_COSTS } from '../services/firestore';
 import { collection, query, where, limit, getDocs, doc, getDoc, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -39,7 +41,11 @@ export default function AIChatPanel() {
       return { ...rateData, dailyCount: dailyData.count, dailyResetTime: dailyData.resetTime };
     } catch { return { count: 0, resetTime: null }; }
   });
+  const keyboardHeight = useKeyboardHeight();
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
 
   const RATE_LIMIT_WINDOW = 60 * 60 * 1000;
@@ -54,8 +60,33 @@ export default function AIChatPanel() {
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (isAtBottom) {
+      scrollToBottom();
+    } else if (messages.length > 0) {
+      setHasNewMessages(true);
+    }
   }, [messages]);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const atBottom = scrollHeight - scrollTop - clientHeight < 50;
+      setIsAtBottom(atBottom);
+      if (atBottom) setHasNewMessages(false);
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [chatOpen]);
+
+  useEffect(() => {
+    if (keyboardHeight > 0) {
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [keyboardHeight]);
 
   useEffect(() => {
     if (chatOpen) {
@@ -473,35 +504,100 @@ export default function AIChatPanel() {
     setMessages((prev) => [...prev, { role: 'user', content: messageText }]);
     setLoading(true);
 
+    incrementRateLimit();
+
+    if (user?.uid && !isAdmin) {
+      updateProfile({ credits: credits - creditCost });
+    }
+
+    const chatContext = {
+      userId: user?.uid,
+      personality: userProfile?.chatPersonality || 'coach',
+      ...(context || {}),
+    };
+
     try {
-      incrementRateLimit();
+      // Add empty assistant message for streaming
+      setMessages((prev) => [...prev, { role: 'assistant', content: '', streaming: true }]);
 
-      if (user?.uid && !isAdmin) {
-        // Credits deducted server-side — just update local display
-        updateProfile({ credits: credits - creditCost });
+      let streamFailed = false;
+
+      await api.askAssistantStream(
+        messageText,
+        chatContext,
+        // onDelta — append text progressively
+        (delta) => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            updated[updated.length - 1] = { ...last, content: last.content + delta };
+            return updated;
+          });
+        },
+        // onComplete — finalize with workout data
+        (data) => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            const cleanContent = last.content.replace(/```workout[\s\S]*?```/g, '').trim();
+            updated[updated.length - 1] = {
+              ...last,
+              content: cleanContent,
+              workout: data.workout,
+              streaming: false,
+            };
+            return updated;
+          });
+          setLoading(false);
+        },
+        // onError — fallback to non-streaming
+        (error) => {
+          console.warn('Stream failed, falling back:', error);
+          streamFailed = true;
+        }
+      );
+
+      // Fallback: if stream failed, use the regular endpoint
+      if (streamFailed) {
+        // Remove the empty streaming message
+        setMessages((prev) => prev.filter((m) => !(m.role === 'assistant' && m.streaming)));
+
+        const response = await api.askAssistant(messageText, chatContext);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: response.message, workout: response.workout },
+        ]);
+        setLoading(false);
       }
-
-      const response = await api.askAssistant(messageText, {
-        userId: user?.uid,
-        personality: userProfile?.chatPersonality || 'coach',
-        ...(context || {}),
-      });
-
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: response.message, workout: response.workout },
-      ]);
     } catch (error) {
       if (user?.uid && !isAdmin) {
-        // Server refunds on failure — restore local display
         updateProfile({ credits: credits });
       }
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: "Sorry, I couldn't process that. Please try again." },
-      ]);
-    } finally {
+      // Clean up any streaming message
+      setMessages((prev) => {
+        const filtered = prev.filter((m) => !(m.role === 'assistant' && m.streaming && !m.content));
+        return [
+          ...filtered,
+          ...(filtered[filtered.length - 1]?.streaming
+            ? [] // there's partial content, mark it as done
+            : [{ role: 'assistant', content: "Sorry, I couldn't process that. Please try again." }]),
+        ];
+      });
       setLoading(false);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    setInput(e.target.value);
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
     }
   };
 
@@ -510,6 +606,9 @@ export default function AIChatPanel() {
     if (!input.trim() || loading) return;
     const messageText = input.trim();
     setInput('');
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
     await sendMessage(messageText);
   };
 
@@ -581,6 +680,7 @@ export default function AIChatPanel() {
             className="fixed inset-4 lg:inset-auto lg:bottom-6 lg:right-6 lg:w-96 lg:h-[600px]
               bg-iron-900 border border-iron-700/50 rounded-2xl z-50
               flex flex-col overflow-hidden shadow-2xl"
+            style={keyboardHeight > 0 ? { bottom: `${keyboardHeight + 4}px` } : undefined}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-iron-800">
@@ -605,7 +705,7 @@ export default function AIChatPanel() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide relative">
               {/* Loading state before greeting */}
               {isGreetingOrLoading && messages.length === 0 && (
                 <div className="flex gap-3">
@@ -649,7 +749,31 @@ export default function AIChatPanel() {
                           : 'bg-iron-800 text-iron-100 rounded-tl-md'
                         }`}
                     >
-                      {message.content}
+                      {message.role === 'assistant' ? (
+                        <div className="chat-markdown">
+                          <ReactMarkdown
+                            components={{
+                              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                              strong: ({ children }) => <strong className="text-iron-50 font-semibold">{children}</strong>,
+                              em: ({ children }) => <em className="text-flame-300">{children}</em>,
+                              ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                              li: ({ children }) => <li className="text-iron-200">{children}</li>,
+                              code: ({ inline, children }) => inline
+                                ? <code className="bg-iron-700 px-1 py-0.5 rounded text-flame-300 text-xs">{children}</code>
+                                : <pre className="bg-iron-900 p-2 rounded-lg my-2 overflow-x-auto text-xs"><code>{children}</code></pre>,
+                              h3: ({ children }) => <h3 className="font-semibold text-iron-50 mt-2 mb-1">{children}</h3>,
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                          {message.streaming && (
+                            <span className="inline-block w-1.5 h-4 bg-flame-400 animate-pulse ml-0.5 rounded-sm" />
+                          )}
+                        </div>
+                      ) : (
+                        message.content
+                      )}
                     </div>
 
                     {/* Workout Card */}
@@ -715,7 +839,7 @@ export default function AIChatPanel() {
                 </motion.div>
               ))}
 
-              {loading && (
+              {loading && !messages.some(m => m.streaming && m.content) && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -737,6 +861,31 @@ export default function AIChatPanel() {
 
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Scroll to bottom button */}
+            <AnimatePresence>
+              {!isAtBottom && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={() => {
+                    scrollToBottom();
+                    setHasNewMessages(false);
+                    setIsAtBottom(true);
+                  }}
+                  className="absolute bottom-36 left-1/2 -translate-x-1/2 z-10
+                    w-8 h-8 rounded-full bg-iron-700 border border-iron-600
+                    flex items-center justify-center
+                    hover:bg-iron-600 transition-colors shadow-lg"
+                >
+                  <ChevronDown className="w-4 h-4 text-iron-300" />
+                  {hasNewMessages && (
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-flame-500 rounded-full" />
+                  )}
+                </motion.button>
+              )}
+            </AnimatePresence>
 
             {/* Quick Actions */}
             {quickActions.length > 0 && messages.length <= 2 && !loading && !isGreetingOrLoading && (
@@ -776,17 +925,20 @@ export default function AIChatPanel() {
                 onSubmit={handleSubmit}
                 className="px-4 pb-4 pt-1.5"
               >
-              <div className="flex gap-2">
-                <input
+              <div className="flex gap-2 items-end">
+                <textarea
                   ref={inputRef}
-                  type="text"
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
                   placeholder="Ask about your workouts..."
                   aria-label="Chat message"
-                  className="flex-1 bg-iron-800 text-iron-100 px-4 py-2.5 rounded-full
+                  rows={1}
+                  className={`flex-1 bg-iron-800 text-iron-100 px-4 py-2.5
+                    ${input.includes('\n') ? 'rounded-2xl' : 'rounded-full'}
                     border border-iron-700 focus:border-flame-500/50 focus:outline-none
-                    placeholder:text-iron-500 text-sm"
+                    placeholder:text-iron-500 text-sm resize-none overflow-hidden`}
+                  style={{ maxHeight: '120px' }}
                 />
                 <button
                   type="submit"

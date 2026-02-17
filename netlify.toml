@@ -34,6 +34,9 @@
 [functions."ask-assistant"]
   timeout = 26
 
+[functions."ask-assistant-stream"]
+  timeout = 26
+
 [functions."analyze-form"]
   timeout = 26
 
