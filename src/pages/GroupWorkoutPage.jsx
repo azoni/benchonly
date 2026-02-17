@@ -23,6 +23,7 @@ import {
   ThumbsUp,
   Eye,
   HelpCircle,
+  Activity,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { groupWorkoutService, groupService } from '../services/firestore'
@@ -76,6 +77,8 @@ export default function GroupWorkoutPage() {
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
   const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
   const [infoExercise, setInfoExercise] = useState(null)
+  const [expandedRpe, setExpandedRpe] = useState({})
+  const [openNotes, setOpenNotes] = useState({})
 
   useEffect(() => {
     loadWorkout()
@@ -770,91 +773,112 @@ export default function GroupWorkoutPage() {
         {exercises.map((exercise, exerciseIndex) => {
           const type = exercise.type || getExerciseType(exercise)
           const typeTag = getTypeTag(type)
-          
-          return (
-          <div key={exerciseIndex} className="card-steel p-3">
-            <div className="flex items-center gap-2 mb-3">
-              <button
-                onClick={() => setInfoExercise(exercise)}
-                className="font-semibold text-iron-100 text-lg hover:text-flame-400 transition-colors text-left flex-1 flex items-center gap-1.5"
-              >
-                {exercise.name}
-                <HelpCircle className="w-3.5 h-3.5 text-iron-600 flex-shrink-0" />
-              </button>
-              {typeTag && (
-                <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
-              )}
-            </div>
 
-            {/* Coach Notes (read-only) */}
-            {exercise.notes && (
-              <div className="mb-3 bg-iron-800/30 rounded-lg p-2.5">
-                <div className="flex items-start gap-2">
+          return (
+          <div key={exerciseIndex} className="card-steel overflow-hidden">
+            {/* Exercise Header */}
+            <div className="p-4 bg-iron-800/30">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setInfoExercise(exercise)}
+                  className="text-xl font-bold text-iron-50 hover:text-flame-400 transition-colors text-left flex-1 flex items-center gap-1.5"
+                >
+                  {exercise.name}
+                  <HelpCircle className="w-3.5 h-3.5 text-iron-600 flex-shrink-0" />
+                </button>
+                {typeTag && (
+                  <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
+                )}
+              </div>
+              <p className="text-sm text-iron-500 mt-1">{exercise.sets?.length || 0} sets</p>
+              {exercise.notes && (
+                <div className="flex items-start gap-2 mt-2 bg-iron-900/50 rounded-lg p-2.5">
                   <MessageSquare className="w-3.5 h-3.5 text-iron-500 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-iron-400 leading-relaxed">{exercise.notes}</p>
                 </div>
-              </div>
-            )}
-            
-            <div className="space-y-3">
+              )}
+            </div>
+
+            {/* Sets */}
+            <div className="divide-y divide-iron-800/50">
               {exercise.sets?.map((set, setIndex) => {
-                const isFilled = type === 'time' ? !!set.actualTime : type === 'bodyweight' ? !!set.actualReps : !!(set.actualWeight && set.actualReps)
+                const isFilled = type === 'time'
+                  ? !!set.actualTime
+                  : type === 'bodyweight'
+                    ? !!set.actualReps
+                    : !!(set.actualWeight && set.actualReps)
                 return (
-                <div key={setIndex} className={`rounded-xl p-3 ${isFilled ? 'bg-green-900/10 border border-green-500/15' : 'bg-iron-800/30'}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className={`text-base font-medium ${isFilled ? 'text-green-400' : 'text-iron-200'}`}>
-                      Set {setIndex + 1} {isFilled && <span className="text-green-400 text-xs">✓</span>}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-iron-500 bg-iron-800 px-2 py-1 rounded">
-                        {type === 'time' 
+                <div key={setIndex} className="p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      isFilled ? 'bg-green-500/15 ring-1 ring-green-500/30' : 'bg-iron-800'
+                    }`}>
+                      <span className={`text-lg font-bold ${isFilled ? 'text-green-400' : 'text-iron-400'}`}>
+                        {setIndex + 1}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (type === 'time') {
+                          updateSet(exerciseIndex, setIndex, 'actualTime', set.prescribedTime || '')
+                        } else if (type === 'bodyweight') {
+                          updateSet(exerciseIndex, setIndex, 'actualReps', set.prescribedReps || '')
+                        } else {
+                          updateSet(exerciseIndex, setIndex, 'actualWeight', set.prescribedWeight || '')
+                          updateSet(exerciseIndex, setIndex, 'actualReps', set.prescribedReps || '')
+                        }
+                      }}
+                      className="flex-1 text-left hover:text-flame-400 active:scale-[0.98] transition-all"
+                      title="Tap to fill with target values"
+                    >
+                      <span className="text-[10px] uppercase tracking-wider text-iron-600 block">Target</span>
+                      <span className="text-sm font-medium text-iron-400">
+                        {type === 'time'
                           ? `${set.prescribedTime || '—'}s`
                           : type === 'bodyweight'
                             ? `${set.prescribedReps || '—'} reps`
-                            : `${set.prescribedWeight || '—'} × ${set.prescribedReps || '—'}`
+                            : `${set.prescribedWeight || '—'} lbs × ${set.prescribedReps || '—'}`
                         }
                         {set.targetRpe ? ` @ RPE ${set.targetRpe}` : ''}
                       </span>
-                      {exercise.sets.length > 1 && (
-                        <button
-                          onClick={() => removeSet(exerciseIndex, setIndex)}
-                          className="p-1 text-iron-600 hover:text-red-400 transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
+                    </button>
+                    {exercise.sets.length > 1 && (
+                      <button
+                        onClick={() => removeSet(exerciseIndex, setIndex)}
+                        className="p-1.5 text-iron-600 hover:text-red-400 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
-                  {/* Input fields */}
                   {type === 'time' ? (
-                    <div className="mb-2">
-                      <label className="block text-xs text-flame-400 mb-1 font-medium">Time (seconds)</label>
+                    <div className="ml-[52px]">
                       <input
                         type="number"
                         inputMode="numeric"
                         value={set.actualTime || ''}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualTime', e.target.value)}
                         placeholder={set.prescribedTime || '—'}
-                        className="w-full input-field text-lg py-2.5 px-2 text-center font-semibold"
+                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
                       />
+                      <p className="text-[10px] text-iron-600 text-center mt-1">seconds</p>
                     </div>
                   ) : type === 'bodyweight' ? (
-                    <div className="mb-2">
-                      <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
+                    <div className="ml-[52px]">
                       <input
                         type="number"
                         inputMode="numeric"
                         value={set.actualReps || ''}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
                         placeholder={set.prescribedReps || '—'}
-                        className="w-full input-field text-lg py-2.5 px-2 text-center font-semibold"
+                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
                       />
+                      <p className="text-[10px] text-iron-600 text-center mt-1">reps</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div className="grid grid-cols-2 gap-2 ml-[52px]">
                       <div>
-                        <label className="block text-xs text-flame-400 mb-1 font-medium">Weight</label>
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => {
@@ -878,9 +902,9 @@ export default function GroupWorkoutPage() {
                             className="w-9 h-11 rounded-lg bg-iron-700/80 text-iron-400 hover:text-iron-200 hover:bg-iron-700 active:scale-95 transition-all text-lg font-bold flex-shrink-0 flex items-center justify-center"
                           >+</button>
                         </div>
+                        <p className="text-[10px] text-iron-600 text-center mt-1">lbs</p>
                       </div>
                       <div>
-                        <label className="block text-xs text-flame-400 mb-1 font-medium">Reps</label>
                         <input
                           type="number"
                           inputMode="numeric"
@@ -889,6 +913,7 @@ export default function GroupWorkoutPage() {
                           placeholder={set.prescribedReps || '—'}
                           className="w-full input-field text-lg py-2.5 px-2 text-center font-semibold"
                         />
+                        <p className="text-[10px] text-iron-600 text-center mt-1">reps</p>
                       </div>
                     </div>
                   )}
@@ -896,70 +921,103 @@ export default function GroupWorkoutPage() {
               )})}
             </div>
 
-            {/* Add Set Button */}
-            <button
-              onClick={() => addSet(exerciseIndex)}
-              className="mt-3 w-full py-2.5 border border-dashed border-iron-700 rounded-lg
-                text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600
-                flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Set
-            </button>
-
-            {/* RPE & Pain — per exercise */}
-            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-iron-800/50">
-              <div className="flex items-center gap-1">
-                <label className="text-[10px] text-iron-500 uppercase tracking-wider w-6">RPE</label>
-                {[7, 8, 9, 10].map(v => (
-                  <button
-                    key={v}
-                    onClick={() => {
-                      setExercises(prev => {
-                        const n = [...prev]
-                        n[exerciseIndex] = { ...n[exerciseIndex], rpe: n[exerciseIndex].rpe == v ? '' : String(v) }
-                        return n
-                      })
-                    }}
-                    className={`w-7 h-7 text-xs rounded-md border transition-colors ${
-                      exercise.rpe == v
-                        ? 'border-flame-500 bg-flame-500/15 text-flame-400 font-semibold'
-                        : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
-                    }`}
-                  >{v}</button>
-                ))}
-              </div>
-              <div className="flex items-center gap-1">
-                <label className="text-[10px] text-iron-500 uppercase tracking-wider w-7">Pain</label>
-                {[1, 2, 3, 4, 5].map(v => (
-                  <button
-                    key={v}
-                    onClick={() => {
-                      setExercises(prev => {
-                        const n = [...prev]
-                        n[exerciseIndex] = { ...n[exerciseIndex], painLevel: (n[exerciseIndex].painLevel || 0) === v ? 0 : v }
-                        return n
-                      })
-                    }}
-                    className={`w-7 h-7 text-xs rounded-md border transition-colors ${
-                      (exercise.painLevel || 0) === v
-                        ? v <= 2 ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 font-semibold'
-                          : 'border-red-500/50 bg-red-500/10 text-red-400 font-semibold'
-                        : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
-                    }`}
-                  >{v}</button>
-                ))}
-              </div>
+            {/* Add Set */}
+            <div className="px-4 pt-2 pb-1">
+              <button
+                onClick={() => addSet(exerciseIndex)}
+                className="w-full py-2.5 border border-dashed border-iron-700 rounded-lg
+                  text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600
+                  flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Set
+              </button>
             </div>
 
-            {/* Exercise Notes */}
-            <textarea
-              value={exercise.userNotes || ''}
-              onChange={(e) => updateExerciseNotes(exerciseIndex, e.target.value)}
-              placeholder="Your notes..."
-              rows={1}
-              className="mt-3 w-full input-field text-sm resize-none"
-            />
+            {/* RPE & Pain — collapsible */}
+            <div className="px-4 pb-2">
+              <button
+                onClick={() => setExpandedRpe(prev => ({ ...prev, [exerciseIndex]: !prev[exerciseIndex] }))}
+                className="flex items-center gap-2 py-2 text-sm text-iron-500 hover:text-iron-300 transition-colors w-full"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>
+                  {exercise.rpe ? `RPE ${exercise.rpe}` : 'RPE'}
+                  {(exercise.painLevel || 0) > 0 ? ` · Pain ${exercise.painLevel}` : ''}
+                </span>
+                {expandedRpe[exerciseIndex]
+                  ? <ChevronUp className="w-3.5 h-3.5 ml-auto" />
+                  : <ChevronDown className="w-3.5 h-3.5 ml-auto" />
+                }
+              </button>
+              {expandedRpe[exerciseIndex] && (
+                <div className="flex flex-wrap items-center gap-2 pb-2">
+                  <div className="flex items-center gap-1">
+                    <label className="text-[10px] text-iron-500 uppercase tracking-wider w-6">RPE</label>
+                    {[6, 7, 8, 9, 10].map(v => (
+                      <button
+                        key={v}
+                        onClick={() => {
+                          setExercises(prev => {
+                            const n = [...prev]
+                            n[exerciseIndex] = { ...n[exerciseIndex], rpe: n[exerciseIndex].rpe == v ? '' : String(v) }
+                            return n
+                          })
+                        }}
+                        className={`w-8 h-8 text-xs rounded-lg border transition-colors ${
+                          exercise.rpe == v
+                            ? 'border-flame-500 bg-flame-500/15 text-flame-400 font-semibold'
+                            : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
+                        }`}
+                      >{v}</button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <label className="text-[10px] text-iron-500 uppercase tracking-wider w-7">Pain</label>
+                    {[1, 2, 3, 4, 5].map(v => (
+                      <button
+                        key={v}
+                        onClick={() => {
+                          setExercises(prev => {
+                            const n = [...prev]
+                            n[exerciseIndex] = { ...n[exerciseIndex], painLevel: (n[exerciseIndex].painLevel || 0) === v ? 0 : v }
+                            return n
+                          })
+                        }}
+                        className={`w-8 h-8 text-xs rounded-lg border transition-colors ${
+                          (exercise.painLevel || 0) === v
+                            ? v <= 2 ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 font-semibold'
+                              : 'border-red-500/50 bg-red-500/10 text-red-400 font-semibold'
+                            : 'border-iron-700/60 text-iron-500 hover:border-iron-600'
+                        }`}
+                      >{v}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Your Notes — collapsed by default */}
+            <div className="px-4 pb-4">
+              {(exercise.userNotes || openNotes[exerciseIndex]) ? (
+                <textarea
+                  value={exercise.userNotes || ''}
+                  onChange={(e) => updateExerciseNotes(exerciseIndex, e.target.value)}
+                  placeholder="How did this feel? Any discomfort?"
+                  rows={2}
+                  autoFocus={openNotes[exerciseIndex] && !exercise.userNotes}
+                  className="w-full input-field text-sm resize-none"
+                />
+              ) : (
+                <button
+                  onClick={() => setOpenNotes(prev => ({ ...prev, [exerciseIndex]: true }))}
+                  className="w-full text-left text-sm text-iron-600 hover:text-iron-400 py-2 transition-colors flex items-center gap-2"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Add notes...
+                </button>
+              )}
+            </div>
           </div>
         )})}
       </div>
