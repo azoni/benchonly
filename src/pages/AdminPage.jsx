@@ -5,8 +5,6 @@ import {
   Search, 
   ChevronDown, 
   Target, 
-  Dumbbell, 
-  Calendar,
   Plus,
   X,
   Check,
@@ -18,7 +16,8 @@ import {
   TrendingUp,
   Settings,
   Save,
-  Zap
+  Zap,
+  ArrowLeft
 } from 'lucide-react'
 import { ClipboardList, Loader2, MessageCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -472,86 +471,36 @@ export default function AdminPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-display text-iron-100 flex items-center gap-3">
-            <UserCog className="w-7 h-7 text-flame-500" />
-            Admin Panel
-          </h1>
-          <p className="text-iron-500 text-sm mt-1">
-            Manage users, create workouts and goals
-          </p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-display text-iron-100 flex items-center gap-3">
+          <UserCog className="w-7 h-7 text-flame-500" />
+          Admin
+        </h1>
       </div>
 
-      {/* Tabs */}
-      <div className="card-steel p-1 mb-6 flex gap-1 max-w-md overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('users')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
-            activeTab === 'users'
-              ? 'bg-flame-500 text-white'
-              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          Users
-        </button>
-        <button
-          onClick={() => setActiveTab('activity')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
-            activeTab === 'activity'
-              ? 'bg-flame-500 text-white'
-              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
-          }`}
-        >
-          <Activity className="w-4 h-4" />
-          Activity
-        </button>
-        <button
-          onClick={() => setActiveTab('usage')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
-            activeTab === 'usage'
-              ? 'bg-flame-500 text-white'
-              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4" />
-          Usage
-        </button>
-        <button
-          onClick={() => setActiveTab('settings')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
-            activeTab === 'settings'
-              ? 'bg-flame-500 text-white'
-              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-          Settings
-        </button>
-        <button
-          onClick={() => setActiveTab('trainers')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
-            activeTab === 'trainers'
-              ? 'bg-flame-500 text-white'
-              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
-          }`}
-        >
-          <ClipboardList className="w-4 h-4" />
-          Trainers
-        </button>
-        <button
-          onClick={() => setActiveTab('feedback')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
-            activeTab === 'feedback'
-              ? 'bg-flame-500 text-white'
-              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
-          }`}
-        >
-          <MessageCircle className="w-4 h-4" />
-          Feedback
-        </button>
+      {/* Tabs — horizontal scroll, icon-only on mobile */}
+      <div className="flex gap-1 mb-6 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
+        {[
+          { key: 'users', icon: Users, label: 'Users' },
+          { key: 'activity', icon: Activity, label: 'Activity' },
+          { key: 'usage', icon: TrendingUp, label: 'Usage' },
+          { key: 'settings', icon: Settings, label: 'Settings' },
+          { key: 'trainers', icon: ClipboardList, label: 'Trainers' },
+          { key: 'feedback', icon: MessageCircle, label: 'Feedback' },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
+              activeTab === tab.key
+                ? 'bg-flame-500/15 text-flame-400 border border-flame-500/30'
+                : 'text-iron-500 hover:text-iron-300 hover:bg-iron-800/50 border border-transparent'
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            <span className="hidden sm:inline">{tab.label}</span>
+          </button>
+        ))}
       </div>
 
       {/* Impersonation Banner */}
@@ -579,11 +528,10 @@ export default function AdminPage() {
 
       {activeTab === 'users' ? (
       <>
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* User List */}
-        <div className="card-steel rounded-xl">
-          <div className="p-4 border-b border-iron-800">
-            <h2 className="font-display text-lg text-iron-100 mb-3">Users</h2>
+      <div className="grid lg:grid-cols-[320px_1fr] gap-6">
+        {/* User List — collapsible on mobile when user selected */}
+        <div className={`card-steel rounded-xl ${selectedUser ? 'hidden lg:block' : ''}`}>
+          <div className="p-3 border-b border-iron-800">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iron-500" />
               <input
@@ -591,48 +539,47 @@ export default function AdminPage() {
                 placeholder="Search users..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="input-field w-full pl-10"
+                className="input-field w-full pl-10 py-2 text-sm"
               />
             </div>
           </div>
 
-          <div className="max-h-[500px] overflow-y-auto">
+          <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
             {loading ? (
               <div className="p-8 text-center">
-                <div className="w-8 h-8 border-2 border-flame-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                <div className="w-6 h-6 border-2 border-flame-500 border-t-transparent rounded-full animate-spin mx-auto" />
               </div>
             ) : filteredUsers.length > 0 ? (
-              <div className="divide-y divide-iron-800">
+              <div>
                 {filteredUsers.map(u => (
                   <button
                     key={u.id}
                     onClick={() => selectUser(u)}
-                    className={`w-full p-4 text-left hover:bg-iron-800/50 transition-colors flex items-center gap-3
-                      ${selectedUser?.id === u.id ? 'bg-flame-500/10 border-l-2 border-l-flame-500' : ''}`}
+                    className={`w-full px-3 py-2.5 text-left transition-colors flex items-center gap-2.5 border-b border-iron-800/50
+                      ${selectedUser?.id === u.id
+                        ? 'bg-flame-500/10 border-l-2 border-l-flame-500'
+                        : 'hover:bg-iron-800/50 border-l-2 border-l-transparent'
+                      }`}
                   >
                     <img
                       src={u.photoURL || '/default-avatar.png'}
                       alt={u.displayName}
-                      className="w-10 h-10 rounded-full"
+                      className="w-8 h-8 rounded-full flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-iron-100 truncate">
+                      <p className="text-sm font-medium text-iron-100 truncate">
                         {u.displayName || 'No Name'}
                       </p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm text-iron-500 truncate">{u.email}</p>
-                        {u.credits !== undefined && (
-                          <span className="flex items-center gap-0.5 text-xs text-flame-400 flex-shrink-0">
-                            <Zap className="w-3 h-3" />{u.credits}
-                          </span>
-                        )}
-                      </div>
+                      <p className="text-xs text-iron-500 truncate">{u.email}</p>
                     </div>
+                    <span className="flex items-center gap-0.5 text-xs text-flame-400/70 flex-shrink-0 tabular-nums">
+                      <Zap className="w-3 h-3" />{u.credits ?? 0}
+                    </span>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="p-8 text-center text-iron-500">
+              <div className="p-8 text-center text-iron-500 text-sm">
                 No users found
               </div>
             )}
@@ -640,76 +587,81 @@ export default function AdminPage() {
         </div>
 
         {/* User Details */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-4">
           {selectedUser ? (
             <>
-              {/* User Info Card */}
-              <div className="card-steel p-4 sm:p-6 rounded-xl overflow-hidden">
-                <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-4">
+              {/* Back button on mobile */}
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="lg:hidden flex items-center gap-2 text-sm text-iron-400 hover:text-iron-200 mb-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to users
+              </button>
+
+              {/* Profile + Stats + Credits — unified card */}
+              <div className="card-steel rounded-xl overflow-hidden">
+                {/* Profile row */}
+                <div className="p-4 flex items-center gap-3 border-b border-iron-800/50">
                   <img
                     src={selectedUser.photoURL || '/default-avatar.png'}
                     alt={selectedUser.displayName}
-                    className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex-shrink-0"
+                    className="w-12 h-12 rounded-full flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-lg sm:text-xl font-display text-iron-100 truncate">
+                    <h2 className="text-lg font-display text-iron-100 truncate">
                       {selectedUser.displayName || 'No Name'}
                     </h2>
-                    <p className="text-iron-400 text-sm truncate">{selectedUser.email}</p>
-                    <p className="text-xs text-iron-500 truncate">
-                      UID: {selectedUser.uid}
+                    <p className="text-sm text-iron-500 truncate">{selectedUser.email}</p>
+                    <p className="text-[10px] text-iron-600 truncate font-mono mt-0.5">
+                      {selectedUser.uid}
                     </p>
                   </div>
+                  <button
+                    onClick={async () => {
+                      await startContextImpersonation(selectedUser.uid)
+                      navigate('/today')
+                    }}
+                    className="px-3 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 flex-shrink-0"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    View as User
+                  </button>
                 </div>
-                <button
-                  onClick={async () => {
-                    await startContextImpersonation(selectedUser.uid)
-                    navigate('/today')
-                  }}
-                  className="w-full sm:w-auto mb-4 px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <Eye className="w-4 h-4" />
-                  View as User
-                </button>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="text-center p-3 bg-iron-800/50 rounded-lg">
-                    <Dumbbell className="w-5 h-5 text-flame-400 mx-auto mb-1" />
+                {/* Stats row */}
+                <div className="grid grid-cols-4 divide-x divide-iron-800/50">
+                  <div className="text-center py-3">
                     <p className="text-lg font-display text-iron-100">{userWorkouts.length}</p>
-                    <p className="text-xs text-iron-500">Workouts</p>
+                    <p className="text-[10px] text-iron-500">Workouts</p>
                   </div>
-                  <div className="text-center p-3 bg-iron-800/50 rounded-lg">
-                    <Target className="w-5 h-5 text-purple-400 mx-auto mb-1" />
+                  <div className="text-center py-3">
                     <p className="text-lg font-display text-iron-100">{userGoals.filter(g => g.status === 'active').length}</p>
-                    <p className="text-xs text-iron-500">Active Goals</p>
+                    <p className="text-[10px] text-iron-500">Goals</p>
                   </div>
-                  <div className="text-center p-3 bg-iron-800/50 rounded-lg">
-                    <Calendar className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+                  <div className="text-center py-3">
                     <p className="text-lg font-display text-iron-100">
                       {userWorkouts.filter(w => w.status === 'scheduled').length}
                     </p>
-                    <p className="text-xs text-iron-500">Scheduled</p>
+                    <p className="text-[10px] text-iron-500">Scheduled</p>
                   </div>
-                  <div className="text-center p-3 bg-iron-800/50 rounded-lg">
-                    <Zap className="w-5 h-5 text-flame-400 mx-auto mb-1" />
-                    <p className="text-lg font-display text-iron-100">{selectedUser.credits ?? 0}</p>
-                    <p className="text-xs text-iron-500">Credits</p>
+                  <div className="text-center py-3">
+                    <p className="text-lg font-display text-flame-400">{selectedUser.credits ?? 0}</p>
+                    <p className="text-[10px] text-iron-500">Credits</p>
                   </div>
                 </div>
 
-                {/* Credit Management */}
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-flame-400 flex-shrink-0" />
-                    <span className="text-sm text-iron-400">Add credits:</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex gap-1.5">
+                {/* Credits + Settings — compact inline */}
+                <div className="p-3 border-t border-iron-800/50 space-y-3">
+                  {/* Credit management */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-iron-500 flex items-center gap-1"><Zap className="w-3 h-3 text-flame-400" />Credits:</span>
+                    <div className="flex gap-1">
                       {[10, 25, 50, 100].map(amt => (
                         <button
                           key={amt}
                           onClick={() => setCreditAmount(String(amt))}
-                          className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                          className={`px-2 py-0.5 text-xs rounded transition-colors ${
                             creditAmount === String(amt)
                               ? 'bg-flame-500 text-white'
                               : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
@@ -723,13 +675,13 @@ export default function AdminPage() {
                       type="number"
                       value={creditAmount}
                       onChange={(e) => setCreditAmount(e.target.value)}
-                      placeholder="Custom"
-                      className="input-field w-20 text-sm py-1"
+                      placeholder="Cust."
+                      className="input-field w-16 text-xs py-1 px-2"
                     />
                     <button
                       onClick={handleAddCredits}
                       disabled={creditLoading || !creditAmount}
-                      className="btn-primary text-sm py-1 px-3 flex items-center gap-1 disabled:opacity-40"
+                      className="px-2.5 py-1 bg-flame-500 hover:bg-flame-600 disabled:bg-iron-700 disabled:text-iron-500 text-white text-xs rounded-lg transition-colors flex items-center gap-1"
                     >
                       {creditLoading ? (
                         <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -739,14 +691,74 @@ export default function AdminPage() {
                       Add
                     </button>
                   </div>
+
+                  {/* Settings inline */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-iron-500">Personality:</span>
+                      <select
+                        value={selectedUser.chatPersonality || 'coach'}
+                        onChange={async (e) => {
+                          try {
+                            const userRef = doc(db, 'users', selectedUser.uid)
+                            await updateDoc(userRef, { chatPersonality: e.target.value })
+                            setSelectedUser(prev => ({ ...prev, chatPersonality: e.target.value }))
+                            setUsers(prev => prev.map(u =>
+                              u.uid === selectedUser.uid ? { ...u, chatPersonality: e.target.value } : u
+                            ))
+                          } catch (err) { console.error(err) }
+                        }}
+                        className="text-xs bg-iron-800 border border-iron-700 rounded px-1.5 py-0.5 text-iron-300"
+                      >
+                        <option value="coach">Coach</option>
+                        <option value="drill-sergeant">Drill Sergeant</option>
+                        <option value="bro">Gym Bro</option>
+                        <option value="scientist">Scientist</option>
+                        <option value="comedian">Trash Talk</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-iron-500">Trainer:</span>
+                      <button
+                        onClick={() => handleToggleTrainer(selectedUser.uid || selectedUser.id, selectedUser.isTrainer)}
+                        className={`text-xs px-2 py-0.5 rounded transition-colors ${
+                          selectedUser.isTrainer
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                        }`}
+                      >
+                        {selectedUser.isTrainer ? 'Active' : 'No'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* AI Usage & Rate Limits */}
-              <div className="card-steel p-4 rounded-xl">
-                <div className="flex items-center gap-2 mb-3">
-                  <Activity className="w-4 h-4 text-blue-400" />
-                  <h3 className="font-medium text-iron-200">AI Chat Usage</h3>
+              {/* AI Usage */}
+              <div className="card-steel p-3 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-iron-300 flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-blue-400" />
+                    AI Chat Usage
+                  </span>
+                  {userAiUsage && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const userRef = doc(db, 'users', selectedUser.uid)
+                          await updateDoc(userRef, { rateLimitResetAt: new Date().toISOString() })
+                          setUserAiUsage(null)
+                          alert('Rate limit reset signal sent.')
+                        } catch (err) {
+                          console.error(err)
+                          alert('Failed to reset rate limit')
+                        }
+                      }}
+                      className="text-[10px] text-yellow-400 hover:text-yellow-300"
+                    >
+                      Reset Limits
+                    </button>
+                  )}
                 </div>
                 {!userAiUsage ? (
                   <button
@@ -756,119 +768,59 @@ export default function AdminPage() {
                         setUserAiUsage(counts)
                       } catch { setUserAiUsage({ hourCount: '?', dayCount: '?', total: '?' }) }
                     }}
-                    className="text-sm text-flame-400 hover:text-flame-300"
+                    className="text-xs text-flame-400 hover:text-flame-300"
                   >
                     Load usage data
                   </button>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="p-2 bg-iron-800/50 rounded-lg">
-                        <p className="text-lg font-display text-iron-100">{userAiUsage.hourCount}</p>
-                        <p className="text-[10px] text-iron-500">Last Hour (limit 8)</p>
-                      </div>
-                      <div className="p-2 bg-iron-800/50 rounded-lg">
-                        <p className="text-lg font-display text-iron-100">{userAiUsage.dayCount}</p>
-                        <p className="text-[10px] text-iron-500">Last 24h (limit 25)</p>
-                      </div>
-                      <div className="p-2 bg-iron-800/50 rounded-lg">
-                        <p className="text-lg font-display text-iron-100">{userAiUsage.total}</p>
-                        <p className="text-[10px] text-iron-500">All Time</p>
-                      </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center p-2 bg-iron-800/40 rounded-lg">
+                      <p className="text-base font-display text-iron-100">{userAiUsage.hourCount}</p>
+                      <p className="text-[10px] text-iron-500">Hour (8)</p>
                     </div>
-                    <button
-                      onClick={async () => {
-                        try {
-                          const userRef = doc(db, 'users', selectedUser.uid)
-                          await updateDoc(userRef, { rateLimitResetAt: new Date().toISOString() })
-                          setUserAiUsage(null) // refresh
-                          alert('Rate limit reset signal sent. User will see it on next message.')
-                        } catch (err) {
-                          console.error(err)
-                          alert('Failed to reset rate limit')
-                        }
-                      }}
-                      className="w-full py-2 text-sm bg-yellow-500/10 text-yellow-400 rounded-lg hover:bg-yellow-500/20 transition-colors"
-                    >
-                      Reset Client Rate Limit
-                    </button>
+                    <div className="text-center p-2 bg-iron-800/40 rounded-lg">
+                      <p className="text-base font-display text-iron-100">{userAiUsage.dayCount}</p>
+                      <p className="text-[10px] text-iron-500">Day (25)</p>
+                    </div>
+                    <div className="text-center p-2 bg-iron-800/40 rounded-lg">
+                      <p className="text-base font-display text-iron-100">{userAiUsage.total}</p>
+                      <p className="text-[10px] text-iron-500">All Time</p>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* User Settings */}
-              <div className="card-steel p-4 rounded-xl">
-                <h3 className="font-medium text-iron-200 mb-3">User Settings</h3>
-                <div className="space-y-3">
-                  {/* Personality */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-iron-400">Coach Personality</span>
-                    <select
-                      value={selectedUser.chatPersonality || 'coach'}
-                      onChange={async (e) => {
-                        try {
-                          const userRef = doc(db, 'users', selectedUser.uid)
-                          await updateDoc(userRef, { chatPersonality: e.target.value })
-                          setSelectedUser(prev => ({ ...prev, chatPersonality: e.target.value }))
-                          setUsers(prev => prev.map(u =>
-                            u.uid === selectedUser.uid ? { ...u, chatPersonality: e.target.value } : u
-                          ))
-                        } catch (err) { console.error(err) }
-                      }}
-                      className="input-field text-sm py-1 px-2 w-36"
-                    >
-                      <option value="coach">Coach</option>
-                      <option value="drill-sergeant">Drill Sergeant</option>
-                      <option value="bro">Gym Bro</option>
-                      <option value="scientist">Scientist</option>
-                      <option value="comedian">Trash Talk</option>
-                    </select>
-                  </div>
-                  {/* Trainer status */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-iron-400">Trainer Status</span>
+              {/* Goals & Workouts — side by side on desktop */}
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Goals */}
+                <div className="card-steel rounded-xl">
+                  <div className="flex items-center justify-between p-3 border-b border-iron-800">
+                    <h3 className="text-sm font-semibold text-iron-200">Goals</h3>
                     <button
-                      onClick={() => handleToggleTrainer(selectedUser.uid || selectedUser.id, selectedUser.isTrainer)}
-                      className={`text-sm px-3 py-1 rounded-lg transition-colors ${
-                        selectedUser.isTrainer
-                          ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                          : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
-                      }`}
+                      onClick={() => setShowGoalModal(true)}
+                      className="text-xs text-flame-400 hover:text-flame-300 flex items-center gap-1"
                     >
-                      {selectedUser.isTrainer ? 'Active Trainer' : 'Not a Trainer'}
+                      <Plus className="w-3 h-3" />
+                      Add
                     </button>
                   </div>
-                </div>
-              </div>
-
-              {/* Goals Section */}
-              <div className="card-steel rounded-xl">
-                <div className="flex items-center justify-between p-4 border-b border-iron-800">
-                  <h3 className="font-display text-lg text-iron-100">Goals</h3>
-                  <button
-                    onClick={() => setShowGoalModal(true)}
-                    className="btn-primary text-sm flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Goal
-                  </button>
-                </div>
-
-                <div className="p-4">
-                  {userGoals.length > 0 ? (
-                    <div className="space-y-3">
-                      {userGoals.map(goal => {
-                        const metricType = goal.metricType || 'weight'
-                        const unit = METRIC_LABELS[metricType]?.unit || 'lbs'
-                        const current = goal.currentValue ?? goal.currentWeight ?? 0
-                        const target = goal.targetValue ?? goal.targetWeight ?? 0
-                        
-                        return (
-                          <div key={goal.id} className="p-3 bg-iron-800/50 rounded-lg">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-medium text-iron-100">{goal.lift}</span>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs px-2 py-1 rounded-full ${
+                  <div className="p-3">
+                    {userGoals.length > 0 ? (
+                      <div className="space-y-2">
+                        {userGoals.map(goal => {
+                          const metricType = goal.metricType || 'weight'
+                          const unit = METRIC_LABELS[metricType]?.unit || 'lbs'
+                          const current = goal.currentValue ?? goal.currentWeight ?? 0
+                          const target = goal.targetValue ?? goal.targetWeight ?? 0
+                          
+                          return (
+                            <div key={goal.id} className="flex items-center justify-between p-2 bg-iron-800/40 rounded-lg">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-iron-100 truncate">{goal.lift}</p>
+                                <p className="text-xs text-iron-500">{current} → {target} {unit}</p>
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
                                   goal.status === 'active' 
                                     ? 'bg-green-500/20 text-green-400' 
                                     : 'bg-iron-700 text-iron-400'
@@ -877,93 +829,81 @@ export default function AdminPage() {
                                 </span>
                                 <button
                                   onClick={() => handleEditGoal(goal)}
-                                  className="p-1 text-iron-400 hover:text-iron-200 hover:bg-iron-700 rounded"
+                                  className="p-1 text-iron-500 hover:text-iron-200 rounded"
                                 >
-                                  <Edit2 className="w-4 h-4" />
+                                  <Edit2 className="w-3 h-3" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteGoal(goal.id)}
-                                  className="p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
+                                  className="p-1 text-iron-500 hover:text-red-400 rounded"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="w-3 h-3" />
                                 </button>
                               </div>
                             </div>
-                            <p className="text-sm text-iron-400">
-                              {current} → {target} {unit}
-                            </p>
-                            {goal.notes && (
-                              <p className="text-xs text-iron-500 mt-1 italic">{goal.notes}</p>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-iron-500 text-center py-4">No goals set</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Recent Workouts */}
-              <div className="card-steel rounded-xl">
-                <div className="flex items-center justify-between p-4 border-b border-iron-800">
-                  <h3 className="font-display text-lg text-iron-100">Recent Workouts</h3>
-                  <button
-                    onClick={() => navigate(`/workouts/new?userId=${selectedUser.uid}`)}
-                    className="btn-secondary text-sm flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Create Workout
-                  </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-iron-600 text-center py-4 text-xs">No goals set</p>
+                    )}
+                  </div>
                 </div>
 
-                <div className="p-4">
-                  {userWorkouts.length > 0 ? (
-                    <div className="space-y-2">
-                      {userWorkouts.slice(0, 5).map(workout => {
-                        const date = workout.date?.toDate ? workout.date.toDate() : new Date(workout.date)
-                        return (
-                          <div key={workout.id} className="p-3 bg-iron-800/50 rounded-lg">
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <p className="font-medium text-iron-100">{workout.name || 'Workout'}</p>
-                                <p className="text-sm text-iron-500">
-                                  {format(date, 'MMM d, yyyy')} · {workout.exercises?.length || 0} exercises
-                                  {workout.workoutType === 'cardio' && ` · ${workout.duration}min`}
+                {/* Recent Workouts */}
+                <div className="card-steel rounded-xl">
+                  <div className="flex items-center justify-between p-3 border-b border-iron-800">
+                    <h3 className="text-sm font-semibold text-iron-200">Recent Workouts</h3>
+                    <button
+                      onClick={() => navigate(`/workouts/new?userId=${selectedUser.uid}`)}
+                      className="text-xs text-iron-400 hover:text-iron-200 flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Create
+                    </button>
+                  </div>
+                  <div className="p-3">
+                    {userWorkouts.length > 0 ? (
+                      <div className="space-y-2">
+                        {userWorkouts.slice(0, 5).map(workout => {
+                          const date = workout.date?.toDate ? workout.date.toDate() : new Date(workout.date)
+                          return (
+                            <div key={workout.id} className="flex items-center justify-between p-2 bg-iron-800/40 rounded-lg">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-iron-100 truncate">{workout.name || 'Workout'}</p>
+                                <p className="text-xs text-iron-500">
+                                  {format(date, 'MMM d')} · {workout.exercises?.length || 0} ex
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs px-2 py-1 rounded-full ${
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
                                   workout.status === 'completed' 
                                     ? 'bg-green-500/20 text-green-400' 
                                     : 'bg-yellow-500/20 text-yellow-400'
                                 }`}>
-                                  {workout.workoutType === 'cardio' ? 'cardio' : workout.status}
+                                  {workout.workoutType === 'cardio' ? 'cardio' : workout.status?.slice(0, 4)}
                                 </span>
                                 <button
                                   onClick={() => navigate(`/workouts/${workout.id}`)}
-                                  className="p-1.5 text-iron-400 hover:text-iron-200 hover:bg-iron-700 rounded transition-colors"
-                                  title="View/Edit"
+                                  className="p-1 text-iron-500 hover:text-iron-200 rounded"
                                 >
-                                  <Edit2 className="w-4 h-4" />
+                                  <Edit2 className="w-3 h-3" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteWorkout(workout.id)}
-                                  className="p-1.5 text-iron-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                                  title="Delete"
+                                  className="p-1 text-iron-500 hover:text-red-400 rounded"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="w-3 h-3" />
                                 </button>
                               </div>
                             </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-iron-500 text-center py-4">No workouts yet</p>
-                  )}
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-iron-600 text-center py-4 text-xs">No workouts yet</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -972,10 +912,10 @@ export default function AdminPage() {
             </>
           ) : (
             <div className="card-steel p-12 rounded-xl text-center">
-              <Users className="w-16 h-16 text-iron-700 mx-auto mb-4" />
-              <h3 className="text-lg font-display text-iron-300 mb-2">Select a User</h3>
-              <p className="text-iron-500 text-sm">
-                Choose a user from the list to view their details and manage their data
+              <Users className="w-12 h-12 text-iron-700 mx-auto mb-3" />
+              <h3 className="text-lg font-display text-iron-400 mb-1">Select a User</h3>
+              <p className="text-iron-600 text-sm">
+                Choose a user from the list to manage
               </p>
             </div>
           )}
