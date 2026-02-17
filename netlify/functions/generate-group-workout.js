@@ -233,25 +233,38 @@ STANDARD WORKOUT RULES:
 5. Factor in cardio/activity load when considering recovery
 6. Include coaching notes explaining your reasoning
 
-EXERCISE DATABASE BY FOCUS:
-- PUSH: Bench Press, Incline DB Press, Overhead Press, Dips, Cable Flyes, Lateral Raises, Tricep Pushdowns, Close-Grip Bench, Push Press, DB Shoulder Press, Landmine Press, Skull Crushers
-- PULL: Barbell Rows, Pull-ups, Lat Pulldowns, Cable Rows, Face Pulls, Dumbbell Rows, T-Bar Rows, Chin-ups, Hammer Curls, Barbell Curls, Rear Delt Flyes
-- LEGS: Squats, Romanian Deadlifts, Leg Press, Bulgarian Split Squats, Leg Curls, Leg Extensions, Hip Thrusts, Walking Lunges, Calf Raises, Front Squats, Goblet Squats
-- UPPER: Bench Press, Overhead Press, Barbell Rows, Pull-ups, Incline DB Press, Lateral Raises, Face Pulls, Dumbbell Rows, Tricep Pushdowns, Curls
-- FULL BODY: Squats, Bench Press, Barbell Rows, Overhead Press, Romanian Deadlifts, Pull-ups, Lunges, Dips, Face Pulls, Planks
-- BENCH FOCUS: Bench Press, Close-Grip Bench, Incline Bench, DB Bench, Paused Bench, Spoto Press, Floor Press, Cable Flyes, Tricep Pushdowns, Dips
-Pick exercises from these AND the athletes' existing exercises. Prioritize compound movements.
+EXERCISE DATABASE — pick from these based on focus. Use the EXACT names listed here:
+
+CHEST: Bench Press, Incline Bench Press, Decline Bench Press, Close-Grip Bench Press, Floor Press, Paused Bench Press, Spoto Press, Larsen Press, DB Bench Press, Incline DB Press, Cable Flyes, Incline Cable Flyes, Pec Deck, DB Flyes, Machine Chest Press, Push-ups
+SHOULDERS: Overhead Press, DB Shoulder Press, Push Press, Arnold Press, Landmine Press, Z Press, Lateral Raises, Cable Lateral Raises, Rear Delt Flyes, Face Pulls, Front Raises, Upright Rows, Band Pull-Aparts
+TRICEPS: Tricep Pushdowns, Overhead Tricep Extensions, Skull Crushers, Dips, JM Press, French Press, Diamond Push-ups
+BACK: Barbell Rows, Pendlay Rows, T-Bar Rows, Dumbbell Rows, Meadows Rows, Seal Rows, Cable Rows, Chest-Supported Rows, Kroc Rows, Pull-ups, Chin-ups, Lat Pulldowns, Close-Grip Pulldowns, Straight-Arm Pulldowns, Shrugs, Rack Pulls
+BICEPS: Barbell Curls, DB Curls, Hammer Curls, Incline DB Curls, Preacher Curls, Cable Curls, Spider Curls, EZ Bar Curls, Reverse Curls
+QUADS: Squats, Front Squats, Goblet Squats, Hack Squats, Leg Press, Pause Squats, Bulgarian Split Squats, Walking Lunges, Reverse Lunges, Step-ups, Leg Extensions
+HAMSTRINGS/GLUTES: Romanian Deadlifts, Stiff-Leg Deadlifts, Conventional Deadlifts, Sumo Deadlifts, Trap Bar Deadlifts, Good Mornings, Hip Thrusts, Leg Curls, Nordic Curls, Glute-Ham Raises, Kettlebell Swings, Back Extensions
+CORE: Planks, Ab Wheel Rollouts, Hanging Leg Raises, Cable Crunches, Pallof Press, Farmer's Walks, Dead Bugs
+
+FOCUS COMBINATIONS:
+- PUSH: 1-2 chest compounds + 1 shoulder + 1-2 tricep/accessory
+- PULL: 1-2 back compounds + 1 vertical pull + 1-2 bicep/accessory
+- LEGS: 1-2 quad compounds + 1-2 hamstring/glute + 1 calf/core
+- UPPER: 1 push compound + 1 pull compound + 2-3 accessories
+- FULL BODY: 1 lower compound + 1 upper push + 1 upper pull + 1-2 accessories
+- BENCH FOCUS: Bench variation as main + 2-3 chest/tricep accessories
+
+ROTATE exercises — do NOT repeat what athletes did last session. Mix familiar exercises (for accurate weights) with new ones.
+Pick exercises from this database AND the athletes' existing exercises. Prioritize compound movements.
 
 WEIGHT CALCULATION — USE EACH ATHLETE'S DATA:
 When setting weights, follow this priority:
 1. If athlete has e1RM data for the EXACT exercise: use intensity scaling below
 2. If athlete has data for a RELATED exercise, infer:
-   - Incline Bench ≈ 75-80% of Flat Bench e1RM
-   - Overhead Press ≈ 60-65% of Bench Press e1RM
-   - Barbell Row ≈ 70-80% of Bench Press e1RM
-   - Front Squat ≈ 80-85% of Back Squat e1RM
-   - Romanian Deadlift ≈ 70-75% of Deadlift e1RM
-   - DB variations ≈ 40-45% of barbell e1RM (per hand)
+   Bench-related: Incline ≈ 75-80%, Close-Grip ≈ 85-90%, Floor Press ≈ 85%, DB Bench ≈ 40-45% per hand
+   Press-related: OHP ≈ 60-65% of Bench, Push Press ≈ 70%, DB Shoulder Press ≈ 30-35% per hand
+   Row-related: Barbell Row ≈ 70-80% of Bench, DB Row ≈ 35-40% per hand, T-Bar Row ≈ 65-75%
+   Squat-related: Front Squat ≈ 80-85%, Goblet Squat ≈ 25-30%, Hack Squat ≈ 80-90%
+   Deadlift-related: RDL ≈ 70-75%, Sumo ≈ 95-100%, Trap Bar ≈ 100-105%
+   General: DB variations ≈ 40-45% of barbell per hand, Cable exercises ≈ light-moderate
 3. If NO related data: conservative defaults and note it
 
 GROUP COACHING:

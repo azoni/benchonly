@@ -116,28 +116,63 @@ STANDARD WORKOUT RULES:
 - USER NOTES: Pay close attention to any user notes from recent workouts. These are the lifter's own observations (e.g. "shoulder felt tight", "grip was slipping", "felt strong today"). Use these to adjust exercise selection, weight, and volume.
 
 EXERCISE SELECTION — THIS IS CRITICAL:
-Do NOT just repeat exercises the user has already done. Select the BEST exercises for the focus area. Mix exercises the user has data for with new ones they should try.
+Do NOT just repeat the same exercises the user always does. Look at their recent workouts and ROTATE exercises. If they benched last session, use Incline DB Press or Floor Press this time. Introduce exercises they haven't tried yet. A good workout mixes 1-2 exercises the user has data for (so weights are accurate) with 1-3 new exercises (use conservative weights and note it).
 
-EXERCISE DATABASE BY FOCUS:
-- PUSH: Bench Press, Incline DB Press, Overhead Press, Dips, Cable Flyes, Lateral Raises, Tricep Pushdowns, Close-Grip Bench, Push Press, DB Shoulder Press, Landmine Press, Skull Crushers
-- PULL: Barbell Rows, Pull-ups, Lat Pulldowns, Cable Rows, Face Pulls, Dumbbell Rows, T-Bar Rows, Chin-ups, Hammer Curls, Barbell Curls, Rear Delt Flyes, Meadows Rows
-- LEGS: Squats, Romanian Deadlifts, Leg Press, Bulgarian Split Squats, Leg Curls, Leg Extensions, Hip Thrusts, Walking Lunges, Calf Raises, Front Squats, Goblet Squats, Hack Squats
-- UPPER: Bench Press, Overhead Press, Barbell Rows, Pull-ups, Incline DB Press, Lateral Raises, Face Pulls, Dumbbell Rows, Tricep Pushdowns, Curls
-- FULL BODY: Squats, Bench Press, Barbell Rows, Overhead Press, Romanian Deadlifts, Pull-ups, Lunges, Dips, Face Pulls, Planks
-- BENCH FOCUS: Bench Press, Close-Grip Bench, Incline Bench, DB Bench, Paused Bench, Spoto Press, Floor Press, Cable Flyes, Tricep Pushdowns, Dips
-Pick from these AND the user's existing exercises. Prioritize compound movements first, accessories second.
+EXERCISE DATABASE — pick from these based on focus. Use the EXACT names listed here:
+
+CHEST (push/bench focus):
+  Compounds: Bench Press, Incline Bench Press, Decline Bench Press, Close-Grip Bench Press, Floor Press, Paused Bench Press, Spoto Press, Larsen Press, DB Bench Press, Incline DB Press, Decline DB Press
+  Accessories: Cable Flyes, Incline Cable Flyes, Pec Deck, DB Flyes, Machine Chest Press, Svend Press, Push-ups, Deficit Push-ups
+
+SHOULDERS:
+  Compounds: Overhead Press, DB Shoulder Press, Push Press, Arnold Press, Landmine Press, Z Press, Viking Press, Behind-the-Neck Press
+  Accessories: Lateral Raises, Cable Lateral Raises, Rear Delt Flyes, Face Pulls, Front Raises, DB Rear Delt Rows, Upright Rows, Lu Raises, Band Pull-Aparts
+
+TRICEPS:
+  Tricep Pushdowns, Overhead Tricep Extensions, Skull Crushers, Close-Grip Push-ups, Dips, Tricep Kickbacks, JM Press, French Press, Diamond Push-ups
+
+BACK:
+  Compounds: Barbell Rows, Pendlay Rows, T-Bar Rows, Dumbbell Rows, Meadows Rows, Seal Rows, Cable Rows, Chest-Supported Rows, Helms Rows, Kroc Rows
+  Vertical: Pull-ups, Chin-ups, Lat Pulldowns, Close-Grip Pulldowns, Neutral-Grip Pulldowns, Straight-Arm Pulldowns
+  Accessories: Face Pulls, Band Pull-Aparts, Rear Delt Flyes, Shrugs, DB Shrugs, Rack Pulls
+
+BICEPS:
+  Barbell Curls, DB Curls, Hammer Curls, Incline DB Curls, Preacher Curls, Cable Curls, Concentration Curls, Spider Curls, EZ Bar Curls, Reverse Curls
+
+QUADS:
+  Compounds: Squats, Front Squats, Goblet Squats, Hack Squats, Leg Press, Smith Machine Squats, Safety Bar Squats, Pause Squats, Anderson Squats
+  Accessories: Bulgarian Split Squats, Walking Lunges, Reverse Lunges, Step-ups, Sissy Squats, Leg Extensions, Wall Sits
+
+HAMSTRINGS & GLUTES:
+  Compounds: Romanian Deadlifts, Stiff-Leg Deadlifts, Conventional Deadlifts, Sumo Deadlifts, Trap Bar Deadlifts, Good Mornings, Hip Thrusts, Barbell Hip Thrusts, Cable Pull-Throughs
+  Accessories: Leg Curls, Nordic Curls, Glute-Ham Raises, Single-Leg RDL, Kettlebell Swings, Back Extensions, Reverse Hypers, Glute Bridges
+
+CALVES:
+  Standing Calf Raises, Seated Calf Raises, Single-Leg Calf Raises, Smith Machine Calf Raises, Leg Press Calf Raises
+
+CORE:
+  Planks, Side Planks, Dead Bugs, Ab Wheel Rollouts, Hanging Leg Raises, Cable Crunches, Pallof Press, Farmer's Walks, Suitcase Carries, L-Sits, Dragon Flags
+
+FOCUS COMBINATIONS:
+- PUSH: Pick 1-2 chest compounds + 1 shoulder + 1-2 tricep/accessory
+- PULL: Pick 1-2 back compounds + 1 vertical pull + 1-2 bicep/accessory
+- LEGS: Pick 1-2 quad compounds + 1-2 hamstring/glute + 1 calf/core
+- UPPER: Pick 1 push compound + 1 pull compound + 2-3 accessories (mix shoulders, arms, back)
+- FULL BODY: Pick 1 lower compound + 1 upper push + 1 upper pull + 1-2 accessories
+- BENCH FOCUS: Bench variation as main lift + 2-3 chest/tricep accessories that support bench
+
+Prioritize compound movements first, accessories second. DO NOT use exercises outside this database unless the user has logged them before.
 
 WEIGHT CALCULATION — CRITICAL:
 When setting weights, follow this priority:
 1. If user has e1RM data for the EXACT exercise: use intensity scaling below
 2. If user has data for a RELATED exercise, infer the weight:
-   - Incline Bench ≈ 75-80% of Flat Bench e1RM
-   - Overhead Press ≈ 60-65% of Bench Press e1RM
-   - Barbell Row ≈ 70-80% of Bench Press e1RM
-   - Front Squat ≈ 80-85% of Back Squat e1RM
-   - Romanian Deadlift ≈ 70-75% of Deadlift e1RM
-   - DB variations ≈ 40-45% of barbell e1RM (per hand)
-   - Close-grip/Paused variations ≈ 85-90% of standard e1RM
+   Bench-related: Incline ≈ 75-80%, Decline ≈ 105%, Close-Grip ≈ 85-90%, Floor Press ≈ 85%, Paused ≈ 85-90%, Spoto ≈ 85%, DB Bench ≈ 40-45% per hand
+   Press-related: OHP ≈ 60-65% of Bench, Push Press ≈ 70% of Bench, Arnold Press ≈ 30% of Bench per hand, DB Shoulder Press ≈ 30-35% per hand
+   Row-related: Barbell Row ≈ 70-80% of Bench, Pendlay Row ≈ 65-75% of Bench, DB Row ≈ 35-40% per hand, T-Bar Row ≈ 65-75%
+   Squat-related: Front Squat ≈ 80-85%, Goblet Squat ≈ 25-30%, Hack Squat ≈ 80-90%, Pause Squat ≈ 80-85%
+   Deadlift-related: RDL ≈ 70-75%, Sumo ≈ 95-100%, Trap Bar ≈ 100-105%, Stiff-Leg ≈ 65-70%
+   General: DB variations ≈ 40-45% of barbell (per hand), Cable exercises ≈ use light-moderate weight
 3. If NO related data exists: use conservative defaults (45-95 lbs upper, 95-135 lbs lower) and note it.
 
 WEIGHT CEILING — CRITICAL:
