@@ -687,6 +687,12 @@ export default function GroupWorkoutPage() {
             )}
           </div>
         )}
+
+        <ExerciseInfoModal
+          exercise={infoExercise}
+          isOpen={!!infoExercise}
+          onClose={() => setInfoExercise(null)}
+        />
       </div>
     )
   }

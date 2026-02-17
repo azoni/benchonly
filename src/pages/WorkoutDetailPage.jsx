@@ -809,6 +809,12 @@ export default function WorkoutDetailPage() {
             )}
           </div>
         )}
+
+        <ExerciseInfoModal
+          exercise={infoExercise}
+          isOpen={!!infoExercise}
+          onClose={() => setInfoExercise(null)}
+        />
       </div>
     )
   }
