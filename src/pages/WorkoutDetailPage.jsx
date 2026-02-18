@@ -269,6 +269,13 @@ export default function WorkoutDetailPage() {
     })
   }
 
+  const removeExercise = (exerciseIndex) => {
+    setExercises(prev => {
+      if (prev.length <= 1) return prev
+      return prev.filter((_, i) => i !== exerciseIndex)
+    })
+  }
+
   // Build save payload preserving AI-generated fields
   const buildSavePayload = (exerciseData) => {
     const payload = { exercises: exerciseData, notes: workoutNotes, userNotes: workoutUserNotes }
@@ -792,7 +799,7 @@ export default function WorkoutDetailPage() {
               {isScheduled ? (
                 <>
                   <Play className="w-6 h-6" />
-                  {hasPartialData ? 'Continue Workout' : 'Start Workout'}
+                  {hasPartialData ? 'Continue Workout' : 'Log Workout'}
                 </>
               ) : (
                 <>
@@ -878,6 +885,15 @@ export default function WorkoutDetailPage() {
                 </button>
                 {typeTag && (
                   <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
+                )}
+                {exercises.length > 1 && (
+                  <button
+                    onClick={() => removeExercise(exerciseIndex)}
+                    className="p-1.5 text-iron-600 hover:text-red-400 transition-colors"
+                    title="Remove exercise"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 )}
               </div>
               <p className="text-sm text-iron-500 mt-1">{exercise.sets?.length || 0} sets</p>

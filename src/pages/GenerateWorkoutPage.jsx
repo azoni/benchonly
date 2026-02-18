@@ -111,7 +111,7 @@ export default function GenerateWorkoutPage() {
   const [model, setModel] = useState('standard');
   const [duration, setDuration] = useState('auto');
   const [exerciseCount, setExerciseCount] = useState('auto');
-  const [includeWarmup, setIncludeWarmup] = useState(true);
+  const [includeWarmup, setIncludeWarmup] = useState(false);
   const [includeStretches, setIncludeStretches] = useState(false);
   const [maxExercise, setMaxExercise] = useState('');
   const [workoutDate, setWorkoutDate] = useState(() => {
