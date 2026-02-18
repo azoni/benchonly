@@ -161,7 +161,7 @@ export default function OnboardingPage() {
                 <div className="w-8 h-8 rounded-full bg-flame-500/10 flex items-center justify-center flex-shrink-0">
                   <User className="w-4 h-4 text-flame-400" />
                 </div>
-                <span className="text-sm text-iron-300">Your body stats for smart weight calculations</span>
+                <span className="text-sm text-iron-300">Your stats for personalized weight calculations</span>
               </div>
               <div className="flex items-center gap-3 text-left">
                 <div className="w-8 h-8 rounded-full bg-flame-500/10 flex items-center justify-center flex-shrink-0">

@@ -19,6 +19,7 @@ import {
   Heart,
   ArrowLeft,
   LogIn,
+  Video,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
@@ -51,6 +52,12 @@ const SECTIONS = [
     id: 'groups',
     label: 'Groups & Coaching',
     icon: Users,
+    group: 'Features',
+  },
+  {
+    id: 'formcheck',
+    label: 'Form Check',
+    icon: Video,
     group: 'Features',
   },
   {
@@ -90,10 +97,10 @@ function SectionContent({ id }) {
     case 'overview':
       return (
         <div>
-          <h1 className="text-2xl lg:text-3xl font-display text-iron-50 mb-3">BenchPressOnly</h1>
+          <h1 className="text-2xl lg:text-3xl font-display text-iron-50 mb-3">BENCH ONLY</h1>
           <p className="text-iron-300 leading-relaxed mb-6">
-            An AI-powered training companion that adapts to you. Log workouts, generate periodized programs,
-            track pain, and train with friends — all driven by your real performance data.
+            An AI-powered strength training companion that adapts to you. Log workouts, generate periodized programs,
+            check your form, track pain, and train with friends — all driven by your real performance data.
           </p>
 
           <div className="grid sm:grid-cols-2 gap-4 mb-8">
@@ -104,6 +111,7 @@ function SectionContent({ id }) {
               { icon: Users, title: 'Group Training', desc: 'Train with friends, share workouts, and review each other\'s lifts.' },
               { icon: Brain, title: 'AI Coach', desc: 'Chat with an AI that knows your full training history.' },
               { icon: AlertTriangle, title: 'Pain Awareness', desc: 'Log pain on any set. The AI adapts around injuries automatically.' },
+              { icon: Video, title: 'AI Form Check', desc: 'Upload a lift video for frame-by-frame analysis with scores and coaching cues.' },
               { icon: Activity, title: 'Cardio & Activity', desc: 'Log cardio sessions with calorie estimates. Set up recurring schedules.' },
               { icon: Calculator, title: '1RM Testing', desc: 'AI-generated max attempt sessions with warm-up ramps and attempt protocols.' },
             ].map(item => (
@@ -218,11 +226,18 @@ function SectionContent({ id }) {
           </div>
 
           <h2 className="text-lg font-display text-iron-100 mb-3">Workout Status</h2>
-          <p className="text-iron-300 text-sm leading-relaxed">
-            Workouts have three states: <strong className="text-iron-100">scheduled</strong> (generated but not started), 
-            <strong className="text-iron-100"> in-progress</strong> (you've started logging), and 
+          <p className="text-iron-300 text-sm leading-relaxed mb-6">
+            Workouts have three states: <strong className="text-iron-100">scheduled</strong> (generated but not started),
+            <strong className="text-iron-100"> in-progress</strong> (you've started logging), and
             <strong className="text-iron-100"> completed</strong>. Only completed workouts feed into AI context
             and strength calculations. This prevents unfinished prescriptions from skewing your data.
+          </p>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">Exercise Info</h2>
+          <p className="text-iron-300 text-sm leading-relaxed">
+            Each AI-generated exercise includes how-to instructions, key form cues, and substitution
+            suggestions. Tap the exercise name (with the help icon) to view this info, or search YouTube
+            for a video tutorial — all without leaving the app.
           </p>
         </div>
       )
@@ -392,6 +407,92 @@ function SectionContent({ id }) {
           <p className="text-iron-300 text-sm leading-relaxed">
             Add friends by name to follow each other's progress. Friends' activity shows up in your feed
             even if you're not in the same group. Go to the Friends page to search and send requests.
+          </p>
+        </div>
+      )
+
+    case 'formcheck':
+      return (
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-display text-iron-50 mb-3">AI Form Check</h1>
+          <p className="text-iron-300 leading-relaxed mb-6">
+            Upload a video of your lift and get instant AI-powered form analysis. The system extracts
+            key frames, identifies the exercise, and scores each phase of the movement.
+          </p>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">How It Works</h2>
+          <ol className="space-y-3 text-iron-300 text-sm mb-8">
+            <li className="flex gap-3">
+              <span className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+              <span><strong className="text-iron-100">Record or upload</strong> a video of your lift (or use your camera directly).</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+              <span><strong className="text-iron-100">Smart frame extraction</strong> detects motion and pulls the most relevant frames from the actual lift.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+              <span><strong className="text-iron-100">AI analyzes</strong> each frame — identifying the exercise, scoring form phases, and detecting issues.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
+              <span><strong className="text-iron-100">Get results</strong> with an overall score, per-frame breakdown, coaching cues, and injury risk flags.</span>
+            </li>
+          </ol>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">What You Get</h2>
+          <div className="bg-iron-900/50 border border-iron-800 rounded-xl p-4 space-y-3 text-sm mb-8">
+            <div>
+              <span className="text-iron-100 font-medium">Overall Score</span>
+              <p className="text-xs text-iron-500">1–10 rating of your form across the entire lift.</p>
+            </div>
+            <div>
+              <span className="text-iron-100 font-medium">Phase Detection</span>
+              <p className="text-xs text-iron-500">Each frame is labeled (setup, descent, bottom, ascent, lockout) with its own score.</p>
+            </div>
+            <div>
+              <span className="text-iron-100 font-medium">Coaching Cues</span>
+              <p className="text-xs text-iron-500">Specific, actionable cues for each frame — written as if a coach is talking directly to you.</p>
+            </div>
+            <div>
+              <span className="text-iron-100 font-medium">Injury Risks</span>
+              <p className="text-xs text-iron-500">Flags body areas at risk with severity levels and specific fixes.</p>
+            </div>
+            <div>
+              <span className="text-iron-100 font-medium">Focus Drill</span>
+              <p className="text-xs text-iron-500">The single most important thing to fix next session, with a memorable cue.</p>
+            </div>
+          </div>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">Quality Tiers</h2>
+          <div className="space-y-3 mb-8">
+            <div className="bg-iron-900/50 border border-iron-800 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold text-iron-100">Quick</h3>
+                <span className="text-xs text-iron-500">10 credits</span>
+              </div>
+              <p className="text-xs text-iron-400">6 frames — fast overview of your form. Good for a quick check.</p>
+            </div>
+            <div className="bg-iron-900/50 border border-iron-800 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold text-iron-100">Standard</h3>
+                <span className="text-xs text-iron-500">15 credits</span>
+              </div>
+              <p className="text-xs text-iron-400">10 frames — detailed analysis with phase-by-phase breakdown.</p>
+            </div>
+            <div className="bg-iron-900/50 border border-iron-800 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold text-iron-100">Detailed</h3>
+                <span className="text-xs text-iron-500">25 credits</span>
+              </div>
+              <p className="text-xs text-iron-400">16 frames — comprehensive analysis catching subtle issues across the full movement.</p>
+            </div>
+          </div>
+
+          <h2 className="text-lg font-display text-iron-100 mb-3">Privacy</h2>
+          <p className="text-iron-300 text-sm leading-relaxed">
+            Your video never leaves your device. Only the extracted frames are sent for analysis, and
+            frame data is automatically deleted from the server after processing completes.
           </p>
         </div>
       )
@@ -691,7 +792,7 @@ function SectionContent({ id }) {
         <div>
           <h1 className="text-2xl lg:text-3xl font-display text-iron-50 mb-3">About</h1>
           <p className="text-iron-300 leading-relaxed mb-8">
-            BenchPressOnly is built by a solo developer who lifts. The goal is simple — 
+            BENCH ONLY is built by a solo developer who lifts. The goal is simple —
             make AI-powered coaching accessible to everyone, not just people who can afford a personal trainer.
           </p>
 

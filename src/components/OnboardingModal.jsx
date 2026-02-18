@@ -10,20 +10,21 @@ import {
   Calendar,
   Calculator,
   Sparkles,
-  Check
+  Check,
+  Video,
 } from 'lucide-react'
 
 const ONBOARDING_STEPS = [
   {
     icon: Sparkles,
-    title: 'Welcome to BenchPressOnly',
+    title: 'Welcome to BENCH ONLY',
     description: 'Your personal strength training companion. Track workouts, set goals, and train smarter.',
     color: 'flame'
   },
   {
     icon: Dumbbell,
     title: 'Log Your Workouts',
-    description: 'Record exercises, sets, reps, and weight. Track RPE and pain levels to monitor recovery.',
+    description: 'Log sets, reps, and weight with a clean, focused interface. Track RPE and pain to monitor recovery.',
     color: 'green'
   },
   {
@@ -35,8 +36,14 @@ const ONBOARDING_STEPS = [
   {
     icon: Sparkles,
     title: 'AI Training Assistant',
-    description: 'Get personalized advice, have AI generate workouts based on your history, and add recommended workouts directly to your log.',
+    description: 'Generate workouts tailored to your maxes and history. Each exercise includes form cues, substitutions, and video links.',
     color: 'flame'
+  },
+  {
+    icon: Video,
+    title: 'AI Form Check',
+    description: 'Upload a video of your lift and get frame-by-frame form analysis with coaching cues and scores.',
+    color: 'purple'
   },
   {
     icon: Users,

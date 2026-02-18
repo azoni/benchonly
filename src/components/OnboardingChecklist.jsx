@@ -25,7 +25,7 @@ const CHECKLIST_TASKS = [
   {
     id: 'docs',
     label: 'Read the docs',
-    description: 'Learn how BenchOnly works',
+    description: 'Learn how BENCH ONLY works',
     icon: BookOpen,
     credits: 25,
     link: '/docs',

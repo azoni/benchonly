@@ -18,6 +18,7 @@ import {
   MessageCircle,
   BookOpen,
   Video,
+  HelpCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
@@ -397,7 +398,7 @@ export default function LoginPage() {
                 TRAIN SMARTER
               </h1>
               <p className="text-lg sm:text-xl text-iron-400 leading-relaxed mb-8">
-                AI-powered workout tracking. Generate personalized workouts, train with friends, and track your progress — all free.
+                AI-powered strength training. Generate personalized workouts, check your form, train with friends, and track everything — all free.
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
@@ -457,11 +458,11 @@ export default function LoginPage() {
                   </p>
                   <div className="space-y-2">
                     {[
-                      'Analyzes your actual training history',
-                      'Calculates working weights from your maxes',
+                      'Analyzes your training history and maxes',
+                      'Generates workouts with exercise-specific form cues',
+                      'AI form check — frame-by-frame video analysis',
                       'Skips exercises flagged for pain',
-                      'Warm-up ramps and 1RM test protocols',
-                      'Bodyweight and hotel/travel modes',
+                      'Bodyweight, hotel/travel, and 1RM test modes',
                     ].map((t, i) => (
                       <div key={i} className="flex items-center gap-2 text-sm text-iron-300">
                         <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
@@ -517,7 +518,6 @@ export default function LoginPage() {
                   <div className="flex items-center gap-2 mb-3">
                     <Video className="w-5 h-5 text-purple-400" />
                     <h2 className="font-display text-2xl text-iron-100">AI FORM CHECK</h2>
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-400 uppercase">Beta</span>
                   </div>
                   <p className="text-iron-400 mb-4 leading-relaxed">
                     Upload a video of your lift and get instant frame-by-frame form analysis from AI. 
@@ -554,6 +554,7 @@ export default function LoginPage() {
                   { icon: Video, label: 'AI Form Check' },
                   { icon: Users, label: 'Group Training' },
                   { icon: Target, label: 'Goal Tracking' },
+                  { icon: HelpCircle, label: 'Exercise Info' },
                   { icon: TrendingUp, label: '1RM Test Mode' },
                   { icon: Activity, label: 'Cardio Tracking' },
                   { icon: Calendar, label: 'Calendar' },
