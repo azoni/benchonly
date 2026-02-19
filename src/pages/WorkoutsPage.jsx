@@ -720,12 +720,15 @@ export default function WorkoutsPage() {
                               Edit
                             </button>
                           )}
-                          {!workout.isGroupWorkout && !isGuest && (
+                          {!isGuest && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setActiveMenu(null)
-                                navigate(`/workouts/${workout.id}?share=true`)
+                                const url = workout.isGroupWorkout
+                                  ? `/workouts/group/${workout.id}`
+                                  : `/workouts/${workout.id}`
+                                navigate(url, { state: { openShare: true } })
                               }}
                               className="flex items-center gap-2 px-4 py-2 text-sm text-iron-300
                                 hover:bg-iron-700 transition-colors w-full"

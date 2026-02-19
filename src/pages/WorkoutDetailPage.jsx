@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -72,7 +72,6 @@ export default function WorkoutDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const [searchParams, setSearchParams] = useSearchParams()
   usePageTitle('Workout')
   const { user, isGuest } = useAuth()
   const sidebarOpen = useUIStore((s) => s.sidebarOpen)
@@ -132,14 +131,14 @@ export default function WorkoutDetailPage() {
     fetchWorkout()
   }, [id, user, isGuest])
 
-  // Auto-open share modal if ?share=true
+  // Auto-open share modal from location state (e.g. from WorkoutsPage share button)
   useEffect(() => {
-    if (searchParams.get('share') === 'true' && workout && !isGuest) {
-      searchParams.delete('share')
-      setSearchParams(searchParams, { replace: true })
-      openShareModal()
+    if (location.state?.openShare && workout && !isGuest) {
+      // Clear the state so it doesn't re-trigger on back nav
+      window.history.replaceState({}, '')
+      setTimeout(() => openShareModal(), 100)
     }
-  }, [workout, searchParams])
+  }, [workout])
 
   const handleBack = () => {
     if (location.state?.from) {
@@ -897,6 +896,124 @@ export default function WorkoutDetailPage() {
           isOpen={!!infoExercise}
           onClose={() => setInfoExercise(null)}
         />
+
+        {/* Share Modal */}
+        <AnimatePresence>
+          {showShareModal && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowShareModal(false)}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed inset-x-4 top-[15%] mx-auto max-w-md bg-iron-900 border border-iron-700 rounded-2xl z-50 overflow-hidden shadow-2xl"
+              >
+                <div className="flex items-center justify-between p-4 border-b border-iron-800">
+                  <h3 className="font-display text-lg text-iron-100">Share Workout</h3>
+                  <button onClick={() => setShowShareModal(false)} className="p-1.5 text-iron-400 hover:text-iron-200 rounded-lg">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  {shared ? (
+                    <div className="text-center py-6">
+                      <div className="w-14 h-14 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Check className="w-7 h-7 text-green-400" />
+                      </div>
+                      <p className="text-iron-200 font-medium">Workout Shared!</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="p-3 bg-iron-800/50 rounded-lg">
+                        <p className="text-sm text-iron-300 font-medium">{workout?.name || 'Workout'}</p>
+                        <p className="text-xs text-iron-500 mt-0.5">{workout?.exercises?.length || 0} exercises</p>
+                      </div>
+
+                      {friends.length === 0 ? (
+                        <div className="text-center py-4">
+                          <p className="text-sm text-iron-500">No friends yet. Add friends to share workouts.</p>
+                          <Link to="/friends" className="text-sm text-flame-400 hover:underline mt-1 inline-block">Find Friends</Link>
+                        </div>
+                      ) : (
+                        <>
+                          {friends.length > 5 && (
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iron-500" />
+                              <input
+                                type="text"
+                                placeholder="Search friends..."
+                                value={shareSearch}
+                                onChange={(e) => setShareSearch(e.target.value)}
+                                className="input-field pl-9 py-2 text-sm w-full"
+                              />
+                            </div>
+                          )}
+
+                          <div className="max-h-48 overflow-y-auto space-y-1">
+                            {friends
+                              .filter(fid => {
+                                if (!shareSearch) return true
+                                const p = friendProfiles[fid]
+                                return p?.displayName?.toLowerCase().includes(shareSearch.toLowerCase())
+                              })
+                              .map(fid => {
+                                const p = friendProfiles[fid]
+                                return (
+                                  <button
+                                    key={fid}
+                                    onClick={() => setSelectedFriend(fid)}
+                                    className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-colors ${
+                                      selectedFriend === fid
+                                        ? 'bg-flame-500/15 border border-flame-500/30'
+                                        : 'hover:bg-iron-800'
+                                    }`}
+                                  >
+                                    {p?.photoURL ? (
+                                      <img src={p.photoURL} alt="" className="w-8 h-8 rounded-full" />
+                                    ) : (
+                                      <div className="w-8 h-8 rounded-full bg-iron-700 flex items-center justify-center text-xs font-medium text-iron-400">
+                                        {(p?.displayName || '?')[0]}
+                                      </div>
+                                    )}
+                                    <span className="text-sm text-iron-200 flex-1 text-left truncate">{p?.displayName || 'User'}</span>
+                                    {selectedFriend === fid && <Check className="w-4 h-4 text-flame-400" />}
+                                  </button>
+                                )
+                              })}
+                          </div>
+
+                          <textarea
+                            placeholder="Add a message (optional)"
+                            value={shareMessage}
+                            onChange={(e) => setShareMessage(e.target.value)}
+                            rows={2}
+                            className="input-field w-full resize-none text-sm"
+                          />
+
+                          <button
+                            onClick={handleShare}
+                            disabled={!selectedFriend || sharing}
+                            className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                            {sharing ? 'Sharing...' : 'Share Workout'}
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
@@ -1251,123 +1368,6 @@ export default function WorkoutDetailPage() {
         onClose={() => setInfoExercise(null)}
       />
 
-      {/* Share Modal */}
-      <AnimatePresence>
-        {showShareModal && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowShareModal(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-x-4 top-[15%] mx-auto max-w-md bg-iron-900 border border-iron-700 rounded-2xl z-50 overflow-hidden shadow-2xl"
-            >
-              <div className="flex items-center justify-between p-4 border-b border-iron-800">
-                <h3 className="font-display text-lg text-iron-100">Share Workout</h3>
-                <button onClick={() => setShowShareModal(false)} className="p-1.5 text-iron-400 hover:text-iron-200 rounded-lg">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="p-4 space-y-4">
-                {shared ? (
-                  <div className="text-center py-6">
-                    <div className="w-14 h-14 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <Check className="w-7 h-7 text-green-400" />
-                    </div>
-                    <p className="text-iron-200 font-medium">Workout Shared!</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="p-3 bg-iron-800/50 rounded-lg">
-                      <p className="text-sm text-iron-300 font-medium">{workout?.name || 'Workout'}</p>
-                      <p className="text-xs text-iron-500 mt-0.5">{workout?.exercises?.length || 0} exercises</p>
-                    </div>
-
-                    {friends.length === 0 ? (
-                      <div className="text-center py-4">
-                        <p className="text-sm text-iron-500">No friends yet. Add friends to share workouts.</p>
-                        <Link to="/friends" className="text-sm text-flame-400 hover:underline mt-1 inline-block">Find Friends</Link>
-                      </div>
-                    ) : (
-                      <>
-                        {friends.length > 5 && (
-                          <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iron-500" />
-                            <input
-                              type="text"
-                              placeholder="Search friends..."
-                              value={shareSearch}
-                              onChange={(e) => setShareSearch(e.target.value)}
-                              className="input-field pl-9 py-2 text-sm w-full"
-                            />
-                          </div>
-                        )}
-
-                        <div className="max-h-48 overflow-y-auto space-y-1">
-                          {friends
-                            .filter(fid => {
-                              if (!shareSearch) return true
-                              const p = friendProfiles[fid]
-                              return p?.displayName?.toLowerCase().includes(shareSearch.toLowerCase())
-                            })
-                            .map(fid => {
-                              const p = friendProfiles[fid]
-                              return (
-                                <button
-                                  key={fid}
-                                  onClick={() => setSelectedFriend(fid)}
-                                  className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-colors ${
-                                    selectedFriend === fid
-                                      ? 'bg-flame-500/15 border border-flame-500/30'
-                                      : 'hover:bg-iron-800'
-                                  }`}
-                                >
-                                  {p?.photoURL ? (
-                                    <img src={p.photoURL} alt="" className="w-8 h-8 rounded-full" />
-                                  ) : (
-                                    <div className="w-8 h-8 rounded-full bg-iron-700 flex items-center justify-center text-xs font-medium text-iron-400">
-                                      {(p?.displayName || '?')[0]}
-                                    </div>
-                                  )}
-                                  <span className="text-sm text-iron-200 flex-1 text-left truncate">{p?.displayName || 'User'}</span>
-                                  {selectedFriend === fid && <Check className="w-4 h-4 text-flame-400" />}
-                                </button>
-                              )
-                            })}
-                        </div>
-
-                        <textarea
-                          placeholder="Add a message (optional)"
-                          value={shareMessage}
-                          onChange={(e) => setShareMessage(e.target.value)}
-                          rows={2}
-                          className="input-field w-full resize-none text-sm"
-                        />
-
-                        <button
-                          onClick={handleShare}
-                          disabled={!selectedFriend || sharing}
-                          className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                          {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                          {sharing ? 'Sharing...' : 'Share Workout'}
-                        </button>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </div>
   )
 }

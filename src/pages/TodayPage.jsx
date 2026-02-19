@@ -1165,7 +1165,7 @@ export default function TodayPage() {
           const visibility = item.visibility || 'public'
           if (visibility === 'private') return false
           if (visibility === 'friends') return friendSet.has(item.userId)
-          if (visibility === 'group') return true // Group workouts now visible to everyone
+          if (visibility === 'group') return item.groupId && userGroupIds.has(item.groupId)
           return true // public
         })
         return visibleItems.length > 0 ? (
@@ -1186,9 +1186,10 @@ export default function TodayPage() {
             {visibleItems.slice(0, 4).map(item => {
               const feedUser = feedUsers[item.userId]
               const userName = feedUser?.displayName || 'Someone'
+              const isGroupWorkout = item.type === 'group_workout' || item.groupId || item.data?.groupId
               const isOwnWorkout = item.userId === user?.uid && item.data?.workoutId
               const workoutLink = isOwnWorkout
-                ? (item.type === 'group_workout' ? `/workouts/group/${item.data.workoutId}` : `/workouts/${item.data.workoutId}`)
+                ? (isGroupWorkout ? `/workouts/group/${item.data.workoutId}` : `/workouts/${item.data.workoutId}`)
                 : null
               const Wrapper = workoutLink ? Link : 'div'
               const wrapperProps = workoutLink ? { to: workoutLink } : {}
@@ -1204,8 +1205,8 @@ export default function TodayPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-iron-300 truncate">
                       <span className="text-iron-200 font-medium">{userName}</span>{' '}
-                      {item.type === 'workout' ? `completed ${item.data?.name || 'a workout'}` :
-                       item.type === 'group_workout' ? `completed ${item.data?.name || 'a workout'}` :
+                      {isGroupWorkout ? `completed their workout in ${item.data?.groupName || 'a group'}` :
+                       item.type === 'workout' ? `completed ${item.data?.name || 'a workout'}` :
                        item.type === 'goal_completed' ? `achieved ${item.data?.lift}` :
                        item.type === 'cardio' ? `logged ${item.data?.duration}min ${item.data?.name || 'cardio'}` :
                        item.type === 'personal_record' ? `hit a new PR on ${item.data?.exercise}` :
@@ -1216,7 +1217,7 @@ export default function TodayPage() {
                     </p>
                     <p className="text-xs text-iron-600">
                       {item.createdAt?.toDate && format(item.createdAt.toDate(), 'EEE, h:mm a')}
-                      {(item.type === 'workout' || item.type === 'group_workout') && (() => {
+                      {(item.type === 'workout' || isGroupWorkout) && (() => {
                         const dur = formatDuration(item.data?.totalSets, item.data?.duration)
                         return dur ? ` · ${dur}` : ''
                       })()}

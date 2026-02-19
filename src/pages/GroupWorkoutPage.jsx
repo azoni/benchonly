@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -24,9 +24,13 @@ import {
   Eye,
   HelpCircle,
   Activity,
+  Share2,
+  Send,
+  Search,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { groupWorkoutService, groupService } from '../services/firestore'
+import { groupWorkoutService, groupService, sharedWorkoutService } from '../services/firestore'
+import { friendService } from '../services/friendService'
 import { getDisplayDate } from '../utils/dateUtils'
 import usePageTitle from '../utils/usePageTitle'
 import ExerciseInfoModal from '../components/ExerciseInfoModal'
@@ -79,6 +83,14 @@ export default function GroupWorkoutPage() {
   const [infoExercise, setInfoExercise] = useState(null)
   const [expandedRpe, setExpandedRpe] = useState({})
   const [openNotes, setOpenNotes] = useState({})
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [friends, setFriends] = useState([])
+  const [friendProfiles, setFriendProfiles] = useState({})
+  const [shareSearch, setShareSearch] = useState('')
+  const [selectedFriend, setSelectedFriend] = useState(null)
+  const [shareMessage, setShareMessage] = useState('')
+  const [sharing, setSharing] = useState(false)
+  const [shared, setShared] = useState(false)
 
   useEffect(() => {
     loadWorkout()
@@ -107,6 +119,55 @@ export default function GroupWorkoutPage() {
       console.error('Error loading workout:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Auto-open share modal from location state
+  useEffect(() => {
+    if (location.state?.openShare && workout) {
+      window.history.replaceState({}, '')
+      setTimeout(() => openShareModal(), 100)
+    }
+  }, [workout])
+
+  const openShareModal = async () => {
+    setShowShareModal(true)
+    setSelectedFriend(null)
+    setShareMessage('')
+    setShared(false)
+    try {
+      const friendIds = await friendService.getFriends(user.uid)
+      setFriends(friendIds)
+      const profiles = {}
+      const { getDoc: gd, doc: dc } = await import('firebase/firestore')
+      const { db: database } = await import('../services/firebase')
+      await Promise.all(friendIds.map(async (fid) => {
+        const snap = await gd(dc(database, 'users', fid))
+        if (snap.exists()) profiles[fid] = snap.data()
+      }))
+      setFriendProfiles(profiles)
+    } catch (err) {
+      console.error('Error loading friends:', err)
+    }
+  }
+
+  const handleShare = async () => {
+    if (!selectedFriend || !workout || sharing) return
+    setSharing(true)
+    try {
+      await sharedWorkoutService.share(
+        user.uid,
+        user.displayName || 'Someone',
+        selectedFriend,
+        workout,
+        shareMessage
+      )
+      setShared(true)
+      setTimeout(() => setShowShareModal(false), 1500)
+    } catch (err) {
+      console.error('Share error:', err)
+    } finally {
+      setSharing(false)
     }
   }
 
@@ -378,8 +439,15 @@ export default function GroupWorkoutPage() {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2">
+              <button
+                onClick={openShareModal}
+                className="p-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-lg transition-colors"
+                title="Share workout"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
               {isAdmin && (
-                <button 
+                <button
                   onClick={handleDelete}
                   className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
                   title="Delete workout"
@@ -703,6 +771,124 @@ export default function GroupWorkoutPage() {
           isOpen={!!infoExercise}
           onClose={() => setInfoExercise(null)}
         />
+
+        {/* Share Modal */}
+        <AnimatePresence>
+          {showShareModal && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowShareModal(false)}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed inset-x-4 top-[15%] mx-auto max-w-md bg-iron-900 border border-iron-700 rounded-2xl z-50 overflow-hidden shadow-2xl"
+              >
+                <div className="flex items-center justify-between p-4 border-b border-iron-800">
+                  <h3 className="font-display text-lg text-iron-100">Share Workout</h3>
+                  <button onClick={() => setShowShareModal(false)} className="p-1.5 text-iron-400 hover:text-iron-200 rounded-lg">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  {shared ? (
+                    <div className="text-center py-6">
+                      <div className="w-14 h-14 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Check className="w-7 h-7 text-green-400" />
+                      </div>
+                      <p className="text-iron-200 font-medium">Workout Shared!</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="p-3 bg-iron-800/50 rounded-lg">
+                        <p className="text-sm text-iron-300 font-medium">{workout?.name || 'Workout'}</p>
+                        <p className="text-xs text-iron-500 mt-0.5">{workout?.exercises?.length || 0} exercises · {group?.name || 'Group'}</p>
+                      </div>
+
+                      {friends.length === 0 ? (
+                        <div className="text-center py-4">
+                          <p className="text-sm text-iron-500">No friends yet. Add friends to share workouts.</p>
+                          <Link to="/friends" className="text-sm text-flame-400 hover:underline mt-1 inline-block">Find Friends</Link>
+                        </div>
+                      ) : (
+                        <>
+                          {friends.length > 5 && (
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iron-500" />
+                              <input
+                                type="text"
+                                placeholder="Search friends..."
+                                value={shareSearch}
+                                onChange={(e) => setShareSearch(e.target.value)}
+                                className="input-field pl-9 py-2 text-sm w-full"
+                              />
+                            </div>
+                          )}
+
+                          <div className="max-h-48 overflow-y-auto space-y-1">
+                            {friends
+                              .filter(fid => {
+                                if (!shareSearch) return true
+                                const p = friendProfiles[fid]
+                                return p?.displayName?.toLowerCase().includes(shareSearch.toLowerCase())
+                              })
+                              .map(fid => {
+                                const p = friendProfiles[fid]
+                                return (
+                                  <button
+                                    key={fid}
+                                    onClick={() => setSelectedFriend(fid)}
+                                    className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-colors ${
+                                      selectedFriend === fid
+                                        ? 'bg-flame-500/15 border border-flame-500/30'
+                                        : 'hover:bg-iron-800'
+                                    }`}
+                                  >
+                                    {p?.photoURL ? (
+                                      <img src={p.photoURL} alt="" className="w-8 h-8 rounded-full" />
+                                    ) : (
+                                      <div className="w-8 h-8 rounded-full bg-iron-700 flex items-center justify-center text-xs font-medium text-iron-400">
+                                        {(p?.displayName || '?')[0]}
+                                      </div>
+                                    )}
+                                    <span className="text-sm text-iron-200 flex-1 text-left truncate">{p?.displayName || 'User'}</span>
+                                    {selectedFriend === fid && <Check className="w-4 h-4 text-flame-400" />}
+                                  </button>
+                                )
+                              })}
+                          </div>
+
+                          <textarea
+                            placeholder="Add a message (optional)"
+                            value={shareMessage}
+                            onChange={(e) => setShareMessage(e.target.value)}
+                            rows={2}
+                            className="input-field w-full resize-none text-sm"
+                          />
+
+                          <button
+                            onClick={handleShare}
+                            disabled={!selectedFriend || sharing}
+                            className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                            {sharing ? 'Sharing...' : 'Share Workout'}
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
     )
   }

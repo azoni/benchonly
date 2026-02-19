@@ -103,7 +103,7 @@ export default function FeedPage() {
     switch (visibility) {
       case 'public': return true
       case 'friends': return friendSet.has(item.userId)
-      case 'group': return true // Group workouts now visible to everyone
+      case 'group': return item.groupId && userGroupIds.has(item.groupId)
       case 'private': return false
       default: return true
     }
@@ -242,13 +242,16 @@ export default function FeedPage() {
     if (item?.data?.eventId) {
       return <Heart className="w-5 h-5 text-pink-400 fill-pink-400" />
     }
+    // Detect group workouts by groupId (handles old items typed as 'workout')
+    const isGroupWorkout = type === 'group_workout' || item?.groupId || item?.data?.groupId
+    if (isGroupWorkout) {
+      return <Users className="w-5 h-5 text-cyan-400" />
+    }
     switch (type) {
       case 'workout':
         return <Dumbbell className="w-5 h-5 text-green-400" />
       case 'cardio':
         return <Activity className="w-5 h-5 text-orange-400" />
-      case 'group_workout':
-        return <Dumbbell className="w-5 h-5 text-green-400" />
       case 'goal_completed':
         return <Trophy className="w-5 h-5 text-yellow-400" />
       case 'goal_created':
@@ -262,14 +265,17 @@ export default function FeedPage() {
 
   const getActivityText = (item) => {
     const userName = users[item.userId]?.displayName || 'Someone'
-    
+    // Detect group workouts by groupId (handles old items typed as 'workout')
+    const isGroupWorkout = item.type === 'group_workout' || item.groupId || item.data?.groupId
+    if (isGroupWorkout) {
+      return <><strong>{userName}</strong> completed their workout in <span className="text-cyan-400">{item.data?.groupName || 'a group'}</span></>
+    }
+
     switch (item.type) {
       case 'workout':
         return <><strong>{userName}</strong> completed <span className="text-flame-400">{item.data?.name || 'a workout'}</span></>
       case 'cardio':
         return <><strong>{userName}</strong> logged <span className="text-orange-400">{item.data?.duration}min of {item.data?.name || 'cardio'}</span></>
-      case 'group_workout':
-        return <><strong>{userName}</strong> completed <span className="text-flame-400">{item.data?.name || 'a workout'}</span>{item.data?.groupName ? <span className="text-iron-600"> · {item.data.groupName}</span> : ''}</>
       case 'goal_completed':
         return <><strong>{userName}</strong> achieved their goal: <span className="text-yellow-400">{item.data?.lift} - {item.data?.targetValue} {item.data?.unit}</span></>
       case 'goal_created':
@@ -293,7 +299,7 @@ export default function FeedPage() {
   const typeFilteredItems = typeFilter === 'all'
     ? tabFilteredItems
     : typeFilter === 'workout'
-    ? tabFilteredItems.filter(item => item.type === 'workout' || item.type === 'group_workout')
+    ? tabFilteredItems.filter(item => item.type === 'workout' || item.type === 'group_workout' || item.groupId || item.data?.groupId)
     : typeFilter === 'goal_completed'
     ? tabFilteredItems.filter(item => item.type === 'goal_completed' || item.type === 'goal_created')
     : tabFilteredItems.filter(item => item.type === typeFilter)
@@ -413,7 +419,8 @@ export default function FeedPage() {
           {filteredItems.map((item) => {
             const itemUser = users[item.userId]
             const profileLink = `/profile/${itemUser?.username || item.userId}`
-            
+            const isGroupWorkout = item.type === 'group_workout' || !!item.groupId || !!item.data?.groupId
+
             return (
             <div key={item.id} className="card-steel p-4">
               {/* Header */}
@@ -456,7 +463,7 @@ export default function FeedPage() {
               </div>
 
               {/* Duration estimate */}
-              {(item.type === 'workout' || item.type === 'group_workout') && (() => {
+              {(item.type === 'workout' || isGroupWorkout) && (() => {
                 const dur = formatDuration(item.data?.totalSets, item.data?.duration)
                 return dur ? (
                   <div className="mt-2 ml-[52px] flex items-center gap-1.5 text-xs text-iron-500">
@@ -474,7 +481,7 @@ export default function FeedPage() {
               })()}
 
               {/* Expandable exercise summary */}
-              {(item.type === 'workout' || item.type === 'group_workout') && item.data?.exerciseSummary?.length > 0 && (
+              {(item.type === 'workout' || isGroupWorkout) && item.data?.exerciseSummary?.length > 0 && (
                 <div className="mt-2 ml-[52px]">
                   <button
                     onClick={() => setExpandedItems(prev => {
@@ -504,8 +511,8 @@ export default function FeedPage() {
 
               {/* View full details — own workouts only */}
               {item.data?.workoutId && item.userId === user?.uid && (
-                <Link 
-                  to={item.type === 'group_workout' ? `/workouts/group/${item.data.workoutId}` : `/workouts/${item.data.workoutId}`}
+                <Link
+                  to={isGroupWorkout ? `/workouts/group/${item.data.workoutId}` : `/workouts/${item.data.workoutId}`}
                   className="mt-2 ml-[52px] block p-2.5 bg-iron-800/50 rounded-lg text-xs text-iron-400 hover:text-iron-200 hover:bg-iron-800 transition-colors"
                 >
                   View full workout details →
@@ -521,7 +528,7 @@ export default function FeedPage() {
                   <MessageCircle className="w-4 h-4" />
                   {item.commentCount > 0 ? `${item.commentCount} comment${item.commentCount !== 1 ? 's' : ''}` : 'Comment'}
                 </button>
-                {(item.type === 'workout' || item.type === 'group_workout') && item.data?.exerciseSummary?.length > 0 && item.userId !== user?.uid && !isGuest && (
+                {(item.type === 'workout' || isGroupWorkout) && item.data?.exerciseSummary?.length > 0 && item.userId !== user?.uid && !isGuest && (
                   <button
                     onClick={() => copyWorkout(item)}
                     disabled={copying === item.id}
