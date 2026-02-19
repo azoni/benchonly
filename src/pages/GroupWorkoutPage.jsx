@@ -28,6 +28,7 @@ import {
   Send,
   Search,
   FileText,
+  RefreshCw,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getAuthHeaders } from '../services/api'
@@ -87,6 +88,8 @@ export default function GroupWorkoutPage() {
   const [infoExercise, setInfoExercise] = useState(null)
   const [infoExerciseIdx, setInfoExerciseIdx] = useState(null)
   const [swappingIdx, setSwappingIdx] = useState(null)
+  const [swapReasonIdx, setSwapReasonIdx] = useState(null)
+  const [swapReason, setSwapReason] = useState('')
   const [expandedRpe, setExpandedRpe] = useState({})
   const [openNotes, setOpenNotes] = useState({})
   const [showShareModal, setShowShareModal] = useState(false)
@@ -201,6 +204,54 @@ export default function GroupWorkoutPage() {
     } catch (error) {
       console.error('Error deleting workout:', error)
       alert('Failed to delete workout')
+    }
+  }
+
+  const swapExercise = async (exIdx, reason) => {
+    const ex = isLogging ? exercises[exIdx] : workout?.exercises?.[exIdx]
+    if (!ex) return
+    setSwappingIdx(exIdx)
+    try {
+      const otherExercises = (isLogging ? exercises : workout.exercises)
+        .filter((_, i) => i !== exIdx)
+        .map(e => e.name)
+
+      const swapHeaders = await getAuthHeaders()
+      const response = await fetch(apiUrl('swap-exercise'), {
+        method: 'POST',
+        headers: swapHeaders,
+        body: JSON.stringify({
+          exerciseName: ex.name,
+          exerciseType: ex.type || 'weight',
+          sets: ex.sets,
+          workoutContext: { otherExercises },
+          ...(reason ? { reason } : {}),
+        }),
+      })
+
+      if (!response.ok) throw new Error('Swap failed')
+      const data = await response.json()
+
+      if (data.exercise) {
+        const newExercises = (isLogging ? exercises : workout.exercises).map((e, i) => i === exIdx ? {
+          ...data.exercise,
+          type: data.exercise.type || e.type || 'weight',
+        } : e)
+
+        await groupWorkoutService.update(id, { exercises: newExercises })
+        setWorkout(prev => ({ ...prev, exercises: newExercises }))
+        if (isLogging) {
+          setExercises(newExercises.map(e => ({
+            ...e,
+            notes: e.notes || '',
+            sets: e.sets?.map(set => ({ ...set })) || []
+          })))
+        }
+      }
+    } catch (err) {
+      console.error('Swap error:', err)
+    } finally {
+      setSwappingIdx(null)
     }
   }
 
@@ -712,6 +763,20 @@ export default function GroupWorkoutPage() {
                   {typeTag && (
                     <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>
                   )}
+                  {!isCompleted && (
+                    <button
+                      onClick={() => setSwapReasonIdx(exerciseIndex)}
+                      disabled={swappingIdx !== null}
+                      title="Swap for similar exercise"
+                      className="p-1.5 text-iron-500 hover:text-flame-400 hover:bg-flame-500/10 rounded-lg transition-colors disabled:opacity-30"
+                    >
+                      {swappingIdx === exerciseIndex ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-flame-400" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4" />
+                      )}
+                    </button>
+                  )}
                 </div>
                 <p className="text-sm text-iron-500 mt-1">{exercise.sets?.length || 0} sets</p>
               </div>
@@ -860,6 +925,59 @@ export default function GroupWorkoutPage() {
           onClose={() => { setInfoExercise(null); setInfoExerciseIdx(null); }}
           onSubstitute={infoExerciseIdx !== null ? (subName) => swapToSubstitution(infoExerciseIdx, subName) : undefined}
         />
+
+        {/* Swap Reason Modal */}
+        <AnimatePresence>
+          {swapReasonIdx !== null && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => { setSwapReasonIdx(null); setSwapReason(''); }}
+                className="fixed inset-0 bg-black/60 z-50"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="fixed inset-x-4 top-[30%] mx-auto max-w-sm bg-iron-900 border border-iron-700 rounded-2xl z-50 p-4 space-y-3"
+              >
+                <h3 className="text-sm font-medium text-iron-200">Swap Exercise</h3>
+                <p className="text-xs text-iron-500">Optionally note why you're swapping (e.g. "shoulder pain", "no cable machine")</p>
+                <input
+                  type="text"
+                  value={swapReason}
+                  onChange={(e) => setSwapReason(e.target.value)}
+                  placeholder="Reason (optional)"
+                  className="input-field w-full text-sm"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      swapExercise(swapReasonIdx, swapReason);
+                      setSwapReasonIdx(null);
+                      setSwapReason('');
+                    }
+                  }}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setSwapReasonIdx(null); setSwapReason(''); }}
+                    className="flex-1 py-2.5 text-sm text-iron-400 hover:text-iron-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => { swapExercise(swapReasonIdx, swapReason); setSwapReasonIdx(null); setSwapReason(''); }}
+                    className="flex-1 py-2.5 text-sm bg-flame-500/15 text-flame-400 border border-flame-500/30 rounded-xl hover:bg-flame-500/25 transition-colors"
+                  >
+                    Swap
+                  </button>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* Share Modal */}
         <AnimatePresence>

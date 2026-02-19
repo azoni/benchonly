@@ -74,6 +74,8 @@ export default function GenerateWorkoutPage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [swappingIdx, setSwappingIdx] = useState(null);
+  const [swapReasonIdx, setSwapReasonIdx] = useState(null);
+  const [swapReason, setSwapReason] = useState('');
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [infoExercise, setInfoExercise] = useState(null);
   const [infoExerciseIdx, setInfoExerciseIdx] = useState(null);
@@ -523,7 +525,7 @@ export default function GenerateWorkoutPage() {
     }));
   };
 
-  const swapExercise = async (exIdx) => {
+  const swapExercise = async (exIdx, reason) => {
     const ex = generatedWorkout.exercises[exIdx];
     if (!ex) return;
     setSwappingIdx(exIdx);
@@ -541,6 +543,7 @@ export default function GenerateWorkoutPage() {
           exerciseType: ex.type || 'weight',
           sets: ex.sets,
           workoutContext: { otherExercises },
+          ...(reason ? { reason } : {}),
         }),
       });
 
@@ -1222,7 +1225,7 @@ export default function GenerateWorkoutPage() {
                         </div>
                         {!editing && (
                           <button
-                            onClick={() => swapExercise(i)}
+                            onClick={() => setSwapReasonIdx(i)}
                             disabled={swappingIdx !== null}
                             title="Swap for similar exercise"
                             className="p-1.5 text-iron-500 hover:text-flame-400 hover:bg-flame-500/10 rounded-lg transition-colors disabled:opacity-30"
@@ -1308,6 +1311,59 @@ export default function GenerateWorkoutPage() {
         onClose={() => { setInfoExercise(null); setInfoExerciseIdx(null); }}
         onSubstitute={infoExerciseIdx !== null ? (subName) => swapToSubstitution(infoExerciseIdx, subName) : undefined}
       />
+
+      {/* Swap Reason Modal */}
+      <AnimatePresence>
+        {swapReasonIdx !== null && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { setSwapReasonIdx(null); setSwapReason(''); }}
+              className="fixed inset-0 bg-black/60 z-50"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-x-4 top-[30%] mx-auto max-w-sm bg-iron-900 border border-iron-700 rounded-2xl z-50 p-4 space-y-3"
+            >
+              <h3 className="text-sm font-medium text-iron-200">Swap Exercise</h3>
+              <p className="text-xs text-iron-500">Optionally note why you're swapping (e.g. "shoulder pain", "no cable machine")</p>
+              <input
+                type="text"
+                value={swapReason}
+                onChange={(e) => setSwapReason(e.target.value)}
+                placeholder="Reason (optional)"
+                className="input-field w-full text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    swapExercise(swapReasonIdx, swapReason);
+                    setSwapReasonIdx(null);
+                    setSwapReason('');
+                  }
+                }}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setSwapReasonIdx(null); setSwapReason(''); }}
+                  className="flex-1 py-2.5 text-sm text-iron-400 hover:text-iron-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { swapExercise(swapReasonIdx, swapReason); setSwapReasonIdx(null); setSwapReason(''); }}
+                  className="flex-1 py-2.5 text-sm bg-flame-500/15 text-flame-400 border border-flame-500/30 rounded-xl hover:bg-flame-500/25 transition-colors"
+                >
+                  Swap
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
