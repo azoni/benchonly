@@ -979,7 +979,7 @@ export default function WorkoutDetailPage() {
           exercise={infoExercise}
           isOpen={!!infoExercise}
           onClose={() => { setInfoExercise(null); setInfoExerciseIdx(null) }}
-          onSubstitute={isScheduled && !isGuest && infoExerciseIdx !== null ? (subName) => swapToSubstitution(infoExerciseIdx, subName) : undefined}
+          onSubstitute={!isGuest && infoExerciseIdx !== null ? (subName) => swapToSubstitution(infoExerciseIdx, subName) : undefined}
         />
 
         {/* Share Modal */}
