@@ -643,6 +643,7 @@ export default function GenerateWorkoutPage() {
     { value: 'upper', label: 'Upper' },
     { value: 'full', label: 'Full Body' },
     { value: 'bench', label: 'Bench Focus' },
+    { value: 'core', label: 'Core' },
     { value: 'no-equipment', label: 'Bodyweight' },
     { value: 'vacation', label: 'Hotel / Travel' },
     { value: '1rm-test', label: 'Test 1RM' },

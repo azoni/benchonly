@@ -518,13 +518,15 @@ function buildContext(ctx, focus, intensity, settings = {}, duration = null, exe
       s += `TARGET DURATION: ${duration} minutes. Fit the workout within this time.\n`;
     }
     if (exerciseCount) {
-      s += `TARGET EXERCISES: ${exerciseCount} exercises. Use exactly this many.\n`;
+      s += `TARGET EXERCISES: ${exerciseCount} main exercises (do NOT count warm-up or stretching blocks toward this number). Use exactly this many.\n`;
     }
     if (duration || exerciseCount) s += '\n';
   }
 
   if (focus === '1rm-test') {
     // Skip regular focus/intensity for 1RM test
+  } else if (focus === 'core') {
+    s += `FOCUS: Core-dominant workout. Prioritize exercises like planks, dead bugs, pallof press, hanging leg raises, ab wheel rollouts, cable crunches, farmer carries, bird dogs, Copenhagen planks, and anti-rotation movements. Include both anterior and posterior core work. May include 1-2 compound lifts (e.g. front squats, overhead press) that heavily tax the core, but the session should feel core-focused overall.\n`;
   } else if (focus === 'no-equipment') {
     s += `FOCUS: Bodyweight only — NO equipment whatsoever. Use exercises like push-ups, pull-ups (if available), squats, lunges, planks, burpees, dips, glute bridges, mountain climbers, etc. Set type to 'bodyweight' or 'time' for all exercises.\n`;
   } else if (focus === 'vacation') {
