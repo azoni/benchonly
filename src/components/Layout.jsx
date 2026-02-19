@@ -201,7 +201,7 @@ export default function Layout() {
                       {pendingReviewCount > 9 ? '9+' : pendingReviewCount}
                     </span>
                   )}
-                  {item.path === '/workouts' && pendingSharedCount > 0 && (
+                  {item.path === '/workouts' && pendingSharedCount > 0 && location.pathname !== '/workouts' && (
                     <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-purple-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                       {pendingSharedCount > 9 ? '9+' : pendingSharedCount}
                     </span>
@@ -421,7 +421,7 @@ export default function Layout() {
                             {pendingReviewCount > 9 ? '9+' : pendingReviewCount}
                           </span>
                         )}
-                        {item.path === '/workouts' && pendingSharedCount > 0 && (
+                        {item.path === '/workouts' && pendingSharedCount > 0 && location.pathname !== '/workouts' && (
                           <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-purple-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                             {pendingSharedCount > 9 ? '9+' : pendingSharedCount}
                           </span>

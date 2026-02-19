@@ -1889,7 +1889,6 @@ export const sharedWorkoutService = {
     const q = query(
       collection(db, 'sharedWorkouts'),
       where('toUserId', '==', userId),
-      where('status', '==', 'pending'),
       orderBy('createdAt', 'desc')
     );
     const snap = await getDocs(q);
@@ -1938,6 +1937,6 @@ export const sharedWorkoutService = {
   },
 
   async dismiss(sharedId) {
-    await deleteDoc(doc(db, 'sharedWorkouts', sharedId));
+    await updateDoc(doc(db, 'sharedWorkouts', sharedId), { status: 'dismissed' });
   },
 };

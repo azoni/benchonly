@@ -244,7 +244,9 @@ export default function WorkoutsPage() {
     setSavingShared(shared.id)
     try {
       const result = await sharedWorkoutService.saveAsWorkout(shared.id, user.uid, exercises)
-      setSharedWorkouts(prev => prev.filter(s => s.id !== shared.id))
+      setSharedWorkouts(prev => prev.map(s =>
+        s.id === shared.id ? { ...s, status: 'saved' } : s
+      ))
       setPreviewShared(null)
       setAdjustedExercises(null)
       navigate(`/workouts/${result.id}`)
@@ -342,7 +344,9 @@ Rules:
   const handleDismissShared = async (sharedId) => {
     try {
       await sharedWorkoutService.dismiss(sharedId)
-      setSharedWorkouts(prev => prev.filter(s => s.id !== sharedId))
+      setSharedWorkouts(prev => prev.map(s =>
+        s.id === sharedId ? { ...s, status: 'dismissed' } : s
+      ))
     } catch (err) {
       console.error('Dismiss error:', err)
     }
@@ -614,10 +618,13 @@ Rules:
           </div>
 
           {/* Received shared workouts */}
-          {sharedSubTab === 'received' && (
-            sharedWorkouts.length > 0 ? (
+          {sharedSubTab === 'received' && (() => {
+            const pendingReceived = sharedWorkouts.filter(s => s.status === 'pending')
+            const historyReceived = sharedWorkouts.filter(s => s.status !== 'pending')
+            return sharedWorkouts.length > 0 ? (
               <div className="space-y-3">
-                {sharedWorkouts.map((shared, index) => (
+                {/* Pending — new workouts */}
+                {pendingReceived.map((shared, index) => (
                   <motion.div
                     key={shared.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -659,6 +666,49 @@ Rules:
                     </div>
                   </motion.div>
                 ))}
+
+                {/* History — saved / dismissed */}
+                {historyReceived.length > 0 && (
+                  <>
+                    {pendingReceived.length > 0 && (
+                      <div className="flex items-center gap-3 pt-2">
+                        <div className="flex-1 h-px bg-iron-800" />
+                        <span className="text-[11px] text-iron-600 uppercase tracking-wider">History</span>
+                        <div className="flex-1 h-px bg-iron-800" />
+                      </div>
+                    )}
+                    {historyReceived.map((shared, index) => {
+                      const statusLabel = shared.status === 'saved' ? 'Saved' : 'Dismissed'
+                      const statusColor = shared.status === 'saved'
+                        ? 'bg-green-500/15 text-green-400'
+                        : 'bg-iron-700/50 text-iron-500'
+                      return (
+                        <div
+                          key={shared.id}
+                          className="card-steel rounded-xl opacity-60"
+                        >
+                          <div className="flex items-center gap-3 p-3">
+                            <div className="w-10 h-10 rounded-lg bg-iron-800 flex items-center justify-center flex-shrink-0">
+                              <Inbox className="w-5 h-5 text-iron-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-medium text-iron-300 truncate">{shared.workout?.name || 'Shared Workout'}</h3>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 ${statusColor}`}>
+                                  {statusLabel}
+                                </span>
+                              </div>
+                              <p className="text-xs text-iron-600 mt-0.5">
+                                From {shared.fromUserName || 'someone'}
+                                {shared.createdAt?.toDate && ` · ${format(shared.createdAt.toDate(), 'MMM d')}`}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </>
+                )}
               </div>
             ) : (
               <div className="card-steel p-12 text-center">
@@ -669,16 +719,20 @@ Rules:
                 <p className="text-iron-500">When friends share workouts with you, they'll appear here.</p>
               </div>
             )
-          )}
+          })()}
 
           {/* Sent shared workouts */}
           {sharedSubTab === 'sent' && (
             sentWorkouts.length > 0 ? (
               <div className="space-y-3">
                 {sentWorkouts.map((shared, index) => {
-                  const statusLabel = shared.status === 'saved' ? 'Saved' : shared.status === 'pending' ? 'Pending' : shared.status
+                  const statusLabel = shared.status === 'saved' ? 'Saved'
+                    : shared.status === 'dismissed' ? 'Dismissed'
+                    : shared.status === 'pending' ? 'Pending' : shared.status
                   const statusColor = shared.status === 'saved'
                     ? 'bg-green-500/15 text-green-400'
+                    : shared.status === 'dismissed'
+                    ? 'bg-red-500/15 text-red-400'
                     : 'bg-yellow-500/15 text-yellow-400'
                   return (
                     <motion.div
