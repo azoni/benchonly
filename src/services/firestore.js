@@ -1882,6 +1882,22 @@ export const sharedWorkoutService = {
       status: 'pending',
       createdAt: serverTimestamp(),
     });
+    // Notify the recipient
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId: toUserId,
+        type: 'shared_workout',
+        fromUserId,
+        fromUserName,
+        workoutName: workoutSnapshot.name,
+        sharedWorkoutId: docRef.id,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error('Failed to create share notification:', e);
+    }
+
     return { id: docRef.id };
   },
 
