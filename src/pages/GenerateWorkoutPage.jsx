@@ -1000,7 +1000,7 @@ export default function GenerateWorkoutPage() {
                     type="date"
                     value={workoutDate}
                     onChange={(e) => setWorkoutDate(e.target.value)}
-                    className="input-field w-full"
+                    className="input-field text-sm"
                   />
                 </div>
                 <div>

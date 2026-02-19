@@ -1139,13 +1139,14 @@ Rules:
                 {requestType === 'custom_workout' && (
                   <div>
                     <label className="block text-xs font-medium text-iron-400 mb-1.5">
-                      When do you need it by? (optional)
+                      Date of the workout
                     </label>
                     <input
                       type="date"
                       value={requestTargetDate}
                       onChange={(e) => setRequestTargetDate(e.target.value)}
-                      className="input-field w-full text-sm"
+                      className="input-field text-sm"
+                      required
                     />
                   </div>
                 )}
@@ -1157,9 +1158,11 @@ Rules:
                   </span>
                 </div>
 
+                <p className="text-xs text-iron-500 text-center">Custom workouts are hand-built and may take up to 24 hours.</p>
+
                 <button
                   onClick={handleTrainerRequest}
-                  disabled={requestSubmitting}
+                  disabled={requestSubmitting || (requestType === 'custom_workout' && !requestTargetDate)}
                   className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2"
                 >
                   {requestSubmitting ? (
