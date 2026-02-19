@@ -103,7 +103,7 @@ export default function FeedPage() {
     switch (visibility) {
       case 'public': return true
       case 'friends': return friendSet.has(item.userId)
-      case 'group': return item.groupId && userGroupIds.has(item.groupId)
+      case 'group': return true // Group workouts now visible to everyone
       case 'private': return false
       default: return true
     }
@@ -248,7 +248,7 @@ export default function FeedPage() {
       case 'cardio':
         return <Activity className="w-5 h-5 text-orange-400" />
       case 'group_workout':
-        return <Users className="w-5 h-5 text-cyan-400" />
+        return <Dumbbell className="w-5 h-5 text-green-400" />
       case 'goal_completed':
         return <Trophy className="w-5 h-5 text-yellow-400" />
       case 'goal_created':
@@ -269,7 +269,7 @@ export default function FeedPage() {
       case 'cardio':
         return <><strong>{userName}</strong> logged <span className="text-orange-400">{item.data?.duration}min of {item.data?.name || 'cardio'}</span></>
       case 'group_workout':
-        return <><strong>{userName}</strong> completed their workout{item.data?.groupName ? <> in <span className="text-cyan-400">{item.data.groupName}</span></> : ''}</>
+        return <><strong>{userName}</strong> completed <span className="text-flame-400">{item.data?.name || 'a workout'}</span>{item.data?.groupName ? <span className="text-iron-600"> · {item.data.groupName}</span> : ''}</>
       case 'goal_completed':
         return <><strong>{userName}</strong> achieved their goal: <span className="text-yellow-400">{item.data?.lift} - {item.data?.targetValue} {item.data?.unit}</span></>
       case 'goal_created':

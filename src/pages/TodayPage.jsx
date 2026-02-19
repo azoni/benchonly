@@ -1165,7 +1165,7 @@ export default function TodayPage() {
           const visibility = item.visibility || 'public'
           if (visibility === 'private') return false
           if (visibility === 'friends') return friendSet.has(item.userId)
-          if (visibility === 'group') return item.groupId && userGroupIds.has(item.groupId)
+          if (visibility === 'group') return true // Group workouts now visible to everyone
           return true // public
         })
         return visibleItems.length > 0 ? (
@@ -1205,7 +1205,7 @@ export default function TodayPage() {
                     <p className="text-sm text-iron-300 truncate">
                       <span className="text-iron-200 font-medium">{userName}</span>{' '}
                       {item.type === 'workout' ? `completed ${item.data?.name || 'a workout'}` :
-                       item.type === 'group_workout' ? `completed their workout${item.data?.groupName ? ` in ${item.data.groupName}` : ''}` :
+                       item.type === 'group_workout' ? `completed ${item.data?.name || 'a workout'}` :
                        item.type === 'goal_completed' ? `achieved ${item.data?.lift}` :
                        item.type === 'cardio' ? `logged ${item.data?.duration}min ${item.data?.name || 'cardio'}` :
                        item.type === 'personal_record' ? `hit a new PR on ${item.data?.exercise}` :
