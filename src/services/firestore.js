@@ -1859,11 +1859,12 @@ export const trainerRequestService = {
 
 // ============ SHARED WORKOUTS ============
 export const sharedWorkoutService = {
-  async share(fromUserId, fromUserName, toUserId, workoutSnapshot, message = '') {
+  async share(fromUserId, fromUserName, toUserId, workoutSnapshot, message = '', toUserName = '') {
     const docRef = await addDoc(collection(db, 'sharedWorkouts'), {
       fromUserId,
       toUserId,
       fromUserName,
+      toUserName,
       workout: {
         name: workoutSnapshot.name,
         exercises: (workoutSnapshot.exercises || []).map(e => ({
@@ -1892,6 +1893,20 @@ export const sharedWorkoutService = {
     );
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  async getSharedByMe(userId) {
+    const q = query(
+      collection(db, 'sharedWorkouts'),
+      where('fromUserId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  async revoke(sharedId) {
+    await deleteDoc(doc(db, 'sharedWorkouts', sharedId));
   },
 
   async saveAsWorkout(sharedId, userId) {

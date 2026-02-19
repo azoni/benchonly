@@ -24,6 +24,8 @@ import {
   Share2,
   Download,
   MessageSquare,
+  Send,
+  Inbox,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { workoutService, groupWorkoutService, scheduleService, trainerRequestService, creditService, CREDIT_COSTS, sharedWorkoutService } from '../services/firestore'
@@ -43,7 +45,9 @@ export default function WorkoutsPage() {
   const [pendingDeleteId, setPendingDeleteId] = useState(null)
   const [activeTab, setActiveTab] = useState('todo') // 'todo' | 'completed' | 'shared'
   const [sharedWorkouts, setSharedWorkouts] = useState([])
+  const [sentWorkouts, setSentWorkouts] = useState([])
   const [savingShared, setSavingShared] = useState(null)
+  const [sharedSubTab, setSharedSubTab] = useState('received') // 'received' | 'sent'
 
   // Trainer request state
   const [showRequestModal, setShowRequestModal] = useState(false)
@@ -69,14 +73,16 @@ export default function WorkoutsPage() {
       }
       
       // Load both personal and group workouts, plus schedules and shared
-      const [personalWorkouts, groupWorkouts, reviews, schedulesData, sharedData] = await Promise.all([
+      const [personalWorkouts, groupWorkouts, reviews, schedulesData, sharedData, sentData] = await Promise.all([
         workoutService.getByUser(user.uid, 100),
         groupWorkoutService.getByUser(user.uid).catch(() => []),
         groupWorkoutService.getPendingReviews(user.uid).catch(() => []),
         scheduleService.getByUser(user.uid).catch(() => []),
         sharedWorkoutService.getSharedWithMe(user.uid).catch(() => []),
+        sharedWorkoutService.getSharedByMe(user.uid).catch(() => []),
       ])
       setSharedWorkouts(sharedData)
+      setSentWorkouts(sentData)
       
       setPendingReviews(reviews)
       
@@ -249,6 +255,15 @@ export default function WorkoutsPage() {
       setSharedWorkouts(prev => prev.filter(s => s.id !== sharedId))
     } catch (err) {
       console.error('Dismiss error:', err)
+    }
+  }
+
+  const handleRevokeSent = async (sharedId) => {
+    try {
+      await sharedWorkoutService.revoke(sharedId)
+      setSentWorkouts(prev => prev.filter(s => s.id !== sharedId))
+    } catch (err) {
+      console.error('Revoke error:', err)
     }
   }
 
@@ -471,78 +486,196 @@ export default function WorkoutsPage() {
 
       {/* Shared Workouts */}
       {activeTab === 'shared' && (
-        sharedWorkouts.length > 0 ? (
-          <div className="space-y-3">
-            {sharedWorkouts.map((shared, index) => (
-              <motion.div
-                key={shared.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03 }}
-                className="card-steel rounded-xl"
-              >
-                <div className="flex items-center gap-4 p-4">
-                  <div className="w-14 h-14 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
-                    <Share2 className="w-7 h-7 text-purple-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-iron-100">{shared.workout?.name || 'Shared Workout'}</h3>
-                    <p className="text-sm text-iron-500 mt-0.5">
-                      From {shared.fromUserName || 'someone'}
-                      {shared.createdAt?.toDate && ` · ${format(shared.createdAt.toDate(), 'MMM d')}`}
-                    </p>
-                    {shared.message && (
-                      <div className="flex items-start gap-1.5 mt-1.5">
-                        <MessageSquare className="w-3 h-3 text-iron-600 mt-0.5 flex-shrink-0" />
-                        <p className="text-xs text-iron-500 italic">"{shared.message}"</p>
+        <>
+          {/* Sub-tabs: Received / Sent */}
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setSharedSubTab('received')}
+              className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                sharedSubTab === 'received'
+                  ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                  : 'bg-iron-800/50 text-iron-500 hover:text-iron-300'
+              }`}
+            >
+              <Inbox className="w-4 h-4" />
+              Received
+              {sharedWorkouts.filter(s => s.status === 'pending').length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-400">
+                  {sharedWorkouts.filter(s => s.status === 'pending').length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setSharedSubTab('sent')}
+              className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                sharedSubTab === 'sent'
+                  ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                  : 'bg-iron-800/50 text-iron-500 hover:text-iron-300'
+              }`}
+            >
+              <Send className="w-4 h-4" />
+              Sent
+              {sentWorkouts.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-xs bg-iron-700 text-iron-400">
+                  {sentWorkouts.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Received shared workouts */}
+          {sharedSubTab === 'received' && (
+            sharedWorkouts.length > 0 ? (
+              <div className="space-y-3">
+                {sharedWorkouts.map((shared, index) => (
+                  <motion.div
+                    key={shared.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                    className="card-steel rounded-xl"
+                  >
+                    <div className="flex items-center gap-4 p-4">
+                      <div className="w-14 h-14 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                        <Inbox className="w-7 h-7 text-purple-400" />
                       </div>
-                    )}
-                    {shared.workout?.exercises?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {shared.workout.exercises.slice(0, 3).map((ex, i) => (
-                          <span key={i} className="px-2 py-0.5 text-xs bg-iron-800 text-iron-400 rounded">
-                            {ex.name}
-                          </span>
-                        ))}
-                        {shared.workout.exercises.length > 3 && (
-                          <span className="text-xs text-iron-500 px-1">+{shared.workout.exercises.length - 3}</span>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-iron-100">{shared.workout?.name || 'Shared Workout'}</h3>
+                        <p className="text-sm text-iron-500 mt-0.5">
+                          From {shared.fromUserName || 'someone'}
+                          {shared.createdAt?.toDate && ` · ${format(shared.createdAt.toDate(), 'MMM d')}`}
+                        </p>
+                        {shared.message && (
+                          <div className="flex items-start gap-1.5 mt-1.5">
+                            <MessageSquare className="w-3 h-3 text-iron-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-xs text-iron-500 italic">"{shared.message}"</p>
+                          </div>
+                        )}
+                        {shared.workout?.exercises?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {shared.workout.exercises.slice(0, 3).map((ex, i) => (
+                              <span key={i} className="px-2 py-0.5 text-xs bg-iron-800 text-iron-400 rounded">
+                                {ex.name}
+                              </span>
+                            ))}
+                            {shared.workout.exercises.length > 3 && (
+                              <span className="text-xs text-iron-500 px-1">+{shared.workout.exercises.length - 3}</span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                    <div className="flex items-center gap-2 px-4 pb-4">
+                      <button
+                        onClick={() => handleSaveShared(shared)}
+                        disabled={savingShared === shared.id}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-flame-500/15 text-flame-400 border border-flame-500/30 rounded-lg text-sm font-medium hover:bg-flame-500/25 transition-colors"
+                      >
+                        {savingShared === shared.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4" />
+                        )}
+                        Save to My Workouts
+                      </button>
+                      <button
+                        onClick={() => handleDismissShared(shared.id)}
+                        className="px-4 py-2.5 bg-iron-800 text-iron-400 rounded-lg text-sm hover:bg-iron-700 transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <div className="card-steel p-12 text-center">
+                <div className="w-16 h-16 bg-iron-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Inbox className="w-8 h-8 text-iron-600" />
                 </div>
-                <div className="flex items-center gap-2 px-4 pb-4">
-                  <button
-                    onClick={() => handleSaveShared(shared)}
-                    disabled={savingShared === shared.id}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-flame-500/15 text-flame-400 border border-flame-500/30 rounded-lg text-sm font-medium hover:bg-flame-500/25 transition-colors"
-                  >
-                    {savingShared === shared.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
-                    Save to My Workouts
-                  </button>
-                  <button
-                    onClick={() => handleDismissShared(shared.id)}
-                    className="px-4 py-2.5 bg-iron-800 text-iron-400 rounded-lg text-sm hover:bg-iron-700 transition-colors"
-                  >
-                    Dismiss
-                  </button>
+                <h3 className="text-lg font-display text-iron-200 mb-2">No Received Workouts</h3>
+                <p className="text-iron-500">When friends share workouts with you, they'll appear here.</p>
+              </div>
+            )
+          )}
+
+          {/* Sent shared workouts */}
+          {sharedSubTab === 'sent' && (
+            sentWorkouts.length > 0 ? (
+              <div className="space-y-3">
+                {sentWorkouts.map((shared, index) => {
+                  const statusLabel = shared.status === 'saved' ? 'Saved' : shared.status === 'pending' ? 'Pending' : shared.status
+                  const statusColor = shared.status === 'saved'
+                    ? 'bg-green-500/15 text-green-400'
+                    : 'bg-yellow-500/15 text-yellow-400'
+                  return (
+                    <motion.div
+                      key={shared.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.03 }}
+                      className="card-steel rounded-xl"
+                    >
+                      <div className="flex items-center gap-4 p-4">
+                        <div className="w-14 h-14 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                          <Send className="w-7 h-7 text-purple-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-iron-100 truncate">{shared.workout?.name || 'Shared Workout'}</h3>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 ${statusColor}`}>
+                              {statusLabel}
+                            </span>
+                          </div>
+                          <p className="text-sm text-iron-500 mt-0.5">
+                            To {shared.toUserName || 'a friend'}
+                            {shared.createdAt?.toDate && ` · ${format(shared.createdAt.toDate(), 'MMM d')}`}
+                          </p>
+                          {shared.message && (
+                            <div className="flex items-start gap-1.5 mt-1.5">
+                              <MessageSquare className="w-3 h-3 text-iron-600 mt-0.5 flex-shrink-0" />
+                              <p className="text-xs text-iron-500 italic">"{shared.message}"</p>
+                            </div>
+                          )}
+                          {shared.workout?.exercises?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {shared.workout.exercises.slice(0, 3).map((ex, i) => (
+                                <span key={i} className="px-2 py-0.5 text-xs bg-iron-800 text-iron-400 rounded">
+                                  {ex.name}
+                                </span>
+                              ))}
+                              {shared.workout.exercises.length > 3 && (
+                                <span className="text-xs text-iron-500 px-1">+{shared.workout.exercises.length - 3}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {shared.status === 'pending' && (
+                        <div className="px-4 pb-4">
+                          <button
+                            onClick={() => handleRevokeSent(shared.id)}
+                            className="px-4 py-2 bg-iron-800 text-iron-400 rounded-lg text-sm hover:bg-iron-700 hover:text-red-400 transition-colors"
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="card-steel p-12 text-center">
+                <div className="w-16 h-16 bg-iron-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Send className="w-8 h-8 text-iron-600" />
                 </div>
-              </motion.div>
-            ))}
-          </div>
-        ) : (
-          <div className="card-steel p-12 text-center">
-            <div className="w-16 h-16 bg-iron-800 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Share2 className="w-8 h-8 text-iron-600" />
-            </div>
-            <h3 className="text-lg font-display text-iron-200 mb-2">No Shared Workouts</h3>
-            <p className="text-iron-500">When friends share workouts with you, they'll appear here.</p>
-          </div>
-        )
+                <h3 className="text-lg font-display text-iron-200 mb-2">No Sent Workouts</h3>
+                <p className="text-iron-500">Share a workout with a friend and it'll show up here.</p>
+              </div>
+            )
+          )}
+        </>
       )}
 
       {/* Workouts List */}

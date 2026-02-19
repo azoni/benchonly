@@ -194,12 +194,14 @@ export default function WorkoutDetailPage() {
     if (!selectedFriend || !workout || sharing) return
     setSharing(true)
     try {
+      const recipientName = friendProfiles[selectedFriend]?.displayName || ''
       await sharedWorkoutService.share(
         user.uid,
         user.displayName || 'Someone',
         selectedFriend,
         workout,
-        shareMessage
+        shareMessage,
+        recipientName
       )
       setShared(true)
       setTimeout(() => setShowShareModal(false), 1500)
