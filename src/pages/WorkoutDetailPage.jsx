@@ -30,6 +30,7 @@ import {
   Share2,
   Send,
   Search,
+  FileText,
 } from 'lucide-react'
 import { workoutService, sharedWorkoutService } from '../services/firestore'
 import { friendService } from '../services/friendService'
@@ -87,6 +88,7 @@ export default function WorkoutDetailPage() {
   const [workoutUserNotes, setWorkoutUserNotes] = useState('')
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
   const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
+  const [promptExpanded, setPromptExpanded] = useState(false)
   const [swappingIdx, setSwappingIdx] = useState(null)
   const [infoExercise, setInfoExercise] = useState(null)
   const [infoExerciseIdx, setInfoExerciseIdx] = useState(null)
@@ -646,6 +648,36 @@ export default function WorkoutDetailPage() {
                         <p className="text-sm text-iron-300 leading-relaxed">{workout.personalNotes}</p>
                       </div>
                     )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {/* Generation Prompt */}
+        {workout.generationPrompt && (
+          <div className="card-steel mb-3 overflow-hidden">
+            <button
+              onClick={() => setPromptExpanded(!promptExpanded)}
+              className="w-full flex items-center justify-between p-4 hover:bg-iron-800/30 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-iron-500" />
+                <span className="text-sm font-medium text-iron-200">Generation Prompt</span>
+              </div>
+              {promptExpanded ? <ChevronUp className="w-4 h-4 text-iron-500" /> : <ChevronDown className="w-4 h-4 text-iron-500" />}
+            </button>
+            <AnimatePresence>
+              {promptExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-4 pb-4">
+                    <pre className="text-xs text-iron-400 leading-relaxed whitespace-pre-wrap font-mono max-h-96 overflow-y-auto">{workout.generationPrompt}</pre>
                   </div>
                 </motion.div>
               )}

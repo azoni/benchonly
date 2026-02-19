@@ -181,7 +181,7 @@ async function saveWorkouts(result, athletes, coachId, groupId, groupAdmins, gro
         notes: ex.notes || (ex.substitution ? `Modified: ${ex.substitution.reason}` : ''), expanded: true,
       })),
       status: 'scheduled', date: parsedDate, assignedTo: athleteId, assignedBy: coachId,
-      groupId, groupAdmins, groupMembers, generatedByAI: true, aiModel: selectedModel,
+      groupId, groupAdmins, groupMembers, generatedByAI: true, aiModel: selectedModel, generationPrompt: userPrompt,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     const docRef = await db.collection('groupWorkouts').add(workoutData);

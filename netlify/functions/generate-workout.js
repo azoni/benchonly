@@ -419,6 +419,7 @@ IMPORTANT: For warm-up and cool-down/stretch exercises, each set MUST include a 
       userId,
       generatedByAI: true,
       aiModel: selectedModel,
+      generationPrompt: userPrompt,
     };
 
     let workoutId = null;
