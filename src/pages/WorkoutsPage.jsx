@@ -78,8 +78,8 @@ export default function WorkoutsPage() {
         groupWorkoutService.getByUser(user.uid).catch(() => []),
         groupWorkoutService.getPendingReviews(user.uid).catch(() => []),
         scheduleService.getByUser(user.uid).catch(() => []),
-        sharedWorkoutService.getSharedWithMe(user.uid).catch(() => []),
-        sharedWorkoutService.getSharedByMe(user.uid).catch(() => []),
+        sharedWorkoutService.getSharedWithMe(user.uid).catch(e => { console.error('getSharedWithMe error:', e); return [] }),
+        sharedWorkoutService.getSharedByMe(user.uid).catch(e => { console.error('getSharedByMe error:', e); return [] }),
       ])
       setSharedWorkouts(sharedData)
       setSentWorkouts(sentData)
