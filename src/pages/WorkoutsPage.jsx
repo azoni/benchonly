@@ -720,6 +720,20 @@ export default function WorkoutsPage() {
                               Edit
                             </button>
                           )}
+                          {!workout.isGroupWorkout && !isGuest && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setActiveMenu(null)
+                                navigate(`/workouts/${workout.id}?share=true`)
+                              }}
+                              className="flex items-center gap-2 px-4 py-2 text-sm text-iron-300
+                                hover:bg-iron-700 transition-colors w-full"
+                            >
+                              <Share2 className="w-4 h-4" />
+                              Share
+                            </button>
+                          )}
                           {!workout.isGroupWorkout && workout.status === 'scheduled' && (
                             <button
                               onClick={(e) => {

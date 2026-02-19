@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -72,6 +72,7 @@ export default function WorkoutDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   usePageTitle('Workout')
   const { user, isGuest } = useAuth()
   const sidebarOpen = useUIStore((s) => s.sidebarOpen)
@@ -130,6 +131,15 @@ export default function WorkoutDetailPage() {
     }
     fetchWorkout()
   }, [id, user, isGuest])
+
+  // Auto-open share modal if ?share=true
+  useEffect(() => {
+    if (searchParams.get('share') === 'true' && workout && !isGuest) {
+      searchParams.delete('share')
+      setSearchParams(searchParams, { replace: true })
+      openShareModal()
+    }
+  }, [workout, searchParams])
 
   const handleBack = () => {
     if (location.state?.from) {
