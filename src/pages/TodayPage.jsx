@@ -91,6 +91,24 @@ export default function TodayPage() {
 
   const APP_UPDATES = [
     {
+      date: 'Feb 2026',
+      title: 'Workout Sharing',
+      description: 'Share workouts with friends. Preview the full exercise breakdown before saving, and optionally have AI adjust the weights to match your training level.',
+      tag: 'Social',
+    },
+    {
+      date: 'Feb 2026',
+      title: 'Exercise How-To Info',
+      description: 'AI-generated exercises now include form cues, key instructions, and substitution suggestions. Tap the exercise name to view, plus search YouTube without leaving the app.',
+      tag: 'AI',
+    },
+    {
+      date: 'Feb 2026',
+      title: 'Feed Visibility Controls',
+      description: 'Choose who sees your activity — public, friends only, group only, or private. Group workouts show with cyan styling in the feed.',
+      tag: 'Social',
+    },
+    {
       date: 'Feb 2025',
       title: 'Form Check Overhaul',
       description: 'Movement quality scores, injury risk detection with severity levels, and a focus drill with a coaching cue for your next session.',
