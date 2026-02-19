@@ -1451,7 +1451,7 @@ export const groupWorkoutService = {
           exerciseCount: actualData?.exercises?.length || 0,
           exerciseSummary,
           totalSets,
-        }, 'group');
+        });
       } catch (e) {
         console.error('Feed error:', e);
       }
@@ -1854,5 +1854,63 @@ export const trainerRequestService = {
         targetWeight: g.targetWeight || g.targetValue,
       })),
     };
+  },
+};
+
+// ============ SHARED WORKOUTS ============
+export const sharedWorkoutService = {
+  async share(fromUserId, fromUserName, toUserId, workoutSnapshot, message = '') {
+    const docRef = await addDoc(collection(db, 'sharedWorkouts'), {
+      fromUserId,
+      toUserId,
+      fromUserName,
+      workout: {
+        name: workoutSnapshot.name,
+        exercises: (workoutSnapshot.exercises || []).map(e => ({
+          name: e.name,
+          type: e.type || 'weight',
+          sets: (e.sets || []).map(s => ({
+            prescribedWeight: s.prescribedWeight || s.actualWeight || null,
+            prescribedReps: s.prescribedReps || s.actualReps || null,
+            prescribedTime: s.prescribedTime || s.actualTime || null,
+          })),
+        })),
+        workoutType: workoutSnapshot.workoutType || 'strength',
+      },
+      message,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+    });
+    return { id: docRef.id };
+  },
+
+  async getSharedWithMe(userId) {
+    const q = query(
+      collection(db, 'sharedWorkouts'),
+      where('toUserId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  async saveAsWorkout(sharedId, userId) {
+    const docSnap = await getDoc(doc(db, 'sharedWorkouts', sharedId));
+    if (!docSnap.exists()) throw new Error('Shared workout not found');
+    const data = docSnap.data();
+
+    const result = await workoutService.create(userId, {
+      name: data.workout.name,
+      exercises: data.workout.exercises,
+      date: new Date(),
+      workoutType: data.workout.workoutType || 'strength',
+    });
+
+    await updateDoc(doc(db, 'sharedWorkouts', sharedId), { status: 'saved' });
+    return result;
+  },
+
+  async dismiss(sharedId) {
+    await deleteDoc(doc(db, 'sharedWorkouts', sharedId));
   },
 };

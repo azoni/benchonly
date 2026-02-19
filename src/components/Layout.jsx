@@ -47,7 +47,7 @@ const baseNavItems = [
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, userProfile, signOut, signInWithGoogle, isGuest, isRealAdmin, realUser, impersonating, stopImpersonating } = useAuth();
+  const { user, userProfile, signOut, signInWithGoogle, isGuest, isRealAdmin, isAppAdmin, realUser, impersonating, stopImpersonating } = useAuth();
   const { sidebarOpen, setSidebarOpen, chatOpen, toggleChat } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [fabExpanded, setFabExpanded] = useState(false);
@@ -88,7 +88,7 @@ export default function Layout() {
     }
   }, [location.pathname, user, isGuest])
 
-  const isAdmin = isRealAdmin;
+  const isAdmin = isAppAdmin;
   const isTrainer = trainerService.isTrainer(userProfile, user?.email);
   
   // Build nav items based on roles

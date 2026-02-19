@@ -21,9 +21,12 @@ import {
   ClipboardList,
   Loader2,
   X,
+  Share2,
+  Download,
+  MessageSquare,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { workoutService, groupWorkoutService, scheduleService, trainerRequestService, creditService, CREDIT_COSTS } from '../services/firestore'
+import { workoutService, groupWorkoutService, scheduleService, trainerRequestService, creditService, CREDIT_COSTS, sharedWorkoutService } from '../services/firestore'
 import { format, isToday, isPast, isFuture, subDays, eachDayOfInterval, startOfDay } from 'date-fns'
 import { getDisplayDate, toDateString } from '../utils/dateUtils'
 import usePageTitle from '../utils/usePageTitle'
@@ -38,7 +41,9 @@ export default function WorkoutsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMenu, setActiveMenu] = useState(null)
   const [pendingDeleteId, setPendingDeleteId] = useState(null)
-  const [activeTab, setActiveTab] = useState('todo') // 'todo' or 'completed'
+  const [activeTab, setActiveTab] = useState('todo') // 'todo' | 'completed' | 'shared'
+  const [sharedWorkouts, setSharedWorkouts] = useState([])
+  const [savingShared, setSavingShared] = useState(null)
 
   // Trainer request state
   const [showRequestModal, setShowRequestModal] = useState(false)
@@ -63,13 +68,15 @@ export default function WorkoutsPage() {
         return
       }
       
-      // Load both personal and group workouts, plus schedules
-      const [personalWorkouts, groupWorkouts, reviews, schedulesData] = await Promise.all([
+      // Load both personal and group workouts, plus schedules and shared
+      const [personalWorkouts, groupWorkouts, reviews, schedulesData, sharedData] = await Promise.all([
         workoutService.getByUser(user.uid, 100),
         groupWorkoutService.getByUser(user.uid).catch(() => []),
         groupWorkoutService.getPendingReviews(user.uid).catch(() => []),
-        scheduleService.getByUser(user.uid).catch(() => [])
+        scheduleService.getByUser(user.uid).catch(() => []),
+        sharedWorkoutService.getSharedWithMe(user.uid).catch(() => []),
       ])
+      setSharedWorkouts(sharedData)
       
       setPendingReviews(reviews)
       
@@ -219,6 +226,29 @@ export default function WorkoutsPage() {
       return isPast(dateObj) && !isToday(dateObj)
     } catch {
       return false
+    }
+  }
+
+  const handleSaveShared = async (shared) => {
+    if (savingShared) return
+    setSavingShared(shared.id)
+    try {
+      const result = await sharedWorkoutService.saveAsWorkout(shared.id, user.uid)
+      setSharedWorkouts(prev => prev.filter(s => s.id !== shared.id))
+      navigate(`/workouts/${result.id}`)
+    } catch (err) {
+      console.error('Save shared error:', err)
+    } finally {
+      setSavingShared(null)
+    }
+  }
+
+  const handleDismissShared = async (sharedId) => {
+    try {
+      await sharedWorkoutService.dismiss(sharedId)
+      setSharedWorkouts(prev => prev.filter(s => s.id !== sharedId))
+    } catch (err) {
+      console.error('Dismiss error:', err)
     }
   }
 
@@ -419,10 +449,104 @@ export default function WorkoutsPage() {
             {completedWorkouts.length}
           </span>
         </button>
+        <button
+          onClick={() => setActiveTab('shared')}
+          className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${
+            activeTab === 'shared'
+              ? 'bg-purple-500 text-white'
+              : 'bg-iron-800 text-iron-400 hover:text-iron-200'
+          }`}
+        >
+          <Share2 className="w-5 h-5" />
+          Shared
+          {sharedWorkouts.filter(s => s.status === 'pending').length > 0 && (
+            <span className={`px-2 py-0.5 rounded-full text-sm ${
+              activeTab === 'shared' ? 'bg-white/20' : 'bg-purple-500/20 text-purple-400'
+            }`}>
+              {sharedWorkouts.filter(s => s.status === 'pending').length}
+            </span>
+          )}
+        </button>
       </div>
 
+      {/* Shared Workouts */}
+      {activeTab === 'shared' && (
+        sharedWorkouts.length > 0 ? (
+          <div className="space-y-3">
+            {sharedWorkouts.map((shared, index) => (
+              <motion.div
+                key={shared.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.03 }}
+                className="card-steel rounded-xl"
+              >
+                <div className="flex items-center gap-4 p-4">
+                  <div className="w-14 h-14 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                    <Share2 className="w-7 h-7 text-purple-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-iron-100">{shared.workout?.name || 'Shared Workout'}</h3>
+                    <p className="text-sm text-iron-500 mt-0.5">
+                      From {shared.fromUserName || 'someone'}
+                      {shared.createdAt?.toDate && ` · ${format(shared.createdAt.toDate(), 'MMM d')}`}
+                    </p>
+                    {shared.message && (
+                      <div className="flex items-start gap-1.5 mt-1.5">
+                        <MessageSquare className="w-3 h-3 text-iron-600 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-iron-500 italic">"{shared.message}"</p>
+                      </div>
+                    )}
+                    {shared.workout?.exercises?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {shared.workout.exercises.slice(0, 3).map((ex, i) => (
+                          <span key={i} className="px-2 py-0.5 text-xs bg-iron-800 text-iron-400 rounded">
+                            {ex.name}
+                          </span>
+                        ))}
+                        {shared.workout.exercises.length > 3 && (
+                          <span className="text-xs text-iron-500 px-1">+{shared.workout.exercises.length - 3}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 px-4 pb-4">
+                  <button
+                    onClick={() => handleSaveShared(shared)}
+                    disabled={savingShared === shared.id}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-flame-500/15 text-flame-400 border border-flame-500/30 rounded-lg text-sm font-medium hover:bg-flame-500/25 transition-colors"
+                  >
+                    {savingShared === shared.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Save to My Workouts
+                  </button>
+                  <button
+                    onClick={() => handleDismissShared(shared.id)}
+                    className="px-4 py-2.5 bg-iron-800 text-iron-400 rounded-lg text-sm hover:bg-iron-700 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="card-steel p-12 text-center">
+            <div className="w-16 h-16 bg-iron-800 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Share2 className="w-8 h-8 text-iron-600" />
+            </div>
+            <h3 className="text-lg font-display text-iron-200 mb-2">No Shared Workouts</h3>
+            <p className="text-iron-500">When friends share workouts with you, they'll appear here.</p>
+          </div>
+        )
+      )}
+
       {/* Workouts List */}
-      {displayedWorkouts.length > 0 ? (
+      {activeTab === 'shared' ? null : displayedWorkouts.length > 0 ? (
         <div className="space-y-3">
           {displayedWorkouts.map((workout, index) => {
             const overdue = activeTab === 'todo' && isOverdue(workout.date)

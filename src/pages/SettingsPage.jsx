@@ -50,7 +50,7 @@ import { ouraService } from '../services/ouraService'
 import OnboardingChecklist from '../components/OnboardingChecklist'
 
 export default function SettingsPage() {
-  const { user, userProfile, updateProfile, isGuest } = useAuth()
+  const { user, userProfile, updateProfile, isGuest, isRealAdmin, actingAsNormalUser, setActingAsNormalUser } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -1676,6 +1676,32 @@ export default function SettingsPage() {
                 }
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Testing */}
+      {isRealAdmin && (
+        <div className="space-y-3 mt-8">
+          <h3 className="text-sm font-medium text-iron-400 px-1">Admin</h3>
+          <div className="card-steel p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+              <FlaskConical className="w-5 h-5 text-purple-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-iron-200">Normal User Mode</p>
+              <p className="text-sm text-iron-500">Hide admin features for testing</p>
+            </div>
+            <button
+              onClick={() => setActingAsNormalUser(!actingAsNormalUser)}
+              className={`relative w-12 h-7 rounded-full transition-colors ${
+                actingAsNormalUser ? 'bg-purple-500' : 'bg-iron-700'
+              }`}
+            >
+              <div className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+                actingAsNormalUser ? 'translate-x-5' : 'translate-x-0.5'
+              }`} />
+            </button>
           </div>
         </div>
       )}

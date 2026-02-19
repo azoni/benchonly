@@ -176,6 +176,7 @@ export function AuthProvider({ children }) {
   // Impersonation state (admin only)
   const [impersonating, setImpersonating] = useState(null); // { uid, email, displayName, ... }
   const [impersonatingProfile, setImpersonatingProfile] = useState(null);
+  const [actingAsNormalUser, setActingAsNormalUser] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -286,7 +287,7 @@ export function AuthProvider({ children }) {
 
   // Admin impersonation — isRealAdmin is always true for admin, isAppAdmin respects impersonation
   const isRealAdmin = user?.email === 'charltonuw@gmail.com' && !isGuest;
-  const isAppAdmin = isRealAdmin && !impersonating;
+  const isAppAdmin = isRealAdmin && !impersonating && !actingAsNormalUser;
   
   const startImpersonating = async (targetUid) => {
     if (!isRealAdmin) return;
@@ -350,6 +351,8 @@ export function AuthProvider({ children }) {
     isAppAdmin,
     isRealAdmin,
     impersonating,
+    actingAsNormalUser,
+    setActingAsNormalUser,
     startImpersonating,
     stopImpersonating,
     signInWithGoogle,
