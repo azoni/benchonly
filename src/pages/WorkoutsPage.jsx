@@ -28,6 +28,7 @@ import {
   Inbox,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import api from '../services/api'
 import { workoutService, groupWorkoutService, scheduleService, trainerRequestService, creditService, CREDIT_COSTS, sharedWorkoutService } from '../services/firestore'
 import { format, isToday, isPast, isFuture, subDays, eachDayOfInterval, startOfDay } from 'date-fns'
 import { getDisplayDate, toDateString } from '../utils/dateUtils'
@@ -48,6 +49,9 @@ export default function WorkoutsPage() {
   const [sentWorkouts, setSentWorkouts] = useState([])
   const [savingShared, setSavingShared] = useState(null)
   const [sharedSubTab, setSharedSubTab] = useState('received') // 'received' | 'sent'
+  const [previewShared, setPreviewShared] = useState(null)
+  const [adjustingWeights, setAdjustingWeights] = useState(false)
+  const [adjustedExercises, setAdjustedExercises] = useState(null)
 
   // Trainer request state
   const [showRequestModal, setShowRequestModal] = useState(false)
@@ -235,17 +239,103 @@ export default function WorkoutsPage() {
     }
   }
 
-  const handleSaveShared = async (shared) => {
+  const handleSaveShared = async (shared, exercises = null) => {
     if (savingShared) return
     setSavingShared(shared.id)
     try {
-      const result = await sharedWorkoutService.saveAsWorkout(shared.id, user.uid)
+      const result = await sharedWorkoutService.saveAsWorkout(shared.id, user.uid, exercises)
       setSharedWorkouts(prev => prev.filter(s => s.id !== shared.id))
+      setPreviewShared(null)
+      setAdjustedExercises(null)
       navigate(`/workouts/${result.id}`)
     } catch (err) {
       console.error('Save shared error:', err)
     } finally {
       setSavingShared(null)
+    }
+  }
+
+  const handleAdjustWeights = async () => {
+    if (adjustingWeights || !previewShared) return
+    setAdjustingWeights(true)
+    try {
+      // Compute user's max weights from workout history
+      const userMaxes = {}
+      workouts.forEach(w => {
+        (w.exercises || []).forEach(ex => {
+          const name = (ex.name || '').toLowerCase().trim()
+          ;(ex.sets || []).forEach(s => {
+            const weight = parseFloat(s.actualWeight || s.prescribedWeight || 0)
+            if (weight > (userMaxes[name] || 0)) {
+              userMaxes[name] = weight
+            }
+          })
+        })
+      })
+
+      const sharedExercises = previewShared.workout?.exercises || []
+      const prompt = `Adjust the weights in this shared workout to match my training level. Return ONLY a valid JSON array — no other text.
+
+My heaviest weights per exercise: ${JSON.stringify(userMaxes)}
+
+Shared workout exercises to adjust:
+${JSON.stringify(sharedExercises.map(ex => ({
+  name: ex.name,
+  type: ex.type,
+  sets: (ex.sets || []).map(s => ({
+    prescribedWeight: s.prescribedWeight,
+    prescribedReps: s.prescribedReps,
+    prescribedTime: s.prescribedTime,
+  }))
+})))}
+
+Rules:
+- Adjust prescribedWeight values proportionally to match my strength level
+- If I have no data for an exercise, keep the original weight
+- Keep exercise names, set count, reps, and times exactly the same
+- Return this exact JSON format: [{"name":"...","type":"...","sets":[{"prescribedWeight":...,"prescribedReps":...,"prescribedTime":...}]}]`
+
+      // Deduct 1 credit for ask-assistant
+      const credits = userProfile?.credits ?? 0
+      const cost = CREDIT_COSTS['ask-assistant']
+      if (!isAppAdmin && credits < cost) {
+        alert(`Not enough credits. This costs ${cost} credit.`)
+        return
+      }
+      if (!isAppAdmin) {
+        await creditService.deduct(user.uid, 'ask-assistant')
+        updateProfile({ credits: credits - cost })
+      }
+
+      const data = await api.askAssistant(prompt, { maxLifts: userMaxes })
+
+      // Extract JSON from the response
+      const responseText = data.response || data.message || ''
+      let parsed = null
+      // Try to find JSON block
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/)
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[1].trim())
+      } else {
+        // Try parsing the whole response
+        const trimmed = responseText.trim()
+        const start = trimmed.indexOf('[')
+        const end = trimmed.lastIndexOf(']')
+        if (start !== -1 && end !== -1) {
+          parsed = JSON.parse(trimmed.slice(start, end + 1))
+        }
+      }
+
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setAdjustedExercises(parsed)
+      } else {
+        alert('Could not parse adjusted weights. Try again.')
+      }
+    } catch (err) {
+      console.error('Adjust weights error:', err)
+      alert('Failed to adjust weights. Please try again.')
+    } finally {
+      setAdjustingWeights(false)
     }
   }
 
@@ -533,7 +623,8 @@ export default function WorkoutsPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.03 }}
-                    className="card-steel rounded-xl"
+                    onClick={() => { setPreviewShared(shared); setAdjustedExercises(null) }}
+                    className="card-steel rounded-xl cursor-pointer hover:border-purple-500/30 transition-colors"
                   >
                     <div className="flex items-center gap-4 p-4">
                       <div className="w-14 h-14 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
@@ -564,26 +655,7 @@ export default function WorkoutsPage() {
                           </div>
                         )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 px-4 pb-4">
-                      <button
-                        onClick={() => handleSaveShared(shared)}
-                        disabled={savingShared === shared.id}
-                        className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-flame-500/15 text-flame-400 border border-flame-500/30 rounded-lg text-sm font-medium hover:bg-flame-500/25 transition-colors"
-                      >
-                        {savingShared === shared.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Download className="w-4 h-4" />
-                        )}
-                        Save to My Workouts
-                      </button>
-                      <button
-                        onClick={() => handleDismissShared(shared.id)}
-                        className="px-4 py-2.5 bg-iron-800 text-iron-400 rounded-lg text-sm hover:bg-iron-700 transition-colors"
-                      >
-                        Dismiss
-                      </button>
+                      <ChevronRight className="w-5 h-5 text-iron-600 flex-shrink-0" />
                     </div>
                   </motion.div>
                 ))}
@@ -1045,6 +1117,146 @@ export default function WorkoutsPage() {
                     <ClipboardList className="w-4 h-4" />
                   )}
                   {requestSubmitting ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Preview Shared Workout Modal */}
+      <AnimatePresence>
+        {previewShared && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { setPreviewShared(null); setAdjustedExercises(null) }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-x-4 top-[8%] mx-auto max-w-lg bg-iron-900 border border-iron-700 rounded-2xl z-50 overflow-hidden shadow-2xl flex flex-col max-h-[84vh]"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-iron-800 flex-shrink-0">
+                <h3 className="font-display text-lg text-iron-100 truncate pr-2">
+                  {previewShared.workout?.name || 'Shared Workout'}
+                </h3>
+                <button
+                  onClick={() => { setPreviewShared(null); setAdjustedExercises(null) }}
+                  className="p-1.5 text-iron-400 hover:text-iron-200 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* From info */}
+                <div className="flex items-center gap-2 text-sm text-iron-400">
+                  <span>From <span className="text-iron-200 font-medium">{previewShared.fromUserName || 'someone'}</span></span>
+                  {previewShared.createdAt?.toDate && (
+                    <span className="text-iron-600">· {format(previewShared.createdAt.toDate(), 'MMM d, yyyy')}</span>
+                  )}
+                </div>
+
+                {/* Message */}
+                {previewShared.message && (
+                  <div className="p-3 bg-iron-800/50 rounded-lg flex items-start gap-2">
+                    <MessageSquare className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-iron-300 italic">"{previewShared.message}"</p>
+                  </div>
+                )}
+
+                {/* Adjusted badge */}
+                {adjustedExercises && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <span className="text-sm text-purple-300">Weights adjusted to your training level</span>
+                  </div>
+                )}
+
+                {/* Exercises */}
+                <div className="space-y-3">
+                  {(adjustedExercises || previewShared.workout?.exercises || []).map((ex, exIdx) => {
+                    const originalEx = previewShared.workout?.exercises?.[exIdx]
+                    return (
+                      <div key={exIdx} className="bg-iron-800/40 rounded-xl p-3">
+                        <h4 className="text-sm font-semibold text-iron-100 mb-2">{ex.name}</h4>
+                        <div className="space-y-1">
+                          {(ex.sets || []).map((set, setIdx) => {
+                            const origSet = originalEx?.sets?.[setIdx]
+                            const weightChanged = adjustedExercises && origSet &&
+                              parseFloat(set.prescribedWeight || 0) !== parseFloat(origSet.prescribedWeight || 0)
+                            return (
+                              <div key={setIdx} className="flex items-center gap-3 text-sm">
+                                <span className="text-iron-600 w-12 flex-shrink-0">Set {setIdx + 1}</span>
+                                {(set.prescribedWeight || ex.type === 'weight') && (
+                                  <span className={`${weightChanged ? 'text-purple-400 font-medium' : 'text-iron-300'}`}>
+                                    {weightChanged && origSet?.prescribedWeight ? (
+                                      <>{origSet.prescribedWeight} → {set.prescribedWeight} lbs</>
+                                    ) : (
+                                      <>{set.prescribedWeight || '—'} lbs</>
+                                    )}
+                                  </span>
+                                )}
+                                {set.prescribedReps && (
+                                  <span className="text-iron-400">× {set.prescribedReps} reps</span>
+                                )}
+                                {set.prescribedTime && (
+                                  <span className="text-iron-400">{set.prescribedTime}s</span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="p-4 border-t border-iron-800 space-y-2 flex-shrink-0">
+                <button
+                  onClick={() => handleSaveShared(previewShared, adjustedExercises)}
+                  disabled={savingShared === previewShared.id}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-flame-500/15 text-flame-400 border border-flame-500/30 rounded-lg text-sm font-medium hover:bg-flame-500/25 transition-colors"
+                >
+                  {savingShared === previewShared.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  {savingShared === previewShared.id ? 'Saving...' : 'Save to My Workouts'}
+                </button>
+                {!adjustedExercises && (
+                  <button
+                    onClick={handleAdjustWeights}
+                    disabled={adjustingWeights}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-purple-500/15 text-purple-400 border border-purple-500/30 rounded-lg text-sm font-medium hover:bg-purple-500/25 transition-colors"
+                  >
+                    {adjustingWeights ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    {adjustingWeights ? 'Adjusting...' : `Adjust Weights to My Level · ${CREDIT_COSTS['ask-assistant']} cr`}
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    handleDismissShared(previewShared.id)
+                    setPreviewShared(null)
+                    setAdjustedExercises(null)
+                  }}
+                  className="w-full py-2.5 text-iron-500 text-sm hover:text-iron-300 transition-colors"
+                >
+                  Dismiss
                 </button>
               </div>
             </motion.div>

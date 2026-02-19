@@ -28,7 +28,7 @@ import AIChatPanel from './AIChatPanel';
 import InstallPrompt from './InstallPrompt';
 import ErrorBoundary from './ErrorBoundary';
 import { analyticsService } from '../services/analyticsService';
-import { groupWorkoutService, trainerService } from '../services/firestore';
+import { groupWorkoutService, trainerService, sharedWorkoutService } from '../services/firestore';
 import { notificationService } from '../services/feedService';
 
 const ADMIN_EMAILS = ['charltonuw@gmail.com'];
@@ -52,6 +52,7 @@ export default function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [fabExpanded, setFabExpanded] = useState(false);
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
+  const [pendingSharedCount, setPendingSharedCount] = useState(0);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   // Load pending review count
@@ -69,6 +70,15 @@ export default function Layout() {
       notificationService.getUnread(user.uid)
         .then(notifs => setUnreadNotifCount(notifs.length))
         .catch(err => console.error('[Layout]', err.message));
+    }
+  }, [user, isGuest, location.pathname]);
+
+  // Load pending shared workout count
+  useEffect(() => {
+    if (user && !isGuest) {
+      sharedWorkoutService.getPendingSharedCount(user.uid)
+        .then(count => setPendingSharedCount(count))
+        .catch(() => {});
     }
   }, [user, isGuest, location.pathname]);
 
@@ -189,6 +199,11 @@ export default function Layout() {
                   {item.badgeKey === 'workouts' && pendingReviewCount > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                       {pendingReviewCount > 9 ? '9+' : pendingReviewCount}
+                    </span>
+                  )}
+                  {item.path === '/workouts' && pendingSharedCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-purple-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {pendingSharedCount > 9 ? '9+' : pendingSharedCount}
                     </span>
                   )}
                   {item.path === '/feed' && unreadNotifCount > 0 && (
@@ -404,6 +419,11 @@ export default function Layout() {
                         {item.badgeKey === 'workouts' && pendingReviewCount > 0 && (
                           <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                             {pendingReviewCount > 9 ? '9+' : pendingReviewCount}
+                          </span>
+                        )}
+                        {item.path === '/workouts' && pendingSharedCount > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-purple-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                            {pendingSharedCount > 9 ? '9+' : pendingSharedCount}
                           </span>
                         )}
                         {item.path === '/feed' && unreadNotifCount > 0 && (

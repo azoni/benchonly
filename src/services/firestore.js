@@ -1882,22 +1882,6 @@ export const sharedWorkoutService = {
       status: 'pending',
       createdAt: serverTimestamp(),
     });
-    // Notify the recipient
-    try {
-      await addDoc(collection(db, 'notifications'), {
-        userId: toUserId,
-        type: 'shared_workout',
-        fromUserId,
-        fromUserName,
-        workoutName: workoutSnapshot.name,
-        sharedWorkoutId: docRef.id,
-        read: false,
-        createdAt: serverTimestamp(),
-      });
-    } catch (e) {
-      console.error('Failed to create share notification:', e);
-    }
-
     return { id: docRef.id };
   },
 
@@ -1905,10 +1889,21 @@ export const sharedWorkoutService = {
     const q = query(
       collection(db, 'sharedWorkouts'),
       where('toUserId', '==', userId),
+      where('status', '==', 'pending'),
       orderBy('createdAt', 'desc')
     );
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  async getPendingSharedCount(userId) {
+    const q = query(
+      collection(db, 'sharedWorkouts'),
+      where('toUserId', '==', userId),
+      where('status', '==', 'pending')
+    );
+    const snap = await getDocs(q);
+    return snap.size;
   },
 
   async getSharedByMe(userId) {
@@ -1925,18 +1920,19 @@ export const sharedWorkoutService = {
     await deleteDoc(doc(db, 'sharedWorkouts', sharedId));
   },
 
-  async saveAsWorkout(sharedId, userId) {
+  async saveAsWorkout(sharedId, userId, exerciseOverrides = null) {
     const docSnap = await getDoc(doc(db, 'sharedWorkouts', sharedId));
     if (!docSnap.exists()) throw new Error('Shared workout not found');
     const data = docSnap.data();
 
     const result = await workoutService.create(userId, {
       name: data.workout.name,
-      exercises: data.workout.exercises,
+      exercises: exerciseOverrides || data.workout.exercises,
       date: new Date(),
       workoutType: data.workout.workoutType || 'strength',
     });
 
+    // Auto-dismiss: mark as saved so it no longer appears in received list
     await updateDoc(doc(db, 'sharedWorkouts', sharedId), { status: 'saved' });
     return result;
   },
