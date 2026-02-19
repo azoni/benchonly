@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ExternalLink, ArrowRightLeft } from 'lucide-react';
+import { X, ExternalLink, ArrowRightLeft, RefreshCw } from 'lucide-react';
 
-export default function ExerciseInfoModal({ exercise, isOpen, onClose }) {
+export default function ExerciseInfoModal({ exercise, isOpen, onClose, onSubstitute }) {
   if (!exercise) return null;
 
   const hasInfo = exercise.howTo || exercise.cues?.length > 0 || exercise.substitutions?.length > 0;
@@ -56,13 +56,26 @@ export default function ExerciseInfoModal({ exercise, isOpen, onClose }) {
                   <div>
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <ArrowRightLeft className="w-3 h-3 text-iron-500" />
-                      <span className="text-xs text-iron-500 uppercase tracking-wider">Substitutions</span>
+                      <span className="text-xs text-iron-500 uppercase tracking-wider">
+                        {onSubstitute ? 'Tap to swap' : 'Substitutions'}
+                      </span>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {exercise.substitutions.map((sub, i) => (
-                        <span key={i} className="px-2.5 py-1 bg-iron-800 border border-iron-700 rounded-lg text-xs text-iron-300">
-                          {sub}
-                        </span>
+                        onSubstitute ? (
+                          <button
+                            key={i}
+                            onClick={() => { onSubstitute(sub); onClose(); }}
+                            className="px-2.5 py-1 bg-iron-800 border border-iron-700 rounded-lg text-xs text-iron-300 hover:border-flame-500/40 hover:text-flame-300 hover:bg-flame-500/10 transition-colors flex items-center gap-1.5"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            {sub}
+                          </button>
+                        ) : (
+                          <span key={i} className="px-2.5 py-1 bg-iron-800 border border-iron-700 rounded-lg text-xs text-iron-300">
+                            {sub}
+                          </span>
+                        )
                       ))}
                     </div>
                   </div>

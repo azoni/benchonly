@@ -89,6 +89,7 @@ export default function WorkoutDetailPage() {
   const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
   const [swappingIdx, setSwappingIdx] = useState(null)
   const [infoExercise, setInfoExercise] = useState(null)
+  const [infoExerciseIdx, setInfoExerciseIdx] = useState(null)
   const [expandedRpe, setExpandedRpe] = useState({})
   const [openNotes, setOpenNotes] = useState({})
   const [showShareModal, setShowShareModal] = useState(false)
@@ -252,6 +253,56 @@ export default function WorkoutDetailPage() {
       }
     } catch (err) {
       console.error('Swap error:', err)
+    } finally {
+      setSwappingIdx(null)
+    }
+  }
+
+  const swapToSubstitution = async (exIdx, substitutionName) => {
+    const ex = isLogging ? exercises[exIdx] : workout?.exercises?.[exIdx]
+    if (!ex || isGuest) return
+    setSwappingIdx(exIdx)
+    setInfoExercise(null)
+    setInfoExerciseIdx(null)
+    try {
+      const otherExercises = (isLogging ? exercises : workout.exercises)
+        .filter((_, i) => i !== exIdx)
+        .map(e => e.name)
+
+      const swapHeaders = await getAuthHeaders()
+      const response = await fetch(apiUrl('swap-exercise'), {
+        method: 'POST',
+        headers: swapHeaders,
+        body: JSON.stringify({
+          exerciseName: ex.name,
+          exerciseType: ex.type || 'weight',
+          sets: ex.sets,
+          workoutContext: { otherExercises },
+          preferredReplacement: substitutionName,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Swap failed')
+      const data = await response.json()
+
+      if (data.exercise) {
+        const newExercises = (isLogging ? exercises : workout.exercises).map((e, i) => i === exIdx ? {
+          ...data.exercise,
+          type: data.exercise.type || e.type || 'weight',
+        } : e)
+
+        await workoutService.update(id, { exercises: newExercises })
+        setWorkout(prev => ({ ...prev, exercises: newExercises }))
+        if (isLogging) {
+          setExercises(newExercises.map(e => ({
+            ...e,
+            notes: e.notes || '',
+            sets: e.sets?.map(set => ({ ...set })) || []
+          })))
+        }
+      }
+    } catch (err) {
+      console.error('Substitution swap error:', err)
     } finally {
       setSwappingIdx(null)
     }
@@ -683,9 +734,11 @@ export default function WorkoutDetailPage() {
                       {exercise.sets?.length}×{' '}
                       {exercise.type === 'time' || firstSet?.prescribedTime
                         ? `${firstSet?.prescribedTime || '—'}s`
-                        : allSameSets 
-                          ? `${firstSet?.prescribedWeight || '—'}lbs × ${firstSet?.prescribedReps || '—'}`
-                          : 'varied'
+                        : exercise.type === 'bodyweight'
+                          ? `${firstSet?.prescribedWeight ? `BW+${firstSet.prescribedWeight} ×` : ''} ${firstSet?.prescribedReps || '—'} reps`
+                          : allSameSets
+                            ? `${firstSet?.prescribedWeight || '—'}lbs × ${firstSet?.prescribedReps || '—'}`
+                            : 'varied'
                       }
                     </span>
                   </div>
@@ -700,14 +753,15 @@ export default function WorkoutDetailPage() {
           <div className="space-y-4">
             {workout.exercises.map((exercise, exerciseIndex) => {
               const isTimeExercise = exercise.type === 'time' || exercise.sets?.some(s => s.prescribedTime || s.actualTime)
-              
+              const isBWExercise = exercise.type === 'bodyweight'
+
               return (
               <div key={exerciseIndex} className="card-steel overflow-hidden">
                 {/* Exercise Header */}
                 <div className="p-4 bg-iron-800/30">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setInfoExercise(exercise)}
+                      onClick={() => { setInfoExercise(exercise); setInfoExerciseIdx(exerciseIndex) }}
                       className="text-xl font-bold text-iron-50 hover:text-flame-400 transition-colors text-left flex-1 flex items-center gap-1.5"
                     >
                       {exercise.name}
@@ -737,10 +791,12 @@ export default function WorkoutDetailPage() {
                 {/* Sets */}
                 <div className="divide-y divide-iron-800/50">
                   {exercise.sets?.map((set, setIndex) => {
-                    const hasActual = isTimeExercise 
-                      ? set.actualTime 
-                      : (set.actualWeight || set.actualReps)
-                    const e1rm = !isTimeExercise && hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
+                    const hasActual = isTimeExercise
+                      ? set.actualTime
+                      : isBWExercise
+                        ? !!set.actualReps
+                        : (set.actualWeight || set.actualReps)
+                    const e1rm = !isTimeExercise && !isBWExercise && hasActual && set.actualWeight && set.actualReps && parseInt(set.actualReps) > 1
                       ? calculateE1RM(parseFloat(set.actualWeight), parseInt(set.actualReps))
                       : null
                     
@@ -757,17 +813,43 @@ export default function WorkoutDetailPage() {
                             {isTimeExercise ? (
                               /* TIME EXERCISE */
                               isScheduled ? (
-                                <div className="text-2xl font-bold text-iron-100">
-                                  {set.prescribedTime || '—'} seconds
+                                <div>
+                                  <div className="text-2xl font-bold text-iron-100">
+                                    {set.prescribedTime || '—'} seconds
+                                  </div>
+                                  {set.setNote && (
+                                    <p className="text-sm text-iron-400 mt-0.5">{set.setNote}</p>
+                                  )}
                                 </div>
                               ) : (
                                 <>
                                   <div className="text-sm text-iron-500 mb-1">
-                                    Target: {set.prescribedTime || '—'}s
+                                    Target: {set.prescribedTime || '—'}s{set.setNote ? ` — ${set.setNote}` : ''}
                                   </div>
                                   {hasActual ? (
                                     <span className="text-2xl font-bold text-flame-400">
                                       {set.actualTime || '—'} seconds
+                                    </span>
+                                  ) : (
+                                    <span className="text-lg text-iron-600">Not logged</span>
+                                  )}
+                                </>
+                              )
+                            ) : isBWExercise ? (
+                              /* BODYWEIGHT EXERCISE */
+                              isScheduled ? (
+                                <div className="text-2xl font-bold text-iron-100">
+                                  {set.prescribedWeight ? `BW + ${set.prescribedWeight} lbs` : 'BW'} <span className="text-iron-500">×</span> {set.prescribedReps || '—'} reps
+                                  {set.targetRpe && <span className="text-sm text-iron-500 font-normal ml-2">@ RPE {set.targetRpe}</span>}
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="text-sm text-iron-500 mb-1">
+                                    Target: {set.prescribedWeight ? `BW+${set.prescribedWeight}` : 'BW'} × {set.prescribedReps || '—'}
+                                  </div>
+                                  {hasActual ? (
+                                    <span className="text-2xl font-bold text-flame-400">
+                                      {set.actualWeight ? `BW + ${set.actualWeight} lbs` : 'BW'} × {set.actualReps || '—'}
                                     </span>
                                   ) : (
                                     <span className="text-lg text-iron-600">Not logged</span>
@@ -896,7 +978,8 @@ export default function WorkoutDetailPage() {
         <ExerciseInfoModal
           exercise={infoExercise}
           isOpen={!!infoExercise}
-          onClose={() => setInfoExercise(null)}
+          onClose={() => { setInfoExercise(null); setInfoExerciseIdx(null) }}
+          onSubstitute={isScheduled && !isGuest && infoExerciseIdx !== null ? (subName) => swapToSubstitution(infoExerciseIdx, subName) : undefined}
         />
 
         {/* Share Modal */}
@@ -1069,7 +1152,7 @@ export default function WorkoutDetailPage() {
             <div className="p-4 bg-iron-800/30">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setInfoExercise(exercise)}
+                  onClick={() => { setInfoExercise(exercise); setInfoExerciseIdx(exerciseIndex) }}
                   className="text-xl font-bold text-iron-50 hover:text-flame-400 transition-colors text-left flex-1 flex items-center gap-1.5"
                 >
                   {exercise.name}
@@ -1121,6 +1204,7 @@ export default function WorkoutDetailPage() {
                           updateSet(exerciseIndex, setIndex, 'actualTime', set.prescribedTime || '')
                         } else if (type === 'bodyweight') {
                           updateSet(exerciseIndex, setIndex, 'actualReps', set.prescribedReps || '')
+                          if (set.prescribedWeight) updateSet(exerciseIndex, setIndex, 'actualWeight', set.prescribedWeight)
                         } else {
                           updateSet(exerciseIndex, setIndex, 'actualWeight', set.prescribedWeight || '')
                           updateSet(exerciseIndex, setIndex, 'actualReps', set.prescribedReps || '')
@@ -1134,7 +1218,7 @@ export default function WorkoutDetailPage() {
                         {type === 'time'
                           ? `${set.prescribedTime || '—'}s`
                           : type === 'bodyweight'
-                            ? `${set.prescribedReps || '—'} reps`
+                            ? `${set.prescribedWeight ? `BW+${set.prescribedWeight} ×` : ''} ${set.prescribedReps || '—'} reps`
                             : `${set.prescribedWeight || '—'} lbs × ${set.prescribedReps || '—'}`
                         }
                         {set.targetRpe ? ` @ RPE ${set.targetRpe}` : ''}
@@ -1152,6 +1236,9 @@ export default function WorkoutDetailPage() {
 
                   {type === 'time' ? (
                     <div className="ml-[52px]">
+                      {set.setNote && (
+                        <p className="text-sm text-iron-400 mb-2">{set.setNote}</p>
+                      )}
                       <input
                         type="number"
                         inputMode="numeric"
@@ -1164,15 +1251,29 @@ export default function WorkoutDetailPage() {
                     </div>
                   ) : type === 'bodyweight' ? (
                     <div className="ml-[52px]">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={set.actualReps || ''}
-                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
-                        placeholder={set.prescribedReps || '—'}
-                        className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
-                      />
-                      <p className="text-[10px] text-iron-600 text-center mt-1">reps</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={set.actualReps || ''}
+                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualReps', e.target.value)}
+                            placeholder={set.prescribedReps || '—'}
+                            className="w-full input-field text-xl py-3 px-4 text-center font-semibold"
+                          />
+                          <p className="text-[10px] text-iron-600 text-center mt-1">reps</p>
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            value={set.actualWeight || ''}
+                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'actualWeight', e.target.value)}
+                            placeholder={set.prescribedWeight || 'BW'}
+                            className="w-full input-field text-lg py-3 px-2 text-center font-semibold"
+                          />
+                          <p className="text-[10px] text-iron-600 text-center mt-1">+ added lbs</p>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2 ml-[52px]">
@@ -1310,27 +1411,28 @@ export default function WorkoutDetailPage() {
 
       {/* Action Buttons */}
       <div className={`fixed bottom-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800 left-0 ${sidebarOpen ? 'lg:left-64' : 'lg:left-20'} transition-[left] duration-300`}>
-        <div className="flex gap-3 mb-3">
-          <button onClick={() => setIsLogging(false)} className="btn-secondary flex-1 py-3">
-            Cancel
+        <div className="flex gap-2">
+          <button
+            onClick={handleSaveProgress}
+            disabled={saving}
+            className="btn-secondary py-3 px-4 text-sm flex items-center justify-center gap-1.5 flex-shrink-0"
+          >
+            Save Draft
           </button>
-          <button onClick={handleSaveProgress} disabled={saving} className="btn-secondary flex-1 py-3">
-            Save Progress
+          <button
+            onClick={handleComplete}
+            disabled={saving}
+            className="btn-primary flex-1 py-3 text-sm flex items-center justify-center gap-2"
+          >
+            {saving ? 'Saving...' : (
+              <>
+                <Check className="w-4 h-4" />
+                {isScheduled ? 'Complete Workout' : 'Update'}
+              </>
+            )}
           </button>
         </div>
-        <button
-          onClick={handleComplete}
-          disabled={saving}
-          className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
-        >
-          {saving ? 'Saving...' : (
-            <>
-              <Check className="w-5 h-5" />
-              {isScheduled ? 'Complete Workout' : 'Update'}
-            </>
-          )}
-        </button>
-        <p className="text-xs text-iron-500 text-center mt-2">Empty fields filled with targets</p>
+        <p className="text-xs text-iron-500 text-center mt-1.5">Empty fields filled with targets</p>
       </div>
 
       {/* RPE Modal */}
@@ -1367,7 +1469,8 @@ export default function WorkoutDetailPage() {
       <ExerciseInfoModal
         exercise={infoExercise}
         isOpen={!!infoExercise}
-        onClose={() => setInfoExercise(null)}
+        onClose={() => { setInfoExercise(null); setInfoExerciseIdx(null) }}
+        onSubstitute={!isGuest && infoExerciseIdx !== null ? (subName) => swapToSubstitution(infoExerciseIdx, subName) : undefined}
       />
 
     </div>

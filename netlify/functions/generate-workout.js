@@ -71,18 +71,22 @@ If the user asks to "repeat", "same as", "copy", or reference a previous workout
 WARM-UP GUIDANCE:
 If INCLUDE_WARMUP is true, the FIRST exercise in the workout should be a quick general warm-up:
 - Name it "Warm-up" with type "time"
-- Include 2-3 sets of dynamic movements (e.g. "Arm circles, leg swings, hip circles — 60s each")
-- Set prescribedTime to 60-90 seconds per set
+- Include 2-3 sets, each with a DIFFERENT dynamic movement relevant to the workout
+- Each set MUST have a "setNote" describing the specific movement: e.g. "Arm circles & band pull-aparts"
+- Set prescribedTime to 45-60 seconds per set
 - Keep it under 5 minutes total
-- In the exercise "notes", describe the movements: "Light dynamic stretching: arm circles 20x, leg swings 10/side, hip circles 10/side, band pull-aparts 15x"
+- IMPORTANT: Each set's setNote should name a specific movement, not just "warm-up". Tailor movements to the workout focus (e.g. push day → arm circles, band pull-aparts, push-up walk-outs; leg day → leg swings, hip circles, bodyweight squats)
+Example sets: [{"prescribedTime": 60, "setNote": "Arm circles 20x each direction"}, {"prescribedTime": 60, "setNote": "Leg swings 10/side + hip circles"}, {"prescribedTime": 45, "setNote": "Band pull-aparts 15x"}]
 If INCLUDE_WARMUP is false, skip the warm-up exercise entirely.
 
 STRETCHING GUIDANCE:
 If INCLUDE_STRETCHES is true, add a "Cool-down Stretches" exercise as the LAST exercise:
 - Name it "Cool-down Stretches" with type "time"
-- Include 2-3 sets of static stretches (30-60s holds targeting muscles worked)
-- Set prescribedTime to 45-60 seconds per set
-- In the exercise "notes", list specific stretches: e.g. "Chest doorway stretch 30s/side, Lat stretch 30s/side, Hip flexor stretch 30s/side, Hamstring stretch 30s/side"
+- Include 2-3 sets, each with a DIFFERENT static stretch targeting muscles worked
+- Each set MUST have a "setNote" describing the specific stretch: e.g. "Chest doorway stretch 30s/side"
+- Set prescribedTime to 30-60 seconds per set
+- IMPORTANT: Each set's setNote should name the specific stretch for that hold. Match stretches to the muscles trained (e.g. chest day → chest stretch, tricep stretch, lat stretch)
+Example sets: [{"prescribedTime": 45, "setNote": "Chest doorway stretch 30s/side"}, {"prescribedTime": 45, "setNote": "Tricep overhead stretch 30s/side"}, {"prescribedTime": 45, "setNote": "Lat stretch 30s/side"}]
 If INCLUDE_STRETCHES is false, skip the stretching exercise entirely.
 
 For the first COMPOUND lift (bench, squat, OHP, deadlift), include ramp-up sets in the exercise "notes" field. Example:
@@ -255,7 +259,8 @@ OUTPUT JSON only, no markdown:
   ]
 }
 
-IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array. If you prescribe 4x8 for bench press, the "sets" array must contain 4 individual objects. NEVER return just 1 set object — always return the full number of sets. This is critical.`;
+IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array. If you prescribe 4x8 for bench press, the "sets" array must contain 4 individual objects. NEVER return just 1 set object — always return the full number of sets. This is critical.
+IMPORTANT: For warm-up and cool-down/stretch exercises, each set MUST include a "setNote" field describing the specific movement for that set (e.g. "Arm circles 20x", "Chest doorway stretch 30s/side"). Never leave warm-up/stretch sets without a setNote.`;
 
     const userPrompt = `Create a workout:\n\n${contextStr}\n\n${prompt ? `USER REQUEST: ${prompt}` : ''}`;
 
@@ -283,6 +288,34 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
         headers: { 'Content-Type': 'application/json', ...cors },
         body: JSON.stringify({ error: 'AI returned invalid JSON' }),
       };
+    }
+
+    // Post-processing: enforce correct exercise types for known exercises
+    const TIME_EXERCISES = /^(dead hang|plank|side plank|wall sit|l-sit|farmer.?s walk|suitcase carr|warm.?up|cool.?down|stretch)/i;
+    const BW_EXERCISES = /^(pull.?up|chin.?up|push.?up|dip|deficit push|diamond push|close.?grip push|burpee|mountain climber|glute bridge|dead bug|nordic curl|pistol squat|dragon flag|ab wheel|hanging leg raise)/i;
+    if (workout.exercises && Array.isArray(workout.exercises)) {
+      workout.exercises.forEach(ex => {
+        const name = (ex.name || '').trim();
+        if (TIME_EXERCISES.test(name)) {
+          ex.type = 'time';
+          // Convert any reps-only sets to time-based
+          (ex.sets || []).forEach(s => {
+            if (!s.prescribedTime && s.prescribedReps) {
+              s.prescribedTime = String(Math.max(30, parseInt(s.prescribedReps) * 3 || 30));
+              delete s.prescribedReps;
+            }
+            if (!s.prescribedTime) s.prescribedTime = '30';
+            delete s.prescribedWeight;
+          });
+        } else if (BW_EXERCISES.test(name)) {
+          ex.type = 'bodyweight';
+          // Remove prescribedWeight (unless it's small added weight like weighted vest)
+          (ex.sets || []).forEach(s => {
+            const w = parseFloat(s.prescribedWeight || 0);
+            if (w > 100) delete s.prescribedWeight; // clearly wrong — bodyweight doesn't use heavy weight
+          });
+        }
+      });
     }
 
     // Post-processing: expand exercises that only have 1 set (AI sometimes gets lazy)
@@ -353,6 +386,7 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
             rpe: '',
             painLevel: 0,
             completed: false,
+            ...(s.setNote ? { setNote: s.setNote } : {}),
           };
           if (ex.type === 'time') {
             return {

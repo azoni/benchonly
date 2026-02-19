@@ -26,7 +26,7 @@ export const handler = async (event) => {
   }
 
   try {
-    const { exerciseName, exerciseType, sets, workoutContext, reason } = JSON.parse(event.body);
+    const { exerciseName, exerciseType, sets, workoutContext, reason, preferredReplacement } = JSON.parse(event.body);
 
     if (!exerciseName) {
       return { statusCode: 400, body: JSON.stringify({ error: 'exerciseName required' }) };
@@ -38,20 +38,28 @@ export const handler = async (event) => {
       : '';
 
     const otherExercises = workoutContext?.otherExercises?.join(', ') || '';
+    const userMaxes = workoutContext?.userMaxes ? `\nUser's known max weights: ${JSON.stringify(workoutContext.userMaxes)}` : '';
 
-    const prompt = `Replace "${exerciseName}" with a similar exercise.
+    const prompt = preferredReplacement
+      ? `Replace "${exerciseName}" with "${preferredReplacement}". Adjust weights/reps/time to be appropriate for ${preferredReplacement}.
+${setsDescription}${userMaxes}
+${otherExercises ? `Other exercises in workout: ${otherExercises}` : ''}`
+      : `Replace "${exerciseName}" with a similar exercise.
 ${setsDescription}
 ${exerciseType === 'bodyweight' ? 'This is a bodyweight exercise.' : exerciseType === 'time' ? 'This is a time-based exercise.' : ''}
 ${reason ? `Reason for swap: ${reason}` : ''}
-${otherExercises ? `Other exercises already in this workout (avoid duplicates): ${otherExercises}` : ''}
+${otherExercises ? `Other exercises already in this workout (avoid duplicates): ${otherExercises}` : ''}`
 
 Respond ONLY with valid JSON, no markdown fences:
 {
   "name": "Exercise Name",
   "notes": "Brief coaching note",
-  "type": "${exerciseType || 'weight'}",
+  "type": "weight|bodyweight|time",
+  "howTo": "1-2 sentence form description",
+  "cues": ["form cue 1", "form cue 2"],
+  "substitutions": ["alt 1", "alt 2"],
   "sets": [${sets?.map((s, i) => {
-    if (exerciseType === 'time') return `{"prescribedTime": "${s.prescribedTime || '30s'}", "targetRpe": ${s.targetRpe || 'null'}}`;
+    if (exerciseType === 'time') return `{"prescribedTime": "${s.prescribedTime || '30'}", "targetRpe": ${s.targetRpe || 'null'}}`;
     if (exerciseType === 'bodyweight') return `{"prescribedReps": ${s.prescribedReps || 10}, "targetRpe": ${s.targetRpe || 'null'}}`;
     return `{"prescribedWeight": ${s.prescribedWeight || 'null'}, "prescribedReps": ${s.prescribedReps || 8}, "targetRpe": ${s.targetRpe || 'null'}}`;
   }).join(', ') || ''}]
@@ -61,6 +69,8 @@ Rules:
 - Same muscle group and movement pattern as the original
 - Similar difficulty and rep range
 - Keep the same number of sets (${sets?.length || 3})
+- Set correct "type": "bodyweight" for pull-ups/push-ups/dips, "time" for planks/dead hangs/wall sits, "weight" for weighted exercises
+- For bodyweight exercises, sets have prescribedReps only (no prescribedWeight). For weighted bodyweight (e.g. weighted pull-ups), use prescribedWeight as just the ADDED weight (e.g. "15" for BW+15)
 - Adjust weight if the new exercise typically uses different loads
 - RESPOND WITH ONLY THE JSON`;
 
