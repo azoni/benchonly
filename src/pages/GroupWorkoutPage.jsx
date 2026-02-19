@@ -30,6 +30,8 @@ import {
   FileText,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { getAuthHeaders } from '../services/api'
+import { apiUrl } from '../utils/platform'
 import { groupWorkoutService, groupService, sharedWorkoutService } from '../services/firestore'
 import { friendService } from '../services/friendService'
 import { getDisplayDate } from '../utils/dateUtils'
@@ -83,6 +85,8 @@ export default function GroupWorkoutPage() {
   const [aiNotesExpanded, setAiNotesExpanded] = useState(false)
   const [promptExpanded, setPromptExpanded] = useState(false)
   const [infoExercise, setInfoExercise] = useState(null)
+  const [infoExerciseIdx, setInfoExerciseIdx] = useState(null)
+  const [swappingIdx, setSwappingIdx] = useState(null)
   const [expandedRpe, setExpandedRpe] = useState({})
   const [openNotes, setOpenNotes] = useState({})
   const [showShareModal, setShowShareModal] = useState(false)
@@ -197,6 +201,56 @@ export default function GroupWorkoutPage() {
     } catch (error) {
       console.error('Error deleting workout:', error)
       alert('Failed to delete workout')
+    }
+  }
+
+  const swapToSubstitution = async (exIdx, substitutionName) => {
+    const ex = isLogging ? exercises[exIdx] : workout?.exercises?.[exIdx]
+    if (!ex) return
+    setSwappingIdx(exIdx)
+    setInfoExercise(null)
+    setInfoExerciseIdx(null)
+    try {
+      const otherExercises = (isLogging ? exercises : workout.exercises)
+        .filter((_, i) => i !== exIdx)
+        .map(e => e.name)
+
+      const swapHeaders = await getAuthHeaders()
+      const response = await fetch(apiUrl('swap-exercise'), {
+        method: 'POST',
+        headers: swapHeaders,
+        body: JSON.stringify({
+          exerciseName: ex.name,
+          exerciseType: ex.type || 'weight',
+          sets: ex.sets,
+          workoutContext: { otherExercises },
+          preferredReplacement: substitutionName,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Swap failed')
+      const data = await response.json()
+
+      if (data.exercise) {
+        const newExercises = (isLogging ? exercises : workout.exercises).map((e, i) => i === exIdx ? {
+          ...data.exercise,
+          type: data.exercise.type || e.type || 'weight',
+        } : e)
+
+        await groupWorkoutService.update(id, { exercises: newExercises })
+        setWorkout(prev => ({ ...prev, exercises: newExercises }))
+        if (isLogging) {
+          setExercises(newExercises.map(e => ({
+            ...e,
+            notes: e.notes || '',
+            sets: e.sets?.map(set => ({ ...set })) || []
+          })))
+        }
+      }
+    } catch (err) {
+      console.error('Substitution swap error:', err)
+    } finally {
+      setSwappingIdx(null)
     }
   }
 
@@ -649,7 +703,7 @@ export default function GroupWorkoutPage() {
               <div className="p-4 border-b border-iron-800">
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setInfoExercise(exercise)}
+                    onClick={() => { setInfoExercise(exercise); setInfoExerciseIdx(exerciseIndex); }}
                     className="text-xl font-semibold text-iron-50 hover:text-flame-400 transition-colors text-left flex items-center gap-1.5"
                   >
                     {exercise.name}
@@ -803,7 +857,8 @@ export default function GroupWorkoutPage() {
         <ExerciseInfoModal
           exercise={infoExercise}
           isOpen={!!infoExercise}
-          onClose={() => setInfoExercise(null)}
+          onClose={() => { setInfoExercise(null); setInfoExerciseIdx(null); }}
+          onSubstitute={infoExerciseIdx !== null ? (subName) => swapToSubstitution(infoExerciseIdx, subName) : undefined}
         />
 
         {/* Share Modal */}
@@ -1007,7 +1062,7 @@ export default function GroupWorkoutPage() {
             <div className="p-4 bg-iron-800/30">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setInfoExercise(exercise)}
+                  onClick={() => { setInfoExercise(exercise); setInfoExerciseIdx(exerciseIndex); }}
                   className="text-xl font-bold text-iron-50 hover:text-flame-400 transition-colors text-left flex-1 flex items-center gap-1.5"
                 >
                   {exercise.name}
@@ -1304,7 +1359,8 @@ export default function GroupWorkoutPage() {
       <ExerciseInfoModal
         exercise={infoExercise}
         isOpen={!!infoExercise}
-        onClose={() => setInfoExercise(null)}
+        onClose={() => { setInfoExercise(null); setInfoExerciseIdx(null); }}
+        onSubstitute={infoExerciseIdx !== null ? (subName) => swapToSubstitution(infoExerciseIdx, subName) : undefined}
       />
     </div>
   )

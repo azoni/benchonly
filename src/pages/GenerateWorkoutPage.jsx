@@ -26,6 +26,7 @@ import {
   Save,
   X,
   HelpCircle,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
@@ -75,6 +76,8 @@ export default function GenerateWorkoutPage() {
   const [swappingIdx, setSwappingIdx] = useState(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [infoExercise, setInfoExercise] = useState(null);
+  const [infoExerciseIdx, setInfoExerciseIdx] = useState(null);
+  const [promptExpanded, setPromptExpanded] = useState(false);
   
   const [analysisSteps, setAnalysisSteps] = useState([]);
   const [currentStep, setCurrentStep] = useState(null);
@@ -555,6 +558,49 @@ export default function GenerateWorkoutPage() {
       }
     } catch (err) {
       console.error('Swap error:', err);
+    } finally {
+      setSwappingIdx(null);
+    }
+  };
+
+  const swapToSubstitution = async (exIdx, substitutionName) => {
+    const ex = generatedWorkout.exercises[exIdx];
+    if (!ex) return;
+    setSwappingIdx(exIdx);
+    setInfoExercise(null);
+    setInfoExerciseIdx(null);
+    try {
+      const otherExercises = generatedWorkout.exercises
+        .filter((_, i) => i !== exIdx)
+        .map(e => e.name);
+
+      const swapHeaders = await getAuthHeaders();
+      const response = await fetch(apiUrl('swap-exercise'), {
+        method: 'POST',
+        headers: swapHeaders,
+        body: JSON.stringify({
+          exerciseName: ex.name,
+          exerciseType: ex.type || 'weight',
+          sets: ex.sets,
+          workoutContext: { otherExercises },
+          preferredReplacement: substitutionName,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Swap failed');
+      const data = await response.json();
+
+      if (data.exercise) {
+        setGeneratedWorkout(prev => ({
+          ...prev,
+          exercises: prev.exercises.map((e, i) => i === exIdx ? {
+            ...data.exercise,
+            type: data.exercise.type || e.type || 'weight',
+          } : e)
+        }));
+      }
+    } catch (err) {
+      console.error('Substitution swap error:', err);
     } finally {
       setSwappingIdx(null);
     }
@@ -1109,6 +1155,36 @@ export default function GenerateWorkoutPage() {
                 </div>
               )}
               
+              {/* Generation Prompt */}
+              {generatedWorkout.generationPrompt && !editing && (
+                <div className="border-b border-iron-800">
+                  <button
+                    onClick={() => setPromptExpanded(!promptExpanded)}
+                    className="w-full flex items-center justify-between px-6 py-3 hover:bg-iron-800/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-iron-500" />
+                      <span className="text-sm font-medium text-iron-200">Generation Prompt</span>
+                    </div>
+                    {promptExpanded ? <ChevronUp className="w-4 h-4 text-iron-500" /> : <ChevronDown className="w-4 h-4 text-iron-500" />}
+                  </button>
+                  <AnimatePresence>
+                    {promptExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-6 pb-3">
+                          <pre className="text-xs text-iron-400 leading-relaxed whitespace-pre-wrap font-mono max-h-96 overflow-y-auto">{generatedWorkout.generationPrompt}</pre>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+
               {/* Exercises */}
               <div className="divide-y divide-iron-800">
                 {generatedWorkout.exercises?.map((ex, i) => {
@@ -1131,7 +1207,7 @@ export default function GenerateWorkoutPage() {
                           ) : (
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => setInfoExercise(ex)}
+                                onClick={() => { setInfoExercise(ex); setInfoExerciseIdx(i); }}
                                 className="font-medium text-iron-100 hover:text-flame-400 transition-colors text-left flex items-center gap-1.5"
                               >
                                 {ex.name}
@@ -1229,7 +1305,8 @@ export default function GenerateWorkoutPage() {
       <ExerciseInfoModal
         exercise={infoExercise}
         isOpen={!!infoExercise}
-        onClose={() => setInfoExercise(null)}
+        onClose={() => { setInfoExercise(null); setInfoExerciseIdx(null); }}
+        onSubstitute={infoExerciseIdx !== null ? (subName) => swapToSubstitution(infoExerciseIdx, subName) : undefined}
       />
     </div>
   );
