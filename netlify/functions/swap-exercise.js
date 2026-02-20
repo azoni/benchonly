@@ -88,7 +88,7 @@ Rules:
         { role: 'user', content: prompt }
       ],
       temperature: 0.8,
-      max_tokens: 300,
+      max_tokens: 500,
     });
 
     const responseText = completion.choices[0].message.content;
