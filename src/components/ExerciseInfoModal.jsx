@@ -4,7 +4,18 @@ import { X, ExternalLink, ArrowRightLeft, RefreshCw } from 'lucide-react';
 export default function ExerciseInfoModal({ exercise, isOpen, onClose, onSubstitute }) {
   if (!exercise) return null;
 
-  const hasInfo = exercise.howTo || exercise.cues?.length > 0 || exercise.substitutions?.length > 0;
+  const name = (exercise.name || '').trim();
+  const isWarmupOrStretch = /^(warm.?up|cool.?down|stretch)/i.test(name);
+
+  // Client-side fallback for exercises missing howTo/cues (older workouts)
+  const howTo = exercise.howTo || (!isWarmupOrStretch && name
+    ? `Perform ${name} with controlled form through a full range of motion. Focus on the target muscles and maintain a steady tempo.`
+    : '');
+  const cues = exercise.cues?.length > 0 ? exercise.cues
+    : (!isWarmupOrStretch && name ? ['Control the eccentric (lowering) phase', 'Maintain proper posture throughout', 'Breathe out on exertion'] : []);
+  const substitutions = exercise.substitutions || [];
+
+  const hasInfo = howTo || cues.length > 0 || substitutions.length > 0;
   const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form tutorial')}`;
 
   return (
@@ -37,13 +48,13 @@ export default function ExerciseInfoModal({ exercise, isOpen, onClose, onSubstit
 
               {/* Content — tight spacing */}
               <div className="flex-1 overflow-y-auto px-4 pb-3 space-y-3">
-                {exercise.howTo && (
-                  <p className="text-sm text-iron-300 leading-relaxed">{exercise.howTo}</p>
+                {howTo && (
+                  <p className="text-sm text-iron-300 leading-relaxed">{howTo}</p>
                 )}
 
-                {exercise.cues?.length > 0 && (
+                {cues.length > 0 && (
                   <ul className="space-y-1">
-                    {exercise.cues.map((cue, i) => (
+                    {cues.map((cue, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-iron-300">
                         <span className="w-1.5 h-1.5 rounded-full bg-flame-400 mt-1.5 flex-shrink-0" />
                         {cue}
@@ -52,7 +63,7 @@ export default function ExerciseInfoModal({ exercise, isOpen, onClose, onSubstit
                   </ul>
                 )}
 
-                {exercise.substitutions?.length > 0 && (
+                {substitutions.length > 0 && (
                   <div>
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <ArrowRightLeft className="w-3 h-3 text-iron-500" />
@@ -61,7 +72,7 @@ export default function ExerciseInfoModal({ exercise, isOpen, onClose, onSubstit
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {exercise.substitutions.map((sub, i) => (
+                      {substitutions.map((sub, i) => (
                         onSubstitute ? (
                           <button
                             key={i}

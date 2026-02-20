@@ -74,7 +74,7 @@ export default function WorkoutDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   usePageTitle('Workout')
-  const { user, isGuest } = useAuth()
+  const { user, isGuest, isAppAdmin } = useAuth()
   const sidebarOpen = useUIStore((s) => s.sidebarOpen)
   const [workout, setWorkout] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -104,6 +104,10 @@ export default function WorkoutDetailPage() {
   const [shareMessage, setShareMessage] = useState('')
   const [sharing, setSharing] = useState(false)
   const [shared, setShared] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editExercises, setEditExercises] = useState([])
+  const [editNotes, setEditNotes] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => {
     async function fetchWorkout() {
@@ -215,6 +219,74 @@ export default function WorkoutDetailPage() {
     } finally {
       setSharing(false)
     }
+  }
+
+  // Admin edit helpers
+  const startEditing = () => {
+    setEditExercises(workout.exercises.map(ex => ({
+      ...ex,
+      sets: ex.sets?.map(s => ({ ...s })) || []
+    })))
+    setEditNotes(workout.notes || '')
+    setIsEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setIsEditing(false)
+    setEditExercises([])
+    setEditNotes('')
+  }
+
+  const saveEdits = async () => {
+    setSavingEdit(true)
+    try {
+      await workoutService.update(id, { exercises: editExercises, notes: editNotes })
+      setWorkout(prev => ({ ...prev, exercises: editExercises, notes: editNotes }))
+      setIsEditing(false)
+    } catch (err) {
+      console.error('Error saving edits:', err)
+      alert('Failed to save edits')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const editUpdateExercise = (exIdx, field, value) => {
+    setEditExercises(prev => prev.map((ex, i) => i === exIdx ? { ...ex, [field]: value } : ex))
+  }
+
+  const editUpdateSet = (exIdx, setIdx, field, value) => {
+    setEditExercises(prev => prev.map((ex, i) => i === exIdx ? {
+      ...ex,
+      sets: ex.sets.map((s, j) => j === setIdx ? { ...s, [field]: value } : s)
+    } : ex))
+  }
+
+  const editAddSet = (exIdx) => {
+    setEditExercises(prev => prev.map((ex, i) => {
+      if (i !== exIdx) return ex
+      const lastSet = ex.sets[ex.sets.length - 1] || {}
+      const type = getExerciseType(ex)
+      let newSet = { id: Date.now(), rpe: '', painLevel: 0, completed: false }
+      if (type === 'time') newSet = { ...newSet, prescribedTime: lastSet.prescribedTime || '', actualTime: '' }
+      else if (type === 'bodyweight') newSet = { ...newSet, prescribedReps: lastSet.prescribedReps || '', actualReps: '' }
+      else newSet = { ...newSet, prescribedWeight: lastSet.prescribedWeight || '', prescribedReps: lastSet.prescribedReps || '', actualWeight: '', actualReps: '' }
+      return { ...ex, sets: [...ex.sets, newSet] }
+    }))
+  }
+
+  const editRemoveSet = (exIdx, setIdx) => {
+    setEditExercises(prev => prev.map((ex, i) => {
+      if (i !== exIdx || ex.sets.length <= 1) return ex
+      return { ...ex, sets: ex.sets.filter((_, j) => j !== setIdx) }
+    }))
+  }
+
+  const editRemoveExercise = (exIdx) => {
+    setEditExercises(prev => {
+      if (prev.length <= 1) return prev
+      return prev.filter((_, i) => i !== exIdx)
+    })
   }
 
   const swapExercise = async (exIdx, reason) => {
@@ -531,6 +603,22 @@ export default function WorkoutDetailPage() {
             </button>
             
             <div className="flex items-center gap-2">
+              {isEditing ? (
+                <div className="flex items-center gap-2">
+                  <button onClick={cancelEditing} className="px-3 py-1.5 text-sm text-iron-400 hover:text-iron-200 transition-colors">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveEdits}
+                    disabled={savingEdit}
+                    className="px-3 py-1.5 text-sm bg-flame-500 text-white rounded-lg hover:bg-flame-600 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    Save
+                  </button>
+                </div>
+              ) : (
+                <>
               {isScheduled ? (
                 <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm font-medium">
                   To Do
@@ -540,7 +628,17 @@ export default function WorkoutDetailPage() {
                   Completed
                 </span>
               )}
-              
+
+              {isAppAdmin && !isEditing && (
+                <button
+                  onClick={startEditing}
+                  className="p-2 text-iron-400 hover:text-flame-400 transition-colors"
+                  title="Edit workout"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+              )}
+
               <div className="relative">
                 <button
                   onClick={() => setShowMenu(!showMenu)}
@@ -548,7 +646,7 @@ export default function WorkoutDetailPage() {
                 >
                   <MoreVertical className="w-5 h-5" />
                 </button>
-                
+
                 {showMenu && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
@@ -593,6 +691,8 @@ export default function WorkoutDetailPage() {
                   </>
                 )}
               </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -689,7 +789,18 @@ export default function WorkoutDetailPage() {
         )}
 
         {/* Workout Notes */}
-        {workout.notes && (
+        {isEditing ? (
+          <div className="card-steel p-4 mb-3">
+            <label className="block text-[10px] uppercase tracking-wider text-iron-500 mb-1.5">Notes</label>
+            <textarea
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              rows={2}
+              className="w-full input-field text-sm resize-none"
+              placeholder="Workout notes..."
+            />
+          </div>
+        ) : workout.notes && (
           <div className="card-steel p-4 mb-3">
             <p className="text-iron-300">{workout.notes}</p>
           </div>
@@ -748,7 +859,7 @@ export default function WorkoutDetailPage() {
         )}
 
         {/* Quick Overview (Scheduled Only) */}
-        {isScheduled && !isCardio && workout.exercises?.length > 0 && (
+        {!isEditing && isScheduled && !isCardio && workout.exercises?.length > 0 && (
           <div className="card-steel p-4 mb-6 bg-yellow-500/5 border-yellow-500/20">
             <div className="flex items-center gap-2 mb-3">
               <Target className="w-5 h-5 text-yellow-400" />
@@ -783,8 +894,130 @@ export default function WorkoutDetailPage() {
           </div>
         )}
 
+        {/* Exercises - Admin Edit Mode */}
+        {isEditing && !isCardio && editExercises.length > 0 && (
+          <div className="space-y-4">
+            {editExercises.map((exercise, exIdx) => {
+              const type = getExerciseType(exercise)
+              const typeTag = getTypeTag(type)
+              return (
+                <div key={exIdx} className="card-steel overflow-hidden">
+                  <div className="p-4 bg-iron-800/30">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={exercise.name}
+                        onChange={(e) => editUpdateExercise(exIdx, 'name', e.target.value)}
+                        className="input-field flex-1 text-lg font-bold"
+                      />
+                      {typeTag && <span className={`px-2 py-0.5 text-xs rounded ${typeTag.color}`}>{typeTag.label}</span>}
+                      {editExercises.length > 1 && (
+                        <button onClick={() => editRemoveExercise(exIdx)} className="p-1.5 text-iron-600 hover:text-red-400 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="divide-y divide-iron-800/50">
+                    {exercise.sets?.map((set, setIdx) => (
+                      <div key={setIdx} className="p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-iron-800 flex items-center justify-center flex-shrink-0">
+                          <span className="text-lg font-bold text-iron-400">{setIdx + 1}</span>
+                        </div>
+                        {type === 'time' ? (
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              value={set.prescribedTime || ''}
+                              onChange={(e) => editUpdateSet(exIdx, setIdx, 'prescribedTime', e.target.value)}
+                              placeholder="seconds"
+                              className="input-field w-full text-center"
+                            />
+                            <p className="text-[10px] text-iron-600 text-center mt-1">seconds</p>
+                          </div>
+                        ) : type === 'bodyweight' ? (
+                          <div className="flex-1 grid grid-cols-2 gap-2">
+                            <div>
+                              <input
+                                type="text"
+                                value={set.prescribedReps || ''}
+                                onChange={(e) => editUpdateSet(exIdx, setIdx, 'prescribedReps', e.target.value)}
+                                placeholder="reps"
+                                className="input-field w-full text-center"
+                              />
+                              <p className="text-[10px] text-iron-600 text-center mt-1">reps</p>
+                            </div>
+                            <div>
+                              <input
+                                type="text"
+                                value={set.prescribedWeight || ''}
+                                onChange={(e) => editUpdateSet(exIdx, setIdx, 'prescribedWeight', e.target.value)}
+                                placeholder="+ lbs"
+                                className="input-field w-full text-center"
+                              />
+                              <p className="text-[10px] text-iron-600 text-center mt-1">added lbs</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex-1 grid grid-cols-2 gap-2">
+                            <div>
+                              <input
+                                type="text"
+                                value={set.prescribedWeight || ''}
+                                onChange={(e) => editUpdateSet(exIdx, setIdx, 'prescribedWeight', e.target.value)}
+                                placeholder="lbs"
+                                className="input-field w-full text-center"
+                              />
+                              <p className="text-[10px] text-iron-600 text-center mt-1">lbs</p>
+                            </div>
+                            <div>
+                              <input
+                                type="text"
+                                value={set.prescribedReps || ''}
+                                onChange={(e) => editUpdateSet(exIdx, setIdx, 'prescribedReps', e.target.value)}
+                                placeholder="reps"
+                                className="input-field w-full text-center"
+                              />
+                              <p className="text-[10px] text-iron-600 text-center mt-1">reps</p>
+                            </div>
+                          </div>
+                        )}
+                        {exercise.sets.length > 1 && (
+                          <button onClick={() => editRemoveSet(exIdx, setIdx)} className="p-1.5 text-iron-600 hover:text-red-400 transition-colors">
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="px-4 py-2">
+                    <button
+                      onClick={() => editAddSet(exIdx)}
+                      className="w-full py-2 border border-dashed border-iron-700 rounded-lg text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600 flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Set
+                    </button>
+                  </div>
+                  {exercise.notes && (
+                    <div className="px-4 pb-3">
+                      <input
+                        type="text"
+                        value={exercise.notes}
+                        onChange={(e) => editUpdateExercise(exIdx, 'notes', e.target.value)}
+                        className="input-field w-full text-sm"
+                        placeholder="Exercise notes"
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {/* Exercises - Detailed View */}
-        {!isCardio && workout.exercises?.length > 0 && (
+        {!isEditing && !isCardio && workout.exercises?.length > 0 && (
           <div className="space-y-4">
             {workout.exercises.map((exercise, exerciseIndex) => {
               const isTimeExercise = exercise.type === 'time' || exercise.sets?.some(s => s.prescribedTime || s.actualTime)
@@ -977,7 +1210,7 @@ export default function WorkoutDetailPage() {
         )}
 
         {/* Action Button */}
-        {!isCardio && (
+        {!isCardio && !isEditing && (
           <div className={`fixed bottom-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800 left-0 ${sidebarOpen ? 'lg:left-64' : 'lg:left-20'} transition-[left] duration-300`}>
             <button
               onClick={() => setIsLogging(true)}

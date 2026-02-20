@@ -66,7 +66,7 @@ export default function GenerateGroupWorkoutModal({
   const [duration, setDuration] = useState('auto');
   const [exerciseCount, setExerciseCount] = useState('auto');
   const [maxExercise, setMaxExercise] = useState('');
-  const [includeWarmup, setIncludeWarmup] = useState(true);
+  const [includeWarmup, setIncludeWarmup] = useState(false);
   const [includeStretches, setIncludeStretches] = useState(false);
   
   // Analysis tracking
