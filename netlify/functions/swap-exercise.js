@@ -9,7 +9,7 @@ export const handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
 
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method not allowed' };
+    return { statusCode: 405, headers: CORS_HEADERS, body: 'Method not allowed' };
   }
 
   const auth = await verifyAuth(event);
@@ -29,7 +29,7 @@ export const handler = async (event) => {
     const { exerciseName, exerciseType, sets, workoutContext, reason, preferredReplacement } = JSON.parse(event.body);
 
     if (!exerciseName) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'exerciseName required' }) };
+      return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'exerciseName required' }) };
     }
 
     // Build a concise prompt
@@ -93,7 +93,7 @@ Rules:
     } catch (parseErr) {
       console.error('Parse error:', parseErr, '\nRaw:', responseText);
       logError('swap-exercise', parseErr, 'medium', { action: 'parse-response', exercise: exerciseName });
-      return { statusCode: 500, body: JSON.stringify({ error: 'Failed to parse AI response' }) };
+      return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Failed to parse AI response' }) };
     }
 
     const usage = completion.usage;
@@ -109,7 +109,7 @@ Rules:
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       body: JSON.stringify({ exercise, originalName: exerciseName }),
     };
   } catch (err) {
@@ -118,6 +118,7 @@ Rules:
     await refundCredits(auth.uid, creditResult.cost || 1, auth.isAdmin);
     return {
       statusCode: 500,
+      headers: CORS_HEADERS,
       body: JSON.stringify({ error: err.message || 'Failed to swap exercise' }),
     };
   }

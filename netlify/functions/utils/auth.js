@@ -42,7 +42,7 @@ export async function verifyAuth(event) {
  */
 export const UNAUTHORIZED = {
   statusCode: 401,
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://benchpressonly.com', 'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Access-Control-Allow-Methods': 'POST, OPTIONS' },
   body: JSON.stringify({ error: 'Unauthorized' }),
 };
 
