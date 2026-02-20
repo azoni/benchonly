@@ -894,11 +894,18 @@ export default function ProfilePage() {
         <div className="grid grid-cols-7 gap-1">
           {getDaysInMonth().map((day, i) => {
             const dayWorkouts = getWorkoutsForDay(day)
-            const hasWorkout = dayWorkouts.length > 0
-            const hasCompleted = dayWorkouts.some(w => w.status === 'completed')
+            const strengthWorkouts = dayWorkouts.filter(w => w.workoutType !== 'cardio')
+            const cardioWorkouts = dayWorkouts.filter(w => w.workoutType === 'cardio')
+            const hasStrength = strengthWorkouts.length > 0
+            const hasCardio = cardioWorkouts.length > 0
+            const hasCompletedStrength = strengthWorkouts.some(w => w.status === 'completed')
+            const hasScheduledStrength = strengthWorkouts.some(w => w.status !== 'completed')
             const goalDeadline = getGoalDeadline(day)
             const isCurrentMonth = isSameMonth(day, currentMonth)
             const isTodayDate = isToday(day)
+
+            // Background: green for completed strength, flame for scheduled strength, none otherwise
+            const bgClass = hasCompletedStrength ? 'bg-green-500/20' : hasScheduledStrength ? 'bg-flame-500/20' : ''
 
             return (
               <div
@@ -907,12 +914,20 @@ export default function ProfilePage() {
                   relative aspect-square flex items-center justify-center text-xs rounded-md
                   ${isCurrentMonth ? 'text-iron-300' : 'text-iron-600'}
                   ${isTodayDate ? 'ring-1 ring-flame-500' : ''}
-                  ${hasCompleted ? 'bg-green-500/20' : hasWorkout ? 'bg-flame-500/20' : ''}
+                  ${bgClass}
                 `}
               >
                 {format(day, 'd')}
-                {goalDeadline && (
-                  <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-yellow-400" />
+                {/* Dots row at bottom */}
+                {(hasCardio || goalDeadline) && (
+                  <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
+                    {hasCardio && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                    )}
+                    {goalDeadline && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                    )}
+                  </div>
                 )}
               </div>
             )
@@ -920,7 +935,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center justify-center gap-4 mt-4 text-xs text-iron-500">
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-4 text-xs text-iron-500">
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded bg-green-500/20" />
             <span>Completed</span>
@@ -928,6 +943,10 @@ export default function ProfilePage() {
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded bg-flame-500/20" />
             <span>Scheduled</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-cyan-400" />
+            <span>Cardio</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-yellow-400" />
