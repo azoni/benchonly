@@ -517,7 +517,7 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
   }
 }
 
-function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null, maxExercise = null, includeWarmup = true, includeStretches = false) {
+function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null, maxExercise = null, includeWarmup = false, includeStretches = false) {
   const painThresholdMin = settings.painThresholdMin || 3;
   const painThresholdCount = settings.painThresholdCount || 2;
   

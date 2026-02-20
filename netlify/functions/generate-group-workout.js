@@ -22,7 +22,7 @@ export async function handler(event) {
   let creditCost = 0;
 
   try {
-    const { groupId, athletes, prompt, workoutDate, model, workoutFocus, intensity, duration, exerciseCount, maxExercise, includeWarmup = true, includeStretches = false, jobId } = JSON.parse(event.body);
+    const { groupId, athletes, prompt, workoutDate, model, workoutFocus, intensity, duration, exerciseCount, maxExercise, includeWarmup = false, includeStretches = false, jobId } = JSON.parse(event.body);
     const coachId = auth.uid;
 
     creditCost = model === 'premium' ? 100 : (athletes?.length || 1) * 5;
@@ -112,9 +112,10 @@ export async function handler(event) {
     catch { return { statusCode: 500, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'AI returned invalid JSON' }) }; }
 
     expandSingleSets(result);
+    fillMissingExerciseInfo(result);
     if (!result.athleteWorkouts) return { statusCode: 500, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'AI response missing athleteWorkouts' }) };
 
-    const createdWorkouts = await saveWorkouts(result, athletes, coachId, groupId, groupAdmins, groupMembers, selectedModel, workoutDate);
+    const createdWorkouts = await saveWorkouts(result, athletes, coachId, groupId, groupAdmins, groupMembers, selectedModel, workoutDate, userPrompt);
     const cost = calcCost(usage, selectedModel);
     await logUsage(db, coachId, selectedModel, usage, cost, responseTime, athletes, groupId, prompt, result);
 
@@ -160,7 +161,27 @@ function expandSingleSets(result) {
   }
 }
 
-async function saveWorkouts(result, athletes, coachId, groupId, groupAdmins, groupMembers, selectedModel, workoutDate) {
+function fillMissingExerciseInfo(result) {
+  if (!result.athleteWorkouts) return;
+  for (const aw of Object.values(result.athleteWorkouts)) {
+    (aw.exercises || []).forEach(ex => {
+      const name = (ex.name || '').trim();
+      if (!ex.howTo && !/^(warm.?up|cool.?down|stretch)/i.test(name)) {
+        ex.howTo = `Perform ${name} with controlled form through a full range of motion. Focus on the target muscles and maintain a steady tempo.`;
+      }
+      if (!Array.isArray(ex.cues) || ex.cues.length === 0) {
+        if (!/^(warm.?up|cool.?down|stretch)/i.test(name)) {
+          ex.cues = ['Control the eccentric (lowering) phase', 'Maintain proper posture throughout', 'Breathe out on exertion'];
+        }
+      }
+      if (!Array.isArray(ex.substitutions) || ex.substitutions.length === 0) {
+        ex.substitutions = [];
+      }
+    });
+  }
+}
+
+async function saveWorkouts(result, athletes, coachId, groupId, groupAdmins, groupMembers, selectedModel, workoutDate, userPrompt) {
   let parsedDate = new Date();
   if (workoutDate) { const [y, m, d] = workoutDate.split('-').map(Number); parsedDate = new Date(y, m - 1, d, 12, 0, 0); }
 
@@ -353,7 +374,7 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects matching defaultSets
 For pain substitutions: "substitution": { "reason": "shoulder pain", "original": "Bench Press", "replacement": "Floor Press" }`;
 }
 
-function buildGroupContext(athletes, settings = {}, focus = 'auto', intensity = 'moderate', duration = null, exerciseCount = null, maxExercise = null, includeWarmup = true, includeStretches = false) {
+function buildGroupContext(athletes, settings = {}, focus = 'auto', intensity = 'moderate', duration = null, exerciseCount = null, maxExercise = null, includeWarmup = false, includeStretches = false) {
   const painMin = settings.painThresholdMin || 3;
   const painCount = settings.painThresholdCount || 2;
   let s = `GROUP: ${athletes.length} athletes\n`;

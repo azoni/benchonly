@@ -105,6 +105,26 @@ export async function handler(event) {
       }
     }
 
+    // Fill in missing exercise info (howTo, cues, substitutions)
+    if (result.athleteWorkouts) {
+      for (const aw of Object.values(result.athleteWorkouts)) {
+        (aw.exercises || []).forEach(ex => {
+          const name = (ex.name || '').trim();
+          if (!ex.howTo && !/^(warm.?up|cool.?down|stretch)/i.test(name)) {
+            ex.howTo = `Perform ${name} with controlled form through a full range of motion. Focus on the target muscles and maintain a steady tempo.`;
+          }
+          if (!Array.isArray(ex.cues) || ex.cues.length === 0) {
+            if (!/^(warm.?up|cool.?down|stretch)/i.test(name)) {
+              ex.cues = ['Control the eccentric (lowering) phase', 'Maintain proper posture throughout', 'Breathe out on exertion'];
+            }
+          }
+          if (!Array.isArray(ex.substitutions) || ex.substitutions.length === 0) {
+            ex.substitutions = [];
+          }
+        });
+      }
+    }
+
     if (!result.athleteWorkouts) {
       await jobRef.update({ status: 'error', error: 'AI response missing athleteWorkouts' });
       if (creditCost > 0) await refundCredits(coachId, creditCost, jobIsAdmin).catch(() => {});
@@ -167,6 +187,7 @@ export async function handler(event) {
         groupMembers: groupMembers || [coachId],
         generatedByAI: true,
         aiModel: selectedModel,
+        generationPrompt: userPrompt,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
