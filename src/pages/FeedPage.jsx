@@ -98,6 +98,7 @@ export default function FeedPage() {
     if (!user) return item.visibility === 'public' || !item.visibility
 
     if (item.userId === user.uid) return true
+    if (isAppAdmin) return true
 
     const visibility = item.visibility || 'public'
     switch (visibility) {
