@@ -1,35 +1,38 @@
 import OpenAI from 'openai';
-import { verifyAuth, UNAUTHORIZED, CORS_HEADERS, OPTIONS_RESPONSE } from './utils/auth.js';
+import { verifyAuth, UNAUTHORIZED, getCorsHeaders, optionsResponse } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
 import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return OPTIONS_RESPONSE;
+  const cors = getCorsHeaders(event);
+  if (event.httpMethod === 'OPTIONS') return optionsResponse(event);
 
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: CORS_HEADERS, body: 'Method not allowed' };
+    return { statusCode: 405, headers: cors, body: 'Method not allowed' };
   }
 
   const auth = await verifyAuth(event);
-  if (!auth) return UNAUTHORIZED;
+  if (!auth) {
+    return { statusCode: 401, headers: { 'Content-Type': 'application/json', ...cors }, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
 
   const rateCheck = await checkRateLimit(auth.uid, 'swap-exercise');
   if (!rateCheck.allowed) {
-    return { statusCode: 429, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Too many requests.' }) };
+    return { statusCode: 429, headers: cors, body: JSON.stringify({ error: 'Too many requests.' }) };
   }
 
   const creditResult = await deductCredits(auth.uid, 'swap-exercise', null, auth.isAdmin);
   if (!creditResult.success) {
-    return { statusCode: 402, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Not enough credits.' }) };
+    return { statusCode: 402, headers: cors, body: JSON.stringify({ error: 'Not enough credits.' }) };
   }
 
   try {
     const { exerciseName, exerciseType, sets, workoutContext, reason, preferredReplacement } = JSON.parse(event.body);
 
     if (!exerciseName) {
-      return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'exerciseName required' }) };
+      return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'exerciseName required' }) };
     }
 
     // Build a concise prompt
@@ -86,14 +89,14 @@ Rules:
 
     const responseText = completion.choices[0].message.content;
     const cleanJson = responseText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-    
+
     let exercise;
     try {
       exercise = JSON.parse(cleanJson);
     } catch (parseErr) {
       console.error('Parse error:', parseErr, '\nRaw:', responseText);
       logError('swap-exercise', parseErr, 'medium', { action: 'parse-response', exercise: exerciseName });
-      return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Failed to parse AI response' }) };
+      return { statusCode: 500, headers: cors, body: JSON.stringify({ error: 'Failed to parse AI response' }) };
     }
 
     const usage = completion.usage;
@@ -109,7 +112,7 @@ Rules:
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      headers: { 'Content-Type': 'application/json', ...cors },
       body: JSON.stringify({ exercise, originalName: exerciseName }),
     };
   } catch (err) {
@@ -118,7 +121,7 @@ Rules:
     await refundCredits(auth.uid, creditResult.cost || 1, auth.isAdmin);
     return {
       statusCode: 500,
-      headers: CORS_HEADERS,
+      headers: cors,
       body: JSON.stringify({ error: err.message || 'Failed to swap exercise' }),
     };
   }

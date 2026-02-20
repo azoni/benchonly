@@ -92,21 +92,32 @@
            transition-all duration-200;
   }
   
-  /* Date input calendar icon */
+  /* Date input — force mobile browsers to respect container width */
   input[type="date"] {
-    @apply py-2 px-3 text-sm min-w-0 w-full;
+    @apply py-2 px-3 text-sm min-w-0;
+    max-width: 100%;
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    overflow: hidden;
+    box-sizing: border-box;
   }
-  
+
   input[type="date"]::-webkit-calendar-picker-indicator {
     filter: invert(0.7);
     cursor: pointer;
-    padding: 4px;
+    padding: 2px;
     border-radius: 4px;
+    flex-shrink: 0;
   }
-  
+
   input[type="date"]::-webkit-calendar-picker-indicator:hover {
     filter: invert(0.9);
     background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
   }
   
   /* Badge */

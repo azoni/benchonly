@@ -95,11 +95,18 @@ Scale the warm-up to the working weight. Skip warm-up notes for isolation/access
 
 DURATION & EXERCISE COUNT:
 If a target duration or exercise count is specified, respect it:
+- The exercise count means MAIN EXERCISES ONLY. Warm-up and Cool-down Stretches do NOT count toward this number. If the user asks for 5 exercises and warm-up is enabled, you produce: 1 warm-up + 5 main exercises = 6 total entries.
 - Fewer exercises = more sets per exercise. More exercises = fewer sets each.
 - Short workouts (15-20 min): 2-3 exercises, 2-3 sets each, minimal rest.
 - Medium workouts (30-45 min): 4-5 exercises, 3-4 sets each.
 - Long workouts (60-90 min): 5-8 exercises, 3-5 sets each.
 - Adjust total volume so the workout fits the requested time.
+
+WEIGHT SELECTION — CRITICAL:
+- ALWAYS use the TARGET WEIGHT RANGE provided in the context for each lift. These ranges are pre-calculated from the user's actual maxes at the requested intensity. Do NOT exceed the upper bound.
+- If a lift is not in the max lifts list, infer conservatively from related lifts (e.g. if bench is 225, incline DB press should be around 60-70% of that per arm).
+- When in doubt, prescribe LIGHTER, not heavier. Users can always add weight; an overly heavy workout is dangerous and discouraging.
+- For isolation/accessory exercises, use 50-65% of the main compound lift weight for that muscle group.
 
 1RM TEST PROTOCOL:
 If the focus is "1rm-test", generate a max-attempt session for the specified exercise:
@@ -565,7 +572,7 @@ function buildContext(ctx, focus, intensity, settings = {}, duration = null, exe
       const hi = Math.round((d.e1rm * range[1]) / 5) * 5;
       s += `  ${n}: e1RM ${d.e1rm}lb (best: ${d.weight}x${d.reps}) → TARGET: ${lo}-${hi} lbs\n`;
     });
-    s += '  ↑ Use these TARGET ranges for working sets. For exercises not listed, infer from related lifts.\n';
+    s += '  ↑ IMPORTANT: Working set weights MUST fall within these TARGET ranges. NEVER exceed the upper bound. For exercises not listed, infer conservatively from related lifts.\n';
     s += '\n';
   } else {
     s += 'MAX LIFTS: No data - use conservative weights and note it\n\n';
