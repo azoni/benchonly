@@ -267,7 +267,8 @@ OUTPUT JSON only, no markdown:
 }
 
 IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array. If you prescribe 4x8 for bench press, the "sets" array must contain 4 individual objects. NEVER return just 1 set object — always return the full number of sets. This is critical.
-IMPORTANT: For warm-up and cool-down/stretch exercises, each set MUST include a "setNote" field describing the specific movement for that set (e.g. "Arm circles 20x", "Chest doorway stretch 30s/side"). Never leave warm-up/stretch sets without a setNote.`;
+IMPORTANT: For warm-up and cool-down/stretch exercises, each set MUST include a "setNote" field describing the specific movement for that set (e.g. "Arm circles 20x", "Chest doorway stretch 30s/side"). Never leave warm-up/stretch sets without a setNote.
+IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), "cues" (2-3 form cues), and "substitutions" (2-3 alternatives). These fields are REQUIRED — do not skip them for any exercise.`;
 
     const userPrompt = `Create a workout:\n\n${contextStr}\n\n${prompt ? `USER REQUEST: ${prompt}` : ''}`;
 
@@ -370,6 +371,24 @@ IMPORTANT: For warm-up and cool-down/stretch exercises, each set MUST include a 
     } else {
       // GPT-4o-mini: $0.15/$0.60 per 1M tokens
       cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60;
+    }
+
+    // Post-processing: fill in missing exercise info fields
+    if (workout.exercises && Array.isArray(workout.exercises)) {
+      workout.exercises.forEach(ex => {
+        const name = (ex.name || '').trim();
+        if (!ex.howTo && !/^(warm.?up|cool.?down|stretch)/i.test(name)) {
+          ex.howTo = `Perform ${name} with controlled form through a full range of motion. Focus on the target muscles and maintain a steady tempo.`;
+        }
+        if (!Array.isArray(ex.cues) || ex.cues.length === 0) {
+          if (!/^(warm.?up|cool.?down|stretch)/i.test(name)) {
+            ex.cues = ['Control the eccentric (lowering) phase', 'Maintain proper posture throughout', 'Breathe out on exertion'];
+          }
+        }
+        if (!Array.isArray(ex.substitutions) || ex.substitutions.length === 0) {
+          ex.substitutions = [];
+        }
+      });
     }
 
     // Save to Firestore (skip if draft mode)
