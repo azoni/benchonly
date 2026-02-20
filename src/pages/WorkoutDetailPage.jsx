@@ -41,6 +41,7 @@ import { ACTIVITY_METS } from '../services/calorieService'
 import usePageTitle from '../utils/usePageTitle'
 import { apiUrl } from '../utils/platform'
 import ExerciseInfoModal from '../components/ExerciseInfoModal'
+import WorkoutSummaryCard from '../components/WorkoutSummaryCard'
 import { useUIStore } from '../store'
 
 // Calculate estimated 1RM using Epley formula
@@ -1014,6 +1015,11 @@ export default function WorkoutDetailPage() {
               )
             })}
           </div>
+        )}
+
+        {/* Workout Summary Card */}
+        {!isEditing && !isCardio && workout.exercises?.length > 0 && (
+          <WorkoutSummaryCard exercises={workout.exercises} isCompleted={!isScheduled} />
         )}
 
         {/* Exercises - Detailed View */}

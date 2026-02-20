@@ -972,6 +972,19 @@ export default function GroupDetailPage() {
                             </div>
                           </div>
                           
+                          {/* View All Members Button */}
+                          {workoutGroup.assignments.length > 1 && (
+                            <div className="px-4 pb-3">
+                              <Link
+                                to={`/groups/${id}/batch/${encodeURIComponent(key)}`}
+                                className="btn-secondary w-full flex items-center justify-center gap-2"
+                              >
+                                <Users className="w-4 h-4" />
+                                View All Members
+                              </Link>
+                            </div>
+                          )}
+
                           {/* Admin Edit Button */}
                           {isAdmin && (
                             <div className="p-4 border-t border-iron-800 flex gap-2">

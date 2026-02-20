@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Calculator, Dumbbell, ChevronDown, Info, TrendingUp, BarChart3, Calendar, Target, ArrowRight, Video } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { workoutService, goalService } from '../services/firestore'
+import { workoutService, goalService, groupWorkoutService } from '../services/firestore'
 import { format, subDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 
 const COMMON_EXERCISES = [
@@ -83,11 +83,12 @@ export default function ToolsPage() {
 
   const loadAnalyticsData = async () => {
     try {
-      const [workoutsData, goalsData] = await Promise.all([
+      const [personalWorkouts, groupWorkoutsData, goalsData] = await Promise.all([
         workoutService.getByUser(user.uid),
+        groupWorkoutService.getByUser(user.uid),
         goalService.getByUser(user.uid)
       ])
-      setWorkouts(workoutsData)
+      setWorkouts([...personalWorkouts, ...groupWorkoutsData])
       setGoals(goalsData)
     } catch (error) {
       console.error('Error loading analytics:', error)
@@ -122,8 +123,8 @@ export default function ToolsPage() {
         ex.sets?.forEach(set => {
           if (set.completed !== false) {
             totalSets++
-            const weight = parseFloat(set.weight) || 0
-            const reps = parseInt(set.reps) || 0
+            const weight = parseFloat(set.actualWeight ?? set.weight) || 0
+            const reps = parseInt(set.actualReps ?? set.reps) || 0
             totalVolume += weight * reps
             
             const exName = ex.name || 'Unknown'

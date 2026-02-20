@@ -305,7 +305,13 @@ export default function GenerateWorkoutPage() {
           });
         }
         if (aiOverrides.excludeExercises) {
-          aiOverrides.excludeExercises.forEach(name => delete maxLifts[name]);
+          aiOverrides.excludeExercises.forEach(excl => {
+            const el = excl.toLowerCase();
+            Object.keys(maxLifts).forEach(lift => {
+              const ll = lift.toLowerCase();
+              if (el === ll || ll.includes(el) || el.includes(ll)) delete maxLifts[lift];
+            });
+          });
         }
       }
 

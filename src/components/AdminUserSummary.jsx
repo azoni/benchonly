@@ -389,6 +389,7 @@ export default function AdminUserSummary({ userId, userName }) {
   }
 
   const saveOverrides = async (newOverrides) => {
+    const prev = overrides
     setOverrides(newOverrides)
     setOverridesSaving(true)
     try {
@@ -398,6 +399,7 @@ export default function AdminUserSummary({ userId, userName }) {
       setTimeout(() => setOverridesSaved(false), 2000)
     } catch (err) {
       console.error('Failed to save overrides:', err)
+      setOverrides(prev)
     } finally {
       setOverridesSaving(false)
     }
@@ -432,9 +434,15 @@ export default function AdminUserSummary({ userId, userName }) {
     saveOverrides({ ...overrides, maxLifts: rest })
   }
 
+  const exerciseMatches = (a, b) => {
+    const al = a.toLowerCase().trim()
+    const bl = b.toLowerCase().trim()
+    return al === bl || al.includes(bl) || bl.includes(al)
+  }
+
   const handleExcludeExercise = (name) => {
     const excluded = overrides.excludeExercises || []
-    if (excluded.includes(name)) return
+    if (excluded.some(e => exerciseMatches(e, name))) return
     saveOverrides({ ...overrides, excludeExercises: [...excluded, name] })
   }
 
@@ -451,7 +459,11 @@ export default function AdminUserSummary({ userId, userName }) {
     Object.entries(overrides.maxLifts || {}).forEach(([name, vals]) => {
       effectiveLifts[name] = { ...(effectiveLifts[name] || {}), ...vals }
     })
-    ;(overrides.excludeExercises || []).forEach(name => delete effectiveLifts[name])
+    ;(overrides.excludeExercises || []).forEach(excl => {
+      Object.keys(effectiveLifts).forEach(lift => {
+        if (exerciseMatches(excl, lift)) delete effectiveLifts[lift]
+      })
+    })
     return { ...data, maxLifts: effectiveLifts }
   }
 
@@ -578,7 +590,11 @@ export default function AdminUserSummary({ userId, userName }) {
         Object.entries(overrides.maxLifts || {}).forEach(([name, vals]) => {
           effectiveLifts[name] = { ...(effectiveLifts[name] || {}), ...vals }
         })
-        excluded.forEach(name => delete effectiveLifts[name])
+        excluded.forEach(excl => {
+          Object.keys(effectiveLifts).forEach(lift => {
+            if (exerciseMatches(excl, lift)) delete effectiveLifts[lift]
+          })
+        })
         const liftEntries = Object.entries(effectiveLifts).sort((a, b) => b[1].e1rm - a[1].e1rm)
 
         return (

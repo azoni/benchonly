@@ -18,6 +18,7 @@ const GroupWorkoutPage = lazy(() => import('./pages/GroupWorkoutPage'))
 const CalendarPage = lazy(() => import('./pages/CalendarPage'))
 const GroupsPage = lazy(() => import('./pages/GroupsPage'))
 const GroupDetailPage = lazy(() => import('./pages/GroupDetailPage'))
+const GroupBatchViewPage = lazy(() => import('./pages/GroupBatchViewPage'))
 const GoalsPage = lazy(() => import('./pages/GoalsPage'))
 const ToolsPage = lazy(() => import('./pages/ToolsPage'))
 const HealthPage = lazy(() => import('./pages/HealthPage'))
@@ -181,6 +182,7 @@ export default function App() {
         <Route path="programs/:id" element={<Suspense fallback={<PageLoader />}><ProgramDetailPage /></Suspense>} />
         <Route path="groups" element={<Suspense fallback={<PageLoader />}><GroupsPage /></Suspense>} />
         <Route path="groups/:id" element={<Suspense fallback={<PageLoader />}><GroupDetailPage /></Suspense>} />
+        <Route path="groups/:groupId/batch/:batchKey" element={<Suspense fallback={<PageLoader />}><GroupBatchViewPage /></Suspense>} />
         <Route path="goals" element={<Suspense fallback={<PageLoader />}><GoalsPage /></Suspense>} />
         <Route path="tools" element={<Suspense fallback={<PageLoader />}><ToolsPage /></Suspense>} />
         <Route path="form-check" element={<Suspense fallback={<PageLoader />}><FormCheckPage /></Suspense>} />

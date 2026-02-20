@@ -38,6 +38,7 @@ import { friendService } from '../services/friendService'
 import { getDisplayDate } from '../utils/dateUtils'
 import usePageTitle from '../utils/usePageTitle'
 import ExerciseInfoModal from '../components/ExerciseInfoModal'
+import WorkoutSummaryCard from '../components/WorkoutSummaryCard'
 import { useUIStore } from '../store'
 
 // Calculate estimated 1RM using Epley formula
@@ -216,6 +217,14 @@ export default function GroupWorkoutPage() {
       }
       await groupWorkoutService.update(id, updates)
       setWorkout(prev => ({ ...prev, ...updates }))
+      // Sync logging exercises state so log mode reflects the edits
+      setExercises(cleanExercises.map(ex => ({
+        ...ex,
+        type: getExerciseType(ex),
+        notes: ex.notes || '',
+        userNotes: ex.userNotes || '',
+        sets: ex.sets?.map(set => ({ ...set })) || [],
+      })))
       setIsEditing(false)
     } catch (error) {
       console.error('Error saving workout edits:', error)
@@ -1090,6 +1099,11 @@ export default function GroupWorkoutPage() {
           <div className="card-steel p-4 mb-6">
             <p className="text-iron-300 text-sm">{workout.notes}</p>
           </div>
+        )}
+
+        {/* Workout Summary Card */}
+        {workout.exercises?.length > 0 && (
+          <WorkoutSummaryCard exercises={workout.exercises} isCompleted={isCompleted} />
         )}
 
         {/* Exercises */}
