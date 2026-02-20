@@ -18,7 +18,12 @@ import {
   Copy,
   Check,
   ArrowRight,
+  Pencil,
+  Trash2,
+  X,
+  Plus,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { collection, query, where, orderBy, limit, getDocs, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import { ouraService } from '../services/ouraService'
@@ -195,6 +200,12 @@ export default function AdminUserSummary({ userId, userName }) {
   const [adminNotes, setAdminNotes] = useState('')
   const [notesSaving, setNotesSaving] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
+  const [overrides, setOverrides] = useState({ maxLifts: {}, excludeExercises: [] })
+  const [overridesSaving, setOverridesSaving] = useState(false)
+  const [overridesSaved, setOverridesSaved] = useState(false)
+  const [editingLift, setEditingLift] = useState(null)
+  const [editValues, setEditValues] = useState({ e1rm: '', weight: '', reps: '' })
+  const [excludeInput, setExcludeInput] = useState('')
 
   const loadData = useCallback(async () => {
     if (!userId) return
@@ -232,7 +243,7 @@ export default function AdminUserSummary({ userId, userName }) {
           where('assignedTo', '==', userId),
           limit(50)
         ))
-        groupWorkouts = gSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+        groupWorkouts = gSnap.docs.map(d => ({ id: d.id, ...d.data(), _isGroup: true }))
       } catch {}
 
       // Merge and sort workouts
@@ -319,8 +330,9 @@ export default function AdminUserSummary({ userId, userName }) {
       // Profile
       const profile = userSnap.exists() ? userSnap.data() : {}
 
-      // Admin notes
+      // Admin notes & overrides
       setAdminNotes(profile.adminNotes || '')
+      setOverrides(profile.aiContextOverrides || { maxLifts: {}, excludeExercises: [] })
 
       // Top exercises by frequency
       const topExercises = Object.entries(exerciseFrequency)
@@ -376,9 +388,76 @@ export default function AdminUserSummary({ userId, userName }) {
     }
   }
 
+  const saveOverrides = async (newOverrides) => {
+    setOverrides(newOverrides)
+    setOverridesSaving(true)
+    try {
+      const ref = doc(db, 'users', userId)
+      await updateDoc(ref, { aiContextOverrides: newOverrides })
+      setOverridesSaved(true)
+      setTimeout(() => setOverridesSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to save overrides:', err)
+    } finally {
+      setOverridesSaving(false)
+    }
+  }
+
+  const handleOverrideLift = (name) => {
+    const current = overrides.maxLifts?.[name] || data.maxLifts[name] || {}
+    setEditingLift(name)
+    setEditValues({
+      e1rm: String(current.e1rm || ''),
+      weight: String(current.weight || ''),
+      reps: String(current.reps || ''),
+    })
+  }
+
+  const handleSaveLiftOverride = () => {
+    if (!editingLift) return
+    const e1rm = parseInt(editValues.e1rm) || 0
+    const weight = parseFloat(editValues.weight) || 0
+    const reps = parseInt(editValues.reps) || 0
+    if (!e1rm) return
+    const next = {
+      ...overrides,
+      maxLifts: { ...overrides.maxLifts, [editingLift]: { e1rm, weight, reps } },
+    }
+    setEditingLift(null)
+    saveOverrides(next)
+  }
+
+  const handleClearLiftOverride = (name) => {
+    const { [name]: _, ...rest } = overrides.maxLifts || {}
+    saveOverrides({ ...overrides, maxLifts: rest })
+  }
+
+  const handleExcludeExercise = (name) => {
+    const excluded = overrides.excludeExercises || []
+    if (excluded.includes(name)) return
+    saveOverrides({ ...overrides, excludeExercises: [...excluded, name] })
+  }
+
+  const handleUnexclude = (name) => {
+    saveOverrides({
+      ...overrides,
+      excludeExercises: (overrides.excludeExercises || []).filter(n => n !== name),
+    })
+  }
+
+  const getEffectiveData = () => {
+    if (!data) return data
+    const effectiveLifts = { ...data.maxLifts }
+    Object.entries(overrides.maxLifts || {}).forEach(([name, vals]) => {
+      effectiveLifts[name] = { ...(effectiveLifts[name] || {}), ...vals }
+    })
+    ;(overrides.excludeExercises || []).forEach(name => delete effectiveLifts[name])
+    return { ...data, maxLifts: effectiveLifts }
+  }
+
   const copyRawContext = () => {
     if (!data) return
-    navigator.clipboard.writeText(buildRawContext(data))
+    navigator.clipboard.writeText(buildRawContext(getEffectiveData()))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -492,29 +571,130 @@ export default function AdminUserSummary({ userId, userName }) {
       )}
 
       {/* Max Lifts */}
-      <Section
-        icon={Dumbbell} iconColor="bg-flame-500/20 text-flame-400"
-        title="Max Lifts (e1RM)"
-        badge={`${Object.keys(data.maxLifts).length} lifts`}
-      >
-        {Object.keys(data.maxLifts).length > 0 ? (
-          <div className="space-y-1.5">
-            {Object.entries(data.maxLifts)
-              .sort((a, b) => b[1].e1rm - a[1].e1rm)
-              .map(([name, d]) => (
-                <div key={name} className="flex items-center justify-between p-2 bg-iron-800/40 rounded-lg">
-                  <span className="text-sm text-iron-300 truncate flex-1">{name}</span>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <span className="text-xs text-iron-500">{d.weight}×{d.reps}</span>
-                    <span className="text-sm font-bold text-iron-100 w-16 text-right">{d.e1rm} lb</span>
-                  </div>
+      {(() => {
+        // Compute effective lifts: merge computed with overrides, then remove excluded
+        const excluded = overrides.excludeExercises || []
+        const effectiveLifts = { ...data.maxLifts }
+        Object.entries(overrides.maxLifts || {}).forEach(([name, vals]) => {
+          effectiveLifts[name] = { ...(effectiveLifts[name] || {}), ...vals }
+        })
+        excluded.forEach(name => delete effectiveLifts[name])
+        const liftEntries = Object.entries(effectiveLifts).sort((a, b) => b[1].e1rm - a[1].e1rm)
+
+        return (
+          <Section
+            icon={Dumbbell} iconColor="bg-flame-500/20 text-flame-400"
+            title="Max Lifts (e1RM)"
+            badge={<>
+              {`${liftEntries.length} lifts`}
+              {overridesSaving && <span className="ml-2 text-iron-500">saving...</span>}
+              {overridesSaved && <span className="ml-2 text-green-400">saved</span>}
+            </>}
+          >
+            {liftEntries.length > 0 ? (
+              <div className="space-y-1.5">
+                {liftEntries.map(([name, d]) => {
+                  const isOverridden = !!overrides.maxLifts?.[name]
+                  if (editingLift === name) {
+                    return (
+                      <div key={name} className="p-2 bg-iron-800/40 rounded-lg space-y-2">
+                        <p className="text-sm font-medium text-iron-200">{name}</p>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <label className="text-[10px] text-iron-500">e1RM</label>
+                            <input type="number" value={editValues.e1rm} onChange={(e) => setEditValues(v => ({ ...v, e1rm: e.target.value }))}
+                              className="w-full input-field text-sm py-1.5 px-2" autoFocus />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-[10px] text-iron-500">Weight</label>
+                            <input type="number" value={editValues.weight} onChange={(e) => setEditValues(v => ({ ...v, weight: e.target.value }))}
+                              className="w-full input-field text-sm py-1.5 px-2" />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-[10px] text-iron-500">Reps</label>
+                            <input type="number" value={editValues.reps} onChange={(e) => setEditValues(v => ({ ...v, reps: e.target.value }))}
+                              className="w-full input-field text-sm py-1.5 px-2" />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setEditingLift(null)} className="flex-1 py-1.5 text-xs text-iron-400 hover:text-iron-200">Cancel</button>
+                          <button onClick={handleSaveLiftOverride} className="flex-1 py-1.5 text-xs bg-flame-500/15 text-flame-400 rounded-lg hover:bg-flame-500/25">Save Override</button>
+                        </div>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div key={name} className="flex items-center justify-between p-2 bg-iron-800/40 rounded-lg group">
+                      <span className="text-sm text-iron-300 truncate flex-1">
+                        {name}
+                        {isOverridden && <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-flame-500/20 text-flame-400">override</span>}
+                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs text-iron-500">{d.weight}×{d.reps}</span>
+                        <span className="text-sm font-bold text-iron-100 w-16 text-right">{d.e1rm} lb</span>
+                        <button onClick={() => handleOverrideLift(name)} className="p-1 text-iron-600 hover:text-flame-400 opacity-0 group-hover:opacity-100 transition-all" title="Edit override">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        {isOverridden ? (
+                          <button onClick={() => handleClearLiftOverride(name)} className="p-1 text-iron-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-all" title="Clear override">
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                        ) : (
+                          <button onClick={() => handleExcludeExercise(name)} className="p-1 text-iron-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all" title="Exclude from context">
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-iron-500 text-center py-2">No lift data recorded</p>
+            )}
+
+            {/* Excluded Exercises */}
+            {excluded.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-iron-800/50">
+                <p className="text-[10px] text-iron-500 uppercase tracking-wider mb-2">Excluded from AI context</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {excluded.map(name => (
+                    <span key={name} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/10 text-red-400 text-xs">
+                      {name}
+                      <button onClick={() => handleUnexclude(name)} className="hover:text-red-300"><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
                 </div>
-              ))}
-          </div>
-        ) : (
-          <p className="text-sm text-iron-500 text-center py-2">No lift data recorded</p>
-        )}
-      </Section>
+              </div>
+            )}
+
+            {/* Add exclusion */}
+            <div className="mt-2 flex gap-2">
+              <input
+                type="text"
+                value={excludeInput}
+                onChange={(e) => setExcludeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && excludeInput.trim()) {
+                    handleExcludeExercise(excludeInput.trim())
+                    setExcludeInput('')
+                  }
+                }}
+                placeholder="Exclude exercise by name..."
+                className="flex-1 input-field text-xs py-1.5 px-2"
+              />
+              {excludeInput.trim() && (
+                <button
+                  onClick={() => { handleExcludeExercise(excludeInput.trim()); setExcludeInput('') }}
+                  className="px-2 py-1 text-xs bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20"
+                >
+                  Exclude
+                </button>
+              )}
+            </div>
+          </Section>
+        )
+      })()}
 
       {/* Pain History */}
       <Section
@@ -720,7 +900,14 @@ export default function AdminUserSummary({ userId, userName }) {
         {data.recentWorkouts.slice(0, 5).map((w, wi) => (
           <div key={wi} className={`${wi > 0 ? 'mt-3 pt-3 border-t border-iron-800/50' : ''}`}>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-iron-200">{w.name || 'Workout'}</p>
+              <Link
+                to={w._isGroup ? `/workouts/group/${w.id}` : `/workouts/${w.id}`}
+                className="text-sm font-medium text-iron-200 hover:text-flame-400 transition-colors flex items-center gap-1.5"
+              >
+                {w.name || 'Workout'}
+                {w._isGroup && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400">group</span>}
+                <ArrowRight className="w-3 h-3 text-iron-600" />
+              </Link>
               <span className="text-xs text-iron-500">{w.date}</span>
             </div>
             {(w.exercises || []).map((ex, ei) => (
@@ -773,7 +960,7 @@ export default function AdminUserSummary({ userId, userName }) {
           {showRaw && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
               <pre className="px-4 pb-4 text-[11px] text-iron-400 whitespace-pre-wrap font-mono leading-relaxed max-h-96 overflow-y-auto bg-iron-900/50 mx-4 mb-4 p-3 rounded-lg">
-                {buildRawContext(data) || '(empty — no data for this user)'}
+                {buildRawContext(getEffectiveData()) || '(empty — no data for this user)'}
               </pre>
             </motion.div>
           )}

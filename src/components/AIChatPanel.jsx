@@ -311,12 +311,26 @@ export default function AIChatPanel() {
           return items;
         }),
         ouraService.getLatestScores(user.uid),
-        getDoc(doc(db, 'users', user.uid)).then(s => s.exists() ? s.data().adminNotes || '' : ''),
+        getDoc(doc(db, 'users', user.uid)).then(s => s.exists() ? s.data() : {}),
       ]);
 
       const formCheckSummary = formCheckResult.status === 'fulfilled' ? formCheckResult.value : [];
       const ouraData = ouraResult.status === 'fulfilled' ? ouraResult.value : null;
-      const adminNotes = notesResult.status === 'fulfilled' ? notesResult.value : '';
+      const userDocData = notesResult.status === 'fulfilled' ? notesResult.value : {};
+      const adminNotes = userDocData.adminNotes || '';
+
+      // Apply AI context overrides from admin
+      const aiOverrides = userDocData.aiContextOverrides;
+      if (aiOverrides) {
+        if (aiOverrides.maxLifts) {
+          Object.entries(aiOverrides.maxLifts).forEach(([name, vals]) => {
+            maxLifts[name] = { ...(maxLifts[name] || {}), ...vals };
+          });
+        }
+        if (aiOverrides.excludeExercises) {
+          aiOverrides.excludeExercises.forEach(name => delete maxLifts[name]);
+        }
+      }
 
       const builtContext = {
         profile,

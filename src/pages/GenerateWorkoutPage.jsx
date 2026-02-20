@@ -292,10 +292,23 @@ export default function GenerateWorkoutPage() {
         .sort((a, b) => b[1].e1rm - a[1].e1rm)
         .slice(0, 3)
         .map(([n, d]) => `${n}: ${d.e1rm}lb`);
-      addAnalysisStep('Analyzing max lifts', 'complete', 
+      addAnalysisStep('Analyzing max lifts', 'complete',
         liftCount > 0 ? `${liftCount} lifts tracked. Top: ${topLifts.join(', ')}` : 'No lift data found'
       );
-      
+
+      // Apply AI context overrides from admin
+      const aiOverrides = userProfile?.aiContextOverrides;
+      if (aiOverrides) {
+        if (aiOverrides.maxLifts) {
+          Object.entries(aiOverrides.maxLifts).forEach(([name, vals]) => {
+            maxLifts[name] = { ...(maxLifts[name] || {}), ...vals };
+          });
+        }
+        if (aiOverrides.excludeExercises) {
+          aiOverrides.excludeExercises.forEach(name => delete maxLifts[name]);
+        }
+      }
+
       addAnalysisStep('Checking pain history', 'loading');
       const painCount = Object.keys(painHistory).length;
       const painExercises = Object.keys(painHistory).slice(0, 3).join(', ');
