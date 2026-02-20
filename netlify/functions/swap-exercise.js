@@ -43,7 +43,7 @@ export const handler = async (event) => {
     const otherExercises = workoutContext?.otherExercises?.join(', ') || '';
     const userMaxes = workoutContext?.userMaxes ? `\nUser's known max weights: ${JSON.stringify(workoutContext.userMaxes)}` : '';
 
-    const prompt = preferredReplacement
+    const introPrompt = preferredReplacement
       ? `Replace "${exerciseName}" with "${preferredReplacement}". Adjust weights/reps/time to be appropriate for ${preferredReplacement}.
 ${setsDescription}${userMaxes}
 ${otherExercises ? `Other exercises in workout: ${otherExercises}` : ''}`
@@ -51,7 +51,15 @@ ${otherExercises ? `Other exercises in workout: ${otherExercises}` : ''}`
 ${setsDescription}
 ${exerciseType === 'bodyweight' ? 'This is a bodyweight exercise.' : exerciseType === 'time' ? 'This is a time-based exercise.' : ''}
 ${reason ? `Reason for swap: ${reason}` : ''}
-${otherExercises ? `Other exercises already in this workout (avoid duplicates): ${otherExercises}` : ''}`
+${otherExercises ? `Other exercises already in this workout (avoid duplicates): ${otherExercises}` : ''}`;
+
+    const setsSchema = (sets || []).map((s) => {
+      if (exerciseType === 'time') return `{"prescribedTime": "${s.prescribedTime || '30'}", "targetRpe": ${s.targetRpe || 'null'}}`;
+      if (exerciseType === 'bodyweight') return `{"prescribedReps": ${s.prescribedReps || 10}, "targetRpe": ${s.targetRpe || 'null'}}`;
+      return `{"prescribedWeight": ${s.prescribedWeight || 'null'}, "prescribedReps": ${s.prescribedReps || 8}, "targetRpe": ${s.targetRpe || 'null'}}`;
+    }).join(', ');
+
+    const prompt = `${introPrompt}
 
 Respond ONLY with valid JSON, no markdown fences:
 {
@@ -61,11 +69,7 @@ Respond ONLY with valid JSON, no markdown fences:
   "howTo": "1-2 sentence form description",
   "cues": ["form cue 1", "form cue 2"],
   "substitutions": ["alt 1", "alt 2"],
-  "sets": [${sets?.map((s, i) => {
-    if (exerciseType === 'time') return `{"prescribedTime": "${s.prescribedTime || '30'}", "targetRpe": ${s.targetRpe || 'null'}}`;
-    if (exerciseType === 'bodyweight') return `{"prescribedReps": ${s.prescribedReps || 10}, "targetRpe": ${s.targetRpe || 'null'}}`;
-    return `{"prescribedWeight": ${s.prescribedWeight || 'null'}, "prescribedReps": ${s.prescribedReps || 8}, "targetRpe": ${s.targetRpe || 'null'}}`;
-  }).join(', ') || ''}]
+  "sets": [${setsSchema}]
 }
 
 Rules:
