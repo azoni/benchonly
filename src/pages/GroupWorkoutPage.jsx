@@ -100,6 +100,10 @@ export default function GroupWorkoutPage() {
   const [shareMessage, setShareMessage] = useState('')
   const [sharing, setSharing] = useState(false)
   const [shared, setShared] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editExercises, setEditExercises] = useState([])
 
   useEffect(() => {
     loadWorkout()
@@ -180,6 +184,107 @@ export default function GroupWorkoutPage() {
     } finally {
       setSharing(false)
     }
+  }
+
+  const enterEditMode = () => {
+    setEditName(workout.name || '')
+    setEditDescription(workout.description || '')
+    setEditExercises((workout.exercises || []).map((ex, i) => ({
+      ...ex,
+      _id: i,
+      type: getExerciseType(ex),
+      sets: ex.sets?.map((s, j) => ({ ...s, _id: j })) || [],
+    })))
+    setIsEditing(true)
+  }
+
+  const handleEditSave = async () => {
+    if (!editName.trim()) {
+      alert('Please enter a workout name')
+      return
+    }
+    setSaving(true)
+    try {
+      const cleanExercises = editExercises.map(({ _id, ...ex }) => ({
+        ...ex,
+        sets: ex.sets?.map(({ _id: _sid, ...s }) => s) || [],
+      }))
+      const updates = {
+        name: editName.trim(),
+        description: editDescription.trim(),
+        exercises: cleanExercises,
+      }
+      await groupWorkoutService.update(id, updates)
+      setWorkout(prev => ({ ...prev, ...updates }))
+      setIsEditing(false)
+    } catch (error) {
+      console.error('Error saving workout edits:', error)
+      alert('Failed to save changes')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updateEditSet = (exerciseIndex, setIndex, field, value) => {
+    setEditExercises(prev => {
+      const next = [...prev]
+      next[exerciseIndex] = {
+        ...next[exerciseIndex],
+        sets: next[exerciseIndex].sets.map((s, i) =>
+          i === setIndex ? { ...s, [field]: value } : s
+        ),
+      }
+      return next
+    })
+  }
+
+  const addEditSet = (exerciseIndex) => {
+    setEditExercises(prev => {
+      const next = [...prev]
+      const ex = next[exerciseIndex]
+      const lastSet = ex.sets[ex.sets.length - 1]
+      const type = ex.type || 'weight'
+      let newSet = { _id: Date.now() + Math.random() }
+      if (type === 'time') {
+        newSet = { ...newSet, prescribedTime: lastSet?.prescribedTime || '' }
+      } else if (type === 'bodyweight') {
+        newSet = { ...newSet, prescribedReps: lastSet?.prescribedReps || '' }
+      } else {
+        newSet = { ...newSet, prescribedWeight: lastSet?.prescribedWeight || '', prescribedReps: lastSet?.prescribedReps || '' }
+      }
+      next[exerciseIndex] = { ...ex, sets: [...ex.sets, newSet] }
+      return next
+    })
+  }
+
+  const removeEditSet = (exerciseIndex, setIndex) => {
+    setEditExercises(prev => {
+      const next = [...prev]
+      const ex = next[exerciseIndex]
+      if (ex.sets.length <= 1) return prev
+      next[exerciseIndex] = { ...ex, sets: ex.sets.filter((_, i) => i !== setIndex) }
+      return next
+    })
+  }
+
+  const addEditExercise = () => {
+    setEditExercises(prev => [
+      ...prev,
+      {
+        _id: Date.now(),
+        name: '',
+        type: 'weight',
+        notes: '',
+        sets: [{ _id: Date.now() + 0.1, prescribedWeight: '', prescribedReps: '' }],
+      },
+    ])
+  }
+
+  const removeEditExercise = (exerciseIndex) => {
+    setEditExercises(prev => {
+      if (prev.length <= 1) return prev
+      return prev.filter((_, i) => i !== exerciseIndex)
+    })
   }
 
   const handleBack = () => {
@@ -537,6 +642,241 @@ export default function GroupWorkoutPage() {
   const wasApproved = workout.reviewStatus === 'approved'
   const wasEditedByAthlete = workout.reviewStatus === 'edited'
 
+  // ============ EDIT MODE ============
+  if (isEditing) {
+    return (
+      <div className="max-w-2xl mx-auto pb-36">
+        <div className="sticky top-0 z-10 bg-iron-950/95 backdrop-blur-sm border-b border-iron-800 -mx-4 px-4 py-3 mb-4">
+          <div className="flex items-center justify-between">
+            <button onClick={() => setIsEditing(false)} className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+            <h1 className="font-display text-lg text-iron-100">Edit Workout</h1>
+            <div className="w-9" />
+          </div>
+        </div>
+
+        {/* Workout Name & Description */}
+        <div className="card-steel p-4 mb-4 space-y-3">
+          <div>
+            <label className="block text-sm text-iron-400 mb-1">Workout Name</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              placeholder="e.g., Upper Body, Bench Day"
+              className="w-full input-field text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-iron-400 mb-1">Description (optional)</label>
+            <textarea
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              placeholder="Workout focus or instructions"
+              rows={2}
+              className="w-full input-field text-sm resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Exercises */}
+        <div className="space-y-4">
+          {editExercises.map((exercise, exerciseIndex) => {
+            const type = exercise.type || 'weight'
+            const typeTag = getTypeTag(type)
+
+            return (
+              <div key={exercise._id} className="card-steel overflow-hidden">
+                {/* Exercise Header */}
+                <div className="p-4 bg-iron-800/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={exercise.name || ''}
+                      onChange={(e) => {
+                        setEditExercises(prev => {
+                          const next = [...prev]
+                          next[exerciseIndex] = { ...next[exerciseIndex], name: e.target.value }
+                          return next
+                        })
+                      }}
+                      placeholder="Exercise name"
+                      className="flex-1 bg-transparent text-lg font-bold text-iron-50 border-none focus:outline-none placeholder:text-iron-600"
+                    />
+                    {editExercises.length > 1 && (
+                      <button
+                        onClick={() => removeEditExercise(exerciseIndex)}
+                        className="p-1.5 text-iron-600 hover:text-red-400 transition-colors"
+                        title="Remove exercise"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  {/* Type selector */}
+                  <div className="flex gap-2">
+                    {[
+                      { t: 'weight', label: 'Weight' },
+                      { t: 'bodyweight', label: 'BW' },
+                      { t: 'time', label: 'Time' },
+                    ].map(({ t, label }) => (
+                      <button
+                        key={t}
+                        onClick={() => {
+                          setEditExercises(prev => {
+                            const next = [...prev]
+                            const ex = next[exerciseIndex]
+                            const newSets = ex.sets.map(s => {
+                              const base = { _id: s._id }
+                              if (t === 'time') return { ...base, prescribedTime: '' }
+                              if (t === 'bodyweight') return { ...base, prescribedReps: '' }
+                              return { ...base, prescribedWeight: '', prescribedReps: '' }
+                            })
+                            next[exerciseIndex] = { ...ex, type: t, sets: newSets }
+                            return next
+                          })
+                        }}
+                        className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+                          type === t
+                            ? 'bg-flame-500 text-white'
+                            : 'bg-iron-800 text-iron-400 hover:text-iron-200'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Exercise notes */}
+                  <textarea
+                    value={exercise.notes || ''}
+                    onChange={(e) => {
+                      setEditExercises(prev => {
+                        const next = [...prev]
+                        next[exerciseIndex] = { ...next[exerciseIndex], notes: e.target.value }
+                        return next
+                      })
+                    }}
+                    placeholder="Coach notes for this exercise (optional)"
+                    rows={1}
+                    className="w-full input-field text-xs resize-none mt-2"
+                  />
+                </div>
+
+                {/* Sets */}
+                <div className="divide-y divide-iron-800/50">
+                  {exercise.sets?.map((set, setIndex) => (
+                    <div key={set._id} className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-iron-800 flex items-center justify-center flex-shrink-0">
+                          <span className="text-lg font-bold text-iron-400">{setIndex + 1}</span>
+                        </div>
+
+                        {type === 'time' ? (
+                          <div className="flex-1">
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              value={set.prescribedTime || ''}
+                              onChange={(e) => updateEditSet(exerciseIndex, setIndex, 'prescribedTime', e.target.value)}
+                              placeholder="seconds"
+                              className="w-full input-field text-lg py-2.5 px-3 text-center font-semibold"
+                            />
+                            <p className="text-[10px] text-iron-600 text-center mt-1">seconds</p>
+                          </div>
+                        ) : type === 'bodyweight' ? (
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={set.prescribedReps || ''}
+                              onChange={(e) => updateEditSet(exerciseIndex, setIndex, 'prescribedReps', e.target.value)}
+                              placeholder="reps"
+                              className="w-full input-field text-lg py-2.5 px-3 text-center font-semibold"
+                            />
+                            <p className="text-[10px] text-iron-600 text-center mt-1">reps</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2 flex-1">
+                            <div>
+                              <input
+                                type="text"
+                                value={set.prescribedWeight || ''}
+                                onChange={(e) => updateEditSet(exerciseIndex, setIndex, 'prescribedWeight', e.target.value)}
+                                placeholder="lbs"
+                                className="w-full input-field text-lg py-2.5 px-3 text-center font-semibold"
+                              />
+                              <p className="text-[10px] text-iron-600 text-center mt-1">lbs</p>
+                            </div>
+                            <div>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={set.prescribedReps || ''}
+                                onChange={(e) => updateEditSet(exerciseIndex, setIndex, 'prescribedReps', e.target.value)}
+                                placeholder="reps"
+                                className="w-full input-field text-lg py-2.5 px-3 text-center font-semibold"
+                              />
+                              <p className="text-[10px] text-iron-600 text-center mt-1">reps</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {exercise.sets.length > 1 && (
+                          <button
+                            onClick={() => removeEditSet(exerciseIndex, setIndex)}
+                            className="p-1.5 text-iron-600 hover:text-red-400 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add Set */}
+                <div className="px-4 py-2">
+                  <button
+                    onClick={() => addEditSet(exerciseIndex)}
+                    className="w-full py-2.5 border border-dashed border-iron-700 rounded-lg
+                      text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600
+                      flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Set
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Add Exercise */}
+          <button
+            onClick={addEditExercise}
+            className="w-full py-4 border-2 border-dashed border-iron-700 rounded-xl
+              text-iron-400 hover:text-iron-200 hover:border-iron-600
+              flex items-center justify-center gap-2 transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            Add Exercise
+          </button>
+        </div>
+
+        {/* Bottom Actions */}
+        <div className={`fixed bottom-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800 left-0 ${sidebarOpen ? 'lg:left-64' : 'lg:left-20'} transition-[left] duration-300`}>
+          <div className="flex gap-3">
+            <button onClick={() => setIsEditing(false)} className="btn-secondary flex-1 py-3">Cancel</button>
+            <button onClick={handleEditSave} disabled={saving} className="btn-primary flex-1 py-3 flex items-center justify-center gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-5 h-5" />}
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // ============ VIEW MODE ============
   if (!isLogging) {
     return (
@@ -555,6 +895,15 @@ export default function GroupWorkoutPage() {
               >
                 <Share2 className="w-4 h-4" />
               </button>
+              {isAdmin && (
+                <button
+                  onClick={enterEditMode}
+                  className="p-2 text-iron-400 hover:text-iron-200 hover:bg-iron-800 rounded-lg transition-colors"
+                  title="Edit workout"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              )}
               {isAdmin && (
                 <button
                   onClick={handleDelete}
