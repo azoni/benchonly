@@ -287,3 +287,31 @@ export function buildUserMessage(frames, timestamps, exercise, note, imageDetail
 
   return content
 }
+
+/**
+ * Build Gemini-compatible parts array (same content as buildUserMessage but in Gemini format).
+ * @param {string[]} frames - base64 encoded frames (with or without data: prefix)
+ * @param {number[]} timestamps
+ * @param {string} exercise
+ * @param {string} note
+ * @param {string} poseContext
+ * @returns {Array} Gemini parts array
+ */
+export function buildGeminiParts(frames, timestamps, exercise, note, poseContext) {
+  let text = `Analyze these ${frames.length} sequential frames from a workout video.`
+  if (exercise) text += `\n\nExercise: ${exercise}. Apply the exercise-specific criteria in your analysis.`
+  if (note) text += `\n\nLifter's note: "${note}"`
+  const duration = timestamps?.length >= 2 ? timestamps[timestamps.length - 1] : null
+  text += `\n\nFrames numbered 1–${frames.length} in chronological order${duration ? `, spanning ${duration}s of video` : ''}.`
+  if (poseContext) text += poseContext
+
+  const parts = [{ text }]
+  frames.forEach((frame, i) => {
+    const ts = timestamps?.[i]
+    parts.push({ text: ts != null ? `Frame ${i + 1} (${ts}s):` : `Frame ${i + 1}:` })
+    const base64 = frame.startsWith('data:') ? frame.split(',')[1] : frame
+    parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } })
+  })
+
+  return parts
+}

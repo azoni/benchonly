@@ -2,12 +2,27 @@ import OpenAI from 'openai';
 import { verifyAuth, UNAUTHORIZED, getCorsHeaders, optionsResponse, admin } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
 import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
-import { buildSystemPrompt, buildUserMessage, formatPoseContext } from './utils/formCheckPrompt.js';
+import { buildSystemPrompt, buildUserMessage, buildGeminiParts, formatPoseContext } from './utils/formCheckPrompt.js';
+import { callGemini } from './utils/gemini.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 22000 });
 
 const INTERNAL_KEY = process.env.INTERNAL_FUNCTION_KEY || 'form-check-internal';
+
+function coerceAnalysis(analysis) {
+  if (!analysis) return null;
+  analysis.overallScore = Number(analysis.overallScore) || 0;
+  analysis.repsDetected = Number(analysis.repsDetected) || 1;
+  if (!Array.isArray(analysis.keyStrengths)) analysis.keyStrengths = [];
+  if (!Array.isArray(analysis.keyIssues)) analysis.keyIssues = [];
+  if (!Array.isArray(analysis.recommendations)) analysis.recommendations = [];
+  if (!Array.isArray(analysis.injuryRisks)) analysis.injuryRisks = [];
+  if (!Array.isArray(analysis.frames)) analysis.frames = [];
+  if (!Array.isArray(analysis.cameraLimitations)) analysis.cameraLimitations = [];
+  analysis.frames = analysis.frames.map(f => ({ ...f, formScore: Number(f.formScore) || 0 }));
+  return analysis;
+}
 
 export async function handler(event) {
   const cors = getCorsHeaders(event);
@@ -40,7 +55,6 @@ export async function handler(event) {
     const QUALITY_COSTS = { quick: 10, standard: 15, detailed: 25 };
     creditCost = isPremium ? 50 : (QUALITY_COSTS[quality] || 15);
 
-    // Server-side credit deduction
     const creditResult = await deductCredits(userId, 'form-check', creditCost, auth.isAdmin);
     if (!creditResult.success) {
       return { statusCode: 402, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: `Not enough credits. Need ${creditCost}, have ${creditResult.balance}.` }) };
@@ -57,7 +71,6 @@ export async function handler(event) {
     }
 
     // ─── Try background function path ───
-    // Store frames in Firestore chunks, invoke background, return jobId instantly
     let backgroundOk = false;
 
     try {
@@ -92,7 +105,6 @@ export async function handler(event) {
 
       await batch.commit();
 
-      // Invoke background function — await the 202 (should be instant)
       const siteUrl = process.env.URL || 'https://benchpressonly.com';
       const bgResponse = await fetch(`${siteUrl}/.netlify/functions/analyze-form-background`, {
         method: 'POST',
@@ -124,7 +136,6 @@ export async function handler(event) {
     // ─── Fallback: inline processing ───
     console.log('[form-check] Processing inline:', frames.length, 'frames');
 
-    // Mark processing
     if (jobId && db) {
       await db.collection('formCheckJobs').doc(jobId).set({
         userId, status: 'processing', quality: quality || 'standard',
@@ -137,47 +148,54 @@ export async function handler(event) {
     const hasPoseData = inlinePoseData.some(p => p.poseDetected);
     const poseContext = hasPoseData ? formatPoseContext(inlinePoseData, exercise) : '';
     const systemPrompt = buildSystemPrompt(exercise, hasPoseData);
-    const content = buildUserMessage(frames, timestamps, exercise, note, imageDetail, poseContext);
 
     logActivity({ type: 'form-check', title: 'Form Check (Inline)', description: `${frames.length} frames (${quality || 'standard'})${hasPoseData ? ' + pose data' : ''}`, metadata: { userId, frameCount: frames.length, quality: quality || 'standard', hasPoseData } });
 
-    const aiModel = isPremium ? 'gpt-4o' : 'gpt-4o-mini';
-
+    // ─── AI call: Gemini first, GPT-4o fallback ───
+    let raw = '', aiModel = '', promptTokens = 0, completionTokens = 0, cost = 0;
     const startMs = Date.now();
-    const response = await openai.chat.completions.create({
-      model: aiModel,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content },
-      ],
-      max_tokens: 4096,
-      temperature: 0.3,
-    });
-    const responseTime = Date.now() - startMs;
+    let usedGemini = false;
 
-    const usage = response.usage;
-    const inputRate = isPremium ? 2.50 : 0.15;
-    const outputRate = isPremium ? 10.00 : 0.60;
-    const cost = (usage.prompt_tokens / 1e6) * inputRate + (usage.completion_tokens / 1e6) * outputRate;
-    const raw = response.choices[0]?.message?.content || '';
+    try {
+      const parts = buildGeminiParts(frames, timestamps, exercise, note, poseContext);
+      const gemini = await callGemini(systemPrompt, parts, isPremium);
+      raw = gemini.text;
+      aiModel = gemini.model;
+      promptTokens = gemini.promptTokens;
+      completionTokens = gemini.completionTokens;
+      cost = gemini.cost;
+      usedGemini = true;
+      console.log('[form-check] Gemini responded in', Date.now() - startMs, 'ms using', aiModel);
+    } catch (geminiErr) {
+      console.warn('[form-check] Gemini failed, falling back to OpenAI:', geminiErr.message);
+      const gptModel = isPremium ? 'gpt-4o' : 'gpt-4o-mini';
+      const content = buildUserMessage(frames, timestamps, exercise, note, imageDetail, poseContext);
+      const response = await openai.chat.completions.create({
+        model: gptModel,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content },
+        ],
+        max_tokens: 4096,
+        temperature: 0.3,
+      });
+      raw = response.choices[0]?.message?.content || '';
+      aiModel = gptModel;
+      promptTokens = response.usage.prompt_tokens;
+      completionTokens = response.usage.completion_tokens;
+      const inputRate = isPremium ? 2.50 : 0.15;
+      const outputRate = isPremium ? 10.00 : 0.60;
+      cost = (promptTokens / 1e6) * inputRate + (completionTokens / 1e6) * outputRate;
+      console.log('[form-check] OpenAI responded in', Date.now() - startMs, 'ms using', aiModel);
+    }
+
+    const responseTime = Date.now() - startMs;
 
     let analysis;
     try {
       const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-      analysis = JSON.parse(cleaned);
-      // Validate and coerce response fields
-      if (analysis) {
-        analysis.overallScore = Number(analysis.overallScore) || 0;
-        analysis.repsDetected = Number(analysis.repsDetected) || 1;
-        if (!Array.isArray(analysis.keyStrengths)) analysis.keyStrengths = [];
-        if (!Array.isArray(analysis.keyIssues)) analysis.keyIssues = [];
-        if (!Array.isArray(analysis.recommendations)) analysis.recommendations = [];
-        if (!Array.isArray(analysis.injuryRisks)) analysis.injuryRisks = [];
-        if (!Array.isArray(analysis.frames)) analysis.frames = [];
-        if (!Array.isArray(analysis.cameraLimitations)) analysis.cameraLimitations = [];
-        analysis.frames = analysis.frames.map(f => ({ ...f, formScore: Number(f.formScore) || 0 }));
-      }
+      analysis = coerceAnalysis(JSON.parse(cleaned));
     } catch (parseErr) {
       console.error('Failed to parse form analysis JSON:', parseErr.message);
       analysis = null;
@@ -187,7 +205,9 @@ export async function handler(event) {
       try {
         await db.collection('tokenUsage').add({
           userId, feature: 'form-check', model: aiModel,
-          promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens, totalTokens: usage.total_tokens,
+          provider: usedGemini ? 'gemini' : 'openai',
+          promptTokens, completionTokens,
+          totalTokens: promptTokens + completionTokens,
           estimatedCost: cost, responseTimeMs: responseTime,
           userMessage: `Form check (${quality || 'standard'}): ${frames.length} frames${note ? ' - ' + note : ''}`,
           assistantResponse: `${analysis?.exercise || 'Unknown'}: score ${analysis?.overallScore || 0}/10`,
@@ -198,7 +218,6 @@ export async function handler(event) {
       }
     }
 
-    // Write to Firestore (triggers client's onSnapshot)
     if (jobId && db) {
       await db.collection('formCheckJobs').doc(jobId).update({
         status: 'complete',
@@ -224,7 +243,6 @@ export async function handler(event) {
       await refundCredits(userId, creditCost, auth.isAdmin).catch(() => {});
     }
 
-    // Write error to Firestore
     if (jobId && db) {
       const isTimeout = error.message?.includes('timeout') || error.message?.includes('timed out') || error.code === 'ETIMEDOUT';
       try {
