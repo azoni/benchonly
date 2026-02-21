@@ -312,7 +312,7 @@ export default function FeedPage() {
       case 'personal_record':
         return <><strong>{userName}</strong> hit a new PR: <span className="text-flame-400">{item.data?.exercise} - {item.data?.weight}lbs</span></>
       case 'user_joined':
-        return <><strong>{userName}</strong> just joined Bench Only 🎉</>
+        return <><strong>{userName}</strong> just joined Bench Only</>
       default:
         return <><strong>{userName}</strong> was active</>
     }
