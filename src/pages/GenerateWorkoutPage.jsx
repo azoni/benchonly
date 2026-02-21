@@ -36,6 +36,7 @@ import { ouraService } from '../services/ouraService';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import usePageTitle from '../utils/usePageTitle'
+import { getTodayString } from '../utils/dateUtils'
 import { apiUrl } from '../utils/platform'
 import ExerciseInfoModal from '../components/ExerciseInfoModal'
 
@@ -124,7 +125,7 @@ export default function GenerateWorkoutPage() {
   const [workoutDate, setWorkoutDate] = useState(() => {
     const dateParam = searchParams.get('date')
     if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return dateParam
-    return new Date().toISOString().split('T')[0]
+    return getTodayString()
   });
   
   const isAdmin = isAppAdmin;

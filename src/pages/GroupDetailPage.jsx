@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 import { groupService, workoutService, attendanceService, groupWorkoutService, userService, goalService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
-import { getDisplayDate } from '../utils/dateUtils'
+import { getDisplayDate, getTodayString } from '../utils/dateUtils'
 import { normalizeRepRange } from '../utils/workoutUtils'
 import GenerateGroupWorkoutModal from '../components/GenerateGroupWorkoutModal'
 import usePageTitle from '../utils/usePageTitle'
@@ -111,7 +111,7 @@ export default function GroupDetailPage() {
   // Workout creation state
   const [showWorkoutModal, setShowWorkoutModal] = useState(false)
   const [selectedMembers, setSelectedMembers] = useState([])
-  const [workoutDate, setWorkoutDate] = useState(new Date().toISOString().split('T')[0])
+  const [workoutDate, setWorkoutDate] = useState(getTodayString())
   const [workoutName, setWorkoutName] = useState('')
   // Per-member workout prescriptions: { oduserId: { exercises: [...] } }
   const [memberPrescriptions, setMemberPrescriptions] = useState({})
@@ -259,7 +259,7 @@ export default function GroupDetailPage() {
   const openWorkoutModal = () => {
     const allMembers = group?.members || []
     setSelectedMembers(allMembers)
-    setWorkoutDate(new Date().toISOString().split('T')[0])
+    setWorkoutDate(getTodayString())
     setWorkoutName('')
     setWorkoutCoachingNotes('')
     // Initialize prescriptions for each member
