@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { format } from 'date-fns'
-import { ArrowLeft, Users, Dumbbell, MessageSquare, HelpCircle, Activity } from 'lucide-react'
+import { ArrowLeft, Users, Dumbbell, MessageSquare, HelpCircle, Activity, Zap } from 'lucide-react'
 import { groupWorkoutService, groupService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
 import { getDisplayDate } from '../utils/dateUtils'
 import usePageTitle from '../utils/usePageTitle'
 import WorkoutSummaryCard from '../components/WorkoutSummaryCard'
+import { groupExercisesForDisplay } from '../utils/workoutUtils'
 import ExerciseInfoModal from '../components/ExerciseInfoModal'
 
 const getExerciseType = (exercise) => {
@@ -244,7 +245,73 @@ export default function GroupBatchViewPage() {
 
           {/* Exercise Details */}
           <div className="space-y-4">
-            {activeWorkout.exercises?.map((exercise, exerciseIndex) => {
+            {groupExercisesForDisplay(activeWorkout.exercises || []).map((group, groupIndex) => {
+              // ── Superset Card ──
+              if (group.type === 'superset') {
+                const { exerciseA, exerciseB } = group
+                const renderSSInfo = (ex, set) => {
+                  const isTime = ex.type === 'time'; const isBW = ex.type === 'bodyweight'
+                  const hasActual = isTime ? !!set.actualTime : isBW ? !!set.actualReps : !!(set.actualWeight || set.actualReps)
+                  if (isTime) return isCompleted && hasActual
+                    ? <span className="text-base font-bold text-flame-400">{set.actualTime}s <span className="text-xs text-iron-500 font-normal">target {set.prescribedTime || '—'}s</span></span>
+                    : <span className="text-base font-bold text-iron-100">{set.prescribedTime || '—'}s</span>
+                  if (isBW) return isCompleted && hasActual
+                    ? <span className="text-base font-bold text-flame-400">{set.actualReps || '—'} reps</span>
+                    : <span className="text-base font-bold text-iron-100">{set.prescribedReps || '—'} reps</span>
+                  return isCompleted && hasActual
+                    ? <span className="text-base font-bold text-flame-400">{set.actualWeight || '—'} × {set.actualReps || '—'} <span className="text-xs text-iron-500 font-normal">target {set.prescribedWeight || '—'} × {set.prescribedReps || '—'}</span></span>
+                    : <span className="text-base font-bold text-iron-100">{set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'}</span>
+                }
+                return (
+                  <div key={`ss-${group.supersetGroup}`} className="card-steel overflow-hidden border border-purple-500/20">
+                    <div className="p-4 border-b border-iron-800">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 text-xs font-semibold">
+                          <Zap className="w-3 h-3" /> Superset
+                        </div>
+                        <h3 className="text-lg font-semibold text-iron-50 flex-1">{exerciseA.name} <span className="text-iron-600">/</span> {exerciseB.name}</h3>
+                      </div>
+                      <p className="text-sm text-iron-500 mt-1">{exerciseA.sets?.length || 0} sets</p>
+                    </div>
+                    <div className="divide-y divide-iron-800/50">
+                      {exerciseA.sets?.map((setA, setIndex) => {
+                        const setB = exerciseB.sets?.[setIndex]
+                        return (
+                          <div key={setIndex} className="p-4">
+                            <div className="flex items-start gap-4">
+                              <div className="w-10 h-10 rounded-xl bg-iron-800 flex items-center justify-center flex-shrink-0">
+                                <span className="text-lg font-bold text-iron-400">{setIndex + 1}</span>
+                              </div>
+                              <div className="flex-1 space-y-2">
+                                <div>
+                                  <p className="text-xs text-purple-400 font-medium mb-0.5">A — {exerciseA.name}</p>
+                                  {renderSSInfo(exerciseA, setA)}
+                                </div>
+                                {setB && (
+                                  <div className="pt-1.5 border-t border-iron-700/30">
+                                    <p className="text-xs text-purple-400 font-medium mb-0.5">B — {exerciseB.name}</p>
+                                    {renderSSInfo(exerciseB, setB)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {(exerciseA.notes || exerciseB.notes) && (
+                      <div className="px-4 pb-2 space-y-1">
+                        {exerciseA.notes && <div className="flex items-start gap-2 bg-iron-800/30 rounded-lg p-3"><MessageSquare className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" /><p className="text-sm text-iron-400"><span className="text-purple-400">A:</span> {exerciseA.notes}</p></div>}
+                        {exerciseB.notes && <div className="flex items-start gap-2 bg-iron-800/30 rounded-lg p-3"><MessageSquare className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" /><p className="text-sm text-iron-400"><span className="text-purple-400">B:</span> {exerciseB.notes}</p></div>}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+
+              // ── Single Exercise Card ──
+              const exercise = group.exercise
+              const exerciseIndex = group.index
               const type = getExerciseType(exercise)
               const typeTag = getTypeTag(type)
 

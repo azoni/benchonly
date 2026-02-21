@@ -81,6 +81,46 @@ export function formatDuration(totalSets, explicitDuration) {
 }
 
 /**
+ * Group exercises for display, pairing supersets together.
+ * Returns array of:
+ *   { type: 'single', exercise, index }
+ *   { type: 'superset', exerciseA, exerciseB, indexA, indexB, supersetGroup }
+ */
+export function groupExercisesForDisplay(exercises) {
+  if (!exercises) return []
+  const result = []
+  const seen = new Set()
+
+  exercises.forEach((ex, i) => {
+    if (seen.has(i)) return
+
+    if (ex.supersetGroup != null) {
+      const partnerIdx = exercises.findIndex(
+        (other, j) => j !== i && !seen.has(j) && other.supersetGroup === ex.supersetGroup
+      )
+      if (partnerIdx !== -1) {
+        seen.add(i)
+        seen.add(partnerIdx)
+        result.push({
+          type: 'superset',
+          exerciseA: exercises[i],
+          exerciseB: exercises[partnerIdx],
+          indexA: i,
+          indexB: partnerIdx,
+          supersetGroup: ex.supersetGroup,
+        })
+        return
+      }
+    }
+
+    seen.add(i)
+    result.push({ type: 'single', exercise: ex, index: i })
+  })
+
+  return result
+}
+
+/**
  * Build a compact exercise summary array for feed items.
  * Returns: [{ name, sets, topWeight, topReps }, ...]
  * Also returns totalSets count.

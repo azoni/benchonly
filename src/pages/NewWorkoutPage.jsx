@@ -15,12 +15,13 @@ import {
   Activity,
   Loader2,
   Search,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { workoutService, trainerRequestService } from '../services/firestore';
 import CardioForm from '../components/CardioForm';
 import { getTodayString, parseLocalDate, toDateString } from '../utils/dateUtils';
-import { normalizeRepRange } from '../utils/workoutUtils';
+import { normalizeRepRange, groupExercisesForDisplay } from '../utils/workoutUtils';
 import { useUIStore } from '../store';
 
 const RPE_INFO = {
@@ -95,6 +96,7 @@ export default function NewWorkoutPage() {
   const [workoutType, setWorkoutType] = useState('strength'); // 'strength' or 'cardio'
   const [activeAutocomplete, setActiveAutocomplete] = useState(null); // exercise.id or null
   const autocompleteRef = useRef(null);
+  const [nextSupersetGroup, setNextSupersetGroup] = useState(1);
   
   // Support admin/trainer creating workout for another user
   const targetUserId = searchParams.get('userId') || user?.uid;
@@ -144,6 +146,10 @@ export default function NewWorkoutPage() {
               })) || [createEmptySet()]
             })) || [createEmptyExercise()],
           });
+          // Compute next superset group from loaded exercises
+          const maxGroup = existingWorkout.exercises?.reduce((max, ex) =>
+            ex.supersetGroup != null ? Math.max(max, ex.supersetGroup) : max, 0) || 0;
+          setNextSupersetGroup(maxGroup + 1);
         }
       } catch (error) {
         console.error('Error loading workout:', error);
@@ -198,11 +204,32 @@ export default function NewWorkoutPage() {
     }));
   };
 
-  const removeExercise = (exerciseId) => {
-    setWorkout((prev) => ({
+  const addSuperset = () => {
+    const group = nextSupersetGroup;
+    const exA = { ...createEmptyExercise(), supersetGroup: group };
+    const exB = { ...createEmptyExercise(), supersetGroup: group, id: Date.now() + 1 };
+    setWorkout(prev => ({
       ...prev,
-      exercises: prev.exercises.filter((e) => e.id !== exerciseId),
+      exercises: [...prev.exercises, exA, exB],
     }));
+    setNextSupersetGroup(g => g + 1);
+  };
+
+  const removeExercise = (exerciseId) => {
+    setWorkout((prev) => {
+      const ex = prev.exercises.find(e => e.id === exerciseId);
+      // If part of a superset, remove both exercises in the pair
+      if (ex?.supersetGroup != null) {
+        return {
+          ...prev,
+          exercises: prev.exercises.filter(e => e.supersetGroup !== ex.supersetGroup),
+        };
+      }
+      return {
+        ...prev,
+        exercises: prev.exercises.filter(e => e.id !== exerciseId),
+      };
+    });
   };
 
   const updateExercise = (exerciseId, updates) => {
@@ -215,52 +242,64 @@ export default function NewWorkoutPage() {
   };
 
   const addSet = (exerciseId) => {
-    setWorkout((prev) => ({
-      ...prev,
-      exercises: prev.exercises.map((e) => {
-        if (e.id !== exerciseId) return e
-        
-        const lastSet = e.sets[e.sets.length - 1]
-        const type = e.type || 'weight'
-        
-        // Create new set with copied prescribed values from last set
-        let newSet = {
-          id: Date.now() + Math.random(),
-          rpe: '',
-          painLevel: 0,
-          completed: false,
-        }
-        
-        if (type === 'time') {
-          newSet = {
-            ...newSet,
-            prescribedTime: lastSet?.prescribedTime || '',
-            actualTime: '',
+    setWorkout((prev) => {
+      const exercise = prev.exercises.find(e => e.id === exerciseId);
+      const supersetGroup = exercise?.supersetGroup;
+
+      return {
+        ...prev,
+        exercises: prev.exercises.map((e) => {
+          // Add to this exercise or its superset partner
+          if (e.id !== exerciseId && (supersetGroup == null || e.supersetGroup !== supersetGroup)) return e;
+
+          const lastSet = e.sets[e.sets.length - 1];
+          const type = e.type || 'weight';
+
+          let newSet = {
+            id: Date.now() + Math.random(),
+            rpe: '',
+            painLevel: 0,
+            completed: false,
+          };
+
+          if (type === 'time') {
+            newSet = { ...newSet, prescribedTime: lastSet?.prescribedTime || '', actualTime: '' };
+          } else {
+            newSet = {
+              ...newSet,
+              prescribedWeight: lastSet?.prescribedWeight || '',
+              prescribedReps: lastSet?.prescribedReps || '',
+              actualWeight: '',
+              actualReps: '',
+            };
           }
-        } else {
-          newSet = {
-            ...newSet,
-            prescribedWeight: lastSet?.prescribedWeight || '',
-            prescribedReps: lastSet?.prescribedReps || '',
-            actualWeight: '',
-            actualReps: '',
-          }
-        }
-        
-        return { ...e, sets: [...e.sets, newSet] }
-      }),
-    }));
+
+          return { ...e, sets: [...e.sets, newSet] };
+        }),
+      };
+    });
   };
 
   const removeSet = (exerciseId, setId) => {
-    setWorkout((prev) => ({
-      ...prev,
-      exercises: prev.exercises.map((e) =>
-        e.id === exerciseId
-          ? { ...e, sets: e.sets.filter((s) => s.id !== setId) }
-          : e
-      ),
-    }));
+    setWorkout((prev) => {
+      const exercise = prev.exercises.find(e => e.id === exerciseId);
+      const supersetGroup = exercise?.supersetGroup;
+      const setIndex = exercise?.sets.findIndex(s => s.id === setId);
+
+      return {
+        ...prev,
+        exercises: prev.exercises.map((e) => {
+          if (e.id === exerciseId) {
+            return { ...e, sets: e.sets.filter(s => s.id !== setId) };
+          }
+          // Sync partner: remove the same index
+          if (supersetGroup != null && e.supersetGroup === supersetGroup && setIndex >= 0) {
+            return { ...e, sets: e.sets.filter((_, i) => i !== setIndex) };
+          }
+          return e;
+        }),
+      };
+    });
   };
 
   const updateSet = (exerciseId, setId, updates) => {
@@ -391,6 +430,78 @@ export default function NewWorkoutPage() {
     );
   }
 
+  // Helper: render weight/reps/time inputs for one exercise within a superset set
+  const renderSupersetInputs = (exercise, set) => {
+    const type = exercise.type || 'weight';
+    if (type === 'time') {
+      return (
+        <div className={`grid gap-2 ${isEditMode ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <div>
+            <label className="block text-xs text-iron-500 mb-1">Target (sec)</label>
+            <input type="number" inputMode="numeric" value={set.prescribedTime || ''}
+              onChange={e => updateSet(exercise.id, set.id, { prescribedTime: e.target.value })}
+              placeholder="seconds" className="w-full input-field text-sm py-2 px-3" />
+          </div>
+          {isEditMode && (
+            <div>
+              <label className="block text-xs text-flame-400 mb-1">Actual (sec)</label>
+              <input type="number" inputMode="numeric" value={set.actualTime || ''}
+                onChange={e => updateSet(exercise.id, set.id, { actualTime: e.target.value })}
+                placeholder="seconds" className="w-full input-field text-sm py-2 px-3 border-flame-500/30" />
+            </div>
+          )}
+        </div>
+      );
+    }
+    if (type === 'bodyweight') {
+      return (
+        <div className={`grid gap-2 ${isEditMode ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <div>
+            <label className="block text-xs text-iron-500 mb-1">Target Reps</label>
+            <input type="text" inputMode="numeric" value={set.prescribedReps || ''}
+              onChange={e => updateSet(exercise.id, set.id, { prescribedReps: e.target.value })}
+              onBlur={e => updateSet(exercise.id, set.id, { prescribedReps: normalizeRepRange(e.target.value) })}
+              placeholder="e.g. 8 or 6-8" className="w-full input-field text-sm py-2 px-3" />
+          </div>
+          {isEditMode && (
+            <div>
+              <label className="block text-xs text-flame-400 mb-1">Actual Reps</label>
+              <input type="number" inputMode="numeric" value={set.actualReps || ''}
+                onChange={e => updateSet(exercise.id, set.id, { actualReps: e.target.value })}
+                placeholder="reps" className="w-full input-field text-sm py-2 px-3 border-flame-500/30" />
+            </div>
+          )}
+        </div>
+      );
+    }
+    // Weight type
+    return (
+      <div className={`grid gap-2 ${isEditMode ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <div className="flex gap-1 items-center">
+          <input type="text" value={set.prescribedWeight || ''}
+            onChange={e => updateSet(exercise.id, set.id, { prescribedWeight: e.target.value })}
+            placeholder="lbs" className="w-full input-field text-sm py-2 px-3" />
+          <span className="text-iron-600 text-xs">×</span>
+          <input type="text" inputMode="numeric" value={set.prescribedReps || ''}
+            onChange={e => updateSet(exercise.id, set.id, { prescribedReps: e.target.value })}
+            onBlur={e => updateSet(exercise.id, set.id, { prescribedReps: normalizeRepRange(e.target.value) })}
+            placeholder="reps" className="w-full input-field text-sm py-2 px-3" />
+        </div>
+        {isEditMode && (
+          <div className="flex gap-1 items-center">
+            <input type="text" value={set.actualWeight || ''}
+              onChange={e => updateSet(exercise.id, set.id, { actualWeight: e.target.value })}
+              placeholder="lbs" className="w-full input-field text-sm py-2 px-3 border-flame-500/30" />
+            <span className="text-iron-600 text-xs">×</span>
+            <input type="number" inputMode="numeric" value={set.actualReps || ''}
+              onChange={e => updateSet(exercise.id, set.id, { actualReps: e.target.value })}
+              placeholder="reps" className="w-full input-field text-sm py-2 px-3 border-flame-500/30" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-3xl mx-auto pb-24">
       {/* Header */}
@@ -496,7 +607,198 @@ export default function NewWorkoutPage() {
         </div>
 
         <AnimatePresence>
-          {workout.exercises.map((exercise, exerciseIndex) => (
+          {groupExercisesForDisplay(workout.exercises).map((group, groupIndex) => {
+            // ── Superset Card ──
+            if (group.type === 'superset') {
+              const { exerciseA, exerciseB } = group;
+              const expanded = exerciseA.expanded !== false;
+              return (
+                <motion.div
+                  key={`ss-${group.supersetGroup}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="card-steel rounded-xl overflow-hidden border border-purple-500/20"
+                >
+                  {/* Superset Header */}
+                  <div className="p-4 border-b border-iron-800">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-400 text-xs font-semibold">
+                        <Zap className="w-3.5 h-3.5" />
+                        Superset
+                      </div>
+                      <div className="flex-1" />
+                      <button
+                        onClick={() => {
+                          updateExercise(exerciseA.id, { expanded: !expanded });
+                          updateExercise(exerciseB.id, { expanded: !expanded });
+                        }}
+                        className="p-2 text-iron-500 hover:text-iron-300 transition-colors"
+                      >
+                        {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                      </button>
+                      <button
+                        onClick={() => removeExercise(exerciseA.id)}
+                        className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Exercise A Name + Type */}
+                    <div className="mb-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-bold text-purple-400 bg-purple-500/10 w-5 h-5 rounded flex items-center justify-center">A</span>
+                        <div className="flex-1 relative" ref={activeAutocomplete === exerciseA.id ? autocompleteRef : null}>
+                          <input
+                            type="text"
+                            value={exerciseA.name}
+                            onChange={(e) => { updateExercise(exerciseA.id, { name: e.target.value }); setActiveAutocomplete(exerciseA.id); }}
+                            onFocus={() => setActiveAutocomplete(exerciseA.id)}
+                            placeholder="Search exercise A..."
+                            className="w-full bg-transparent text-iron-100 font-medium border-none focus:outline-none placeholder:text-iron-500"
+                          />
+                          {activeAutocomplete === exerciseA.id && (
+                            <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-iron-900 border border-iron-700 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                              {(() => {
+                                const filtered = getFilteredSuggestions(exerciseA.name, exerciseA.type || 'weight');
+                                const query = exerciseA.name?.trim().toLowerCase();
+                                const exactMatch = filtered.some(n => n.toLowerCase() === query);
+                                return (<>
+                                  {filtered.map(name => (
+                                    <button key={name} type="button" onMouseDown={e => e.preventDefault()} onClick={() => selectExerciseName(exerciseA.id, name)}
+                                      className="w-full text-left px-4 py-3 text-sm text-iron-200 hover:bg-iron-800 active:bg-iron-700 transition-colors border-b border-iron-800/50 last:border-b-0">{name}</button>
+                                  ))}
+                                  {query && !exactMatch && (
+                                    <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => selectExerciseName(exerciseA.id, exerciseA.name.trim())}
+                                      className="w-full text-left px-4 py-3 text-sm text-flame-400 hover:bg-iron-800 active:bg-iron-700 transition-colors flex items-center gap-2">
+                                      <Plus className="w-4 h-4" /> Add &quot;{exerciseA.name.trim()}&quot;
+                                    </button>
+                                  )}
+                                </>);
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 ml-7">
+                        {[{ type: 'weight', label: 'Weight' }, { type: 'bodyweight', label: 'Bodyweight' }, { type: 'time', label: 'Time' }].map(({ type, label }) => (
+                          <button key={type} onClick={() => updateExercise(exerciseA.id, { type, sets: exerciseA.sets.map(s => ({ ...createEmptySet(type), id: s.id, rpe: s.rpe, painLevel: s.painLevel })) })}
+                            className={`px-3 py-1 text-xs rounded-lg transition-colors ${(exerciseA.type || 'weight') === type ? 'bg-flame-500 text-white' : 'bg-iron-800 text-iron-400 hover:text-iron-200'}`}>{label}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Exercise B Name + Type */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-bold text-purple-400 bg-purple-500/10 w-5 h-5 rounded flex items-center justify-center">B</span>
+                        <div className="flex-1 relative" ref={activeAutocomplete === exerciseB.id ? autocompleteRef : null}>
+                          <input
+                            type="text"
+                            value={exerciseB.name}
+                            onChange={(e) => { updateExercise(exerciseB.id, { name: e.target.value }); setActiveAutocomplete(exerciseB.id); }}
+                            onFocus={() => setActiveAutocomplete(exerciseB.id)}
+                            placeholder="Search exercise B..."
+                            className="w-full bg-transparent text-iron-100 font-medium border-none focus:outline-none placeholder:text-iron-500"
+                          />
+                          {activeAutocomplete === exerciseB.id && (
+                            <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-iron-900 border border-iron-700 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                              {(() => {
+                                const filtered = getFilteredSuggestions(exerciseB.name, exerciseB.type || 'weight');
+                                const query = exerciseB.name?.trim().toLowerCase();
+                                const exactMatch = filtered.some(n => n.toLowerCase() === query);
+                                return (<>
+                                  {filtered.map(name => (
+                                    <button key={name} type="button" onMouseDown={e => e.preventDefault()} onClick={() => selectExerciseName(exerciseB.id, name)}
+                                      className="w-full text-left px-4 py-3 text-sm text-iron-200 hover:bg-iron-800 active:bg-iron-700 transition-colors border-b border-iron-800/50 last:border-b-0">{name}</button>
+                                  ))}
+                                  {query && !exactMatch && (
+                                    <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => selectExerciseName(exerciseB.id, exerciseB.name.trim())}
+                                      className="w-full text-left px-4 py-3 text-sm text-flame-400 hover:bg-iron-800 active:bg-iron-700 transition-colors flex items-center gap-2">
+                                      <Plus className="w-4 h-4" /> Add &quot;{exerciseB.name.trim()}&quot;
+                                    </button>
+                                  )}
+                                </>);
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 ml-7">
+                        {[{ type: 'weight', label: 'Weight' }, { type: 'bodyweight', label: 'Bodyweight' }, { type: 'time', label: 'Time' }].map(({ type, label }) => (
+                          <button key={type} onClick={() => updateExercise(exerciseB.id, { type, sets: exerciseB.sets.map(s => ({ ...createEmptySet(type), id: s.id, rpe: s.rpe, painLevel: s.painLevel })) })}
+                            className={`px-3 py-1 text-xs rounded-lg transition-colors ${(exerciseB.type || 'weight') === type ? 'bg-flame-500 text-white' : 'bg-iron-800 text-iron-400 hover:text-iron-200'}`}>{label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Superset Sets */}
+                  <AnimatePresence>
+                    {expanded && (
+                      <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
+                        <div className="p-4 space-y-3">
+                          {exerciseA.sets.map((setA, setIndex) => {
+                            const setB = exerciseB.sets[setIndex];
+                            if (!setB) return null;
+                            return (
+                              <div key={setA.id} className="p-3 bg-iron-800/30 rounded-lg space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-iron-300 font-medium text-sm">Set {setIndex + 1}</span>
+                                  {exerciseA.sets.length > 1 && (
+                                    <button onClick={() => removeSet(exerciseA.id, setA.id)} className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                                {/* Exercise A inputs */}
+                                <div>
+                                  <p className="text-xs text-purple-400 font-medium mb-1.5">A — {exerciseA.name || 'Exercise A'}</p>
+                                  {renderSupersetInputs(exerciseA, setA)}
+                                </div>
+                                {/* Exercise B inputs */}
+                                <div className="pt-2 border-t border-iron-700/30">
+                                  <p className="text-xs text-purple-400 font-medium mb-1.5">B — {exerciseB.name || 'Exercise B'}</p>
+                                  {renderSupersetInputs(exerciseB, setB)}
+                                </div>
+                                {/* RPE / Pain (edit mode) */}
+                                {isEditMode && (
+                                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-iron-700/30">
+                                    <div>
+                                      <label className="block text-xs text-iron-500 mb-1">RPE</label>
+                                      <select value={setA.rpe} onChange={(e) => { updateSet(exerciseA.id, setA.id, { rpe: e.target.value }); updateSet(exerciseB.id, setB.id, { rpe: e.target.value }); }}
+                                        className="input-field text-sm py-2 px-3 w-full">
+                                        <option value="">—</option>
+                                        {[5, 6, 7, 8, 9, 10].map(val => <option key={val} value={val}>{val}</option>)}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-iron-500 mb-1">Pain</label>
+                                      <select value={setA.painLevel} onChange={(e) => { const v = parseInt(e.target.value); updateSet(exerciseA.id, setA.id, { painLevel: v }); updateSet(exerciseB.id, setB.id, { painLevel: v }); }}
+                                        className="input-field text-sm py-2 px-3 w-full">
+                                        {PAIN_LEVELS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+                                      </select>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                          <button onClick={() => addSet(exerciseA.id)} className="mt-2 text-sm text-flame-400 hover:text-flame-300 flex items-center gap-1">
+                            <Plus className="w-4 h-4" /> Add Set
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            }
+
+            // ── Single Exercise Card ──
+            const exercise = group.exercise;
+            return (
             <motion.div
               key={exercise.id}
               initial={{ opacity: 0, y: 10 }}
@@ -508,7 +810,7 @@ export default function NewWorkoutPage() {
               <div className="p-4 border-b border-iron-800">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-8 h-8 rounded-plate bg-flame-500/10 flex items-center justify-center text-flame-400 font-semibold text-sm">
-                    {exerciseIndex + 1}
+                    {groupIndex + 1}
                   </div>
                   
                   <div className="flex-1 relative" ref={activeAutocomplete === exercise.id ? autocompleteRef : null}>
@@ -1101,19 +1403,31 @@ export default function NewWorkoutPage() {
                 )}
               </AnimatePresence>
             </motion.div>
-          ))}
+            );
+          })}
         </AnimatePresence>
 
-        {/* Add Exercise Button */}
-        <button
-          onClick={addExercise}
-          className="w-full py-4 border-2 border-dashed border-iron-700 rounded-xl
-            text-iron-400 hover:text-iron-200 hover:border-iron-600
-            flex items-center justify-center gap-2 transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          Add Exercise
-        </button>
+        {/* Add Exercise / Superset Buttons */}
+        <div className="flex gap-3">
+          <button
+            onClick={addExercise}
+            className="flex-1 py-4 border-2 border-dashed border-iron-700 rounded-xl
+              text-iron-400 hover:text-iron-200 hover:border-iron-600
+              flex items-center justify-center gap-2 transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            Add Exercise
+          </button>
+          <button
+            onClick={addSuperset}
+            className="flex-1 py-4 border-2 border-dashed border-purple-500/30 rounded-xl
+              text-purple-400 hover:text-purple-300 hover:border-purple-500/50
+              flex items-center justify-center gap-2 transition-colors"
+          >
+            <Zap className="w-5 h-5" />
+            Add Superset
+          </button>
+        </div>
       </div>
 
       {/* Save Button */}

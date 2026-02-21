@@ -29,6 +29,7 @@ import {
   Search,
   FileText,
   RefreshCw,
+  Zap,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getAuthHeaders } from '../services/api'
@@ -39,6 +40,7 @@ import { getDisplayDate } from '../utils/dateUtils'
 import usePageTitle from '../utils/usePageTitle'
 import ExerciseInfoModal from '../components/ExerciseInfoModal'
 import WorkoutSummaryCard from '../components/WorkoutSummaryCard'
+import { groupExercisesForDisplay } from '../utils/workoutUtils'
 import { useUIStore } from '../store'
 
 // Calculate estimated 1RM using Epley formula
@@ -444,31 +446,31 @@ export default function GroupWorkoutPage() {
     setExercises(prev => {
       const newExercises = [...prev]
       const exercise = newExercises[exerciseIndex]
-      const lastSet = exercise.sets[exercise.sets.length - 1]
-      const type = exercise.type || 'weight'
+      const supersetGroup = exercise?.supersetGroup
 
-      let newSet = {
-        id: Date.now() + Math.random(),
-        rpe: '',
-        painLevel: 0,
-        completed: false,
+      const indices = [exerciseIndex]
+      if (supersetGroup != null) {
+        newExercises.forEach((ex, i) => {
+          if (i !== exerciseIndex && ex.supersetGroup === supersetGroup) indices.push(i)
+        })
       }
 
-      if (type === 'time') {
-        newSet = { ...newSet, prescribedTime: lastSet?.prescribedTime || '', actualTime: '' }
-      } else if (type === 'bodyweight') {
-        newSet = { ...newSet, prescribedReps: lastSet?.prescribedReps || '', actualReps: '' }
-      } else {
-        newSet = {
-          ...newSet,
-          prescribedWeight: lastSet?.prescribedWeight || '',
-          prescribedReps: lastSet?.prescribedReps || '',
-          actualWeight: '',
-          actualReps: '',
+      indices.forEach(idx => {
+        const ex = newExercises[idx]
+        const lastSet = ex.sets[ex.sets.length - 1]
+        const type = ex.type || 'weight'
+
+        let newSet = { id: Date.now() + Math.random(), rpe: '', painLevel: 0, completed: false }
+        if (type === 'time') {
+          newSet = { ...newSet, prescribedTime: lastSet?.prescribedTime || '', actualTime: '' }
+        } else if (type === 'bodyweight') {
+          newSet = { ...newSet, prescribedReps: lastSet?.prescribedReps || '', actualReps: '' }
+        } else {
+          newSet = { ...newSet, prescribedWeight: lastSet?.prescribedWeight || '', prescribedReps: lastSet?.prescribedReps || '', actualWeight: '', actualReps: '' }
         }
-      }
+        newExercises[idx] = { ...ex, sets: [...ex.sets, newSet] }
+      })
 
-      newExercises[exerciseIndex] = { ...exercise, sets: [...exercise.sets, newSet] }
       return newExercises
     })
   }
@@ -478,9 +480,15 @@ export default function GroupWorkoutPage() {
       const newExercises = [...prev]
       const exercise = newExercises[exerciseIndex]
       if (exercise.sets.length <= 1) return prev
-      newExercises[exerciseIndex] = {
-        ...exercise,
-        sets: exercise.sets.filter((_, i) => i !== setIndex),
+      const supersetGroup = exercise?.supersetGroup
+
+      newExercises[exerciseIndex] = { ...exercise, sets: exercise.sets.filter((_, i) => i !== setIndex) }
+      if (supersetGroup != null) {
+        newExercises.forEach((ex, i) => {
+          if (i !== exerciseIndex && ex.supersetGroup === supersetGroup) {
+            newExercises[i] = { ...ex, sets: ex.sets.filter((_, si) => si !== setIndex) }
+          }
+        })
       }
       return newExercises
     })
@@ -489,6 +497,10 @@ export default function GroupWorkoutPage() {
   const removeExercise = (exerciseIndex) => {
     setExercises(prev => {
       if (prev.length <= 1) return prev
+      const exercise = prev[exerciseIndex]
+      if (exercise?.supersetGroup != null) {
+        return prev.filter(ex => ex.supersetGroup !== exercise.supersetGroup)
+      }
       return prev.filter((_, i) => i !== exerciseIndex)
     })
   }
@@ -1108,10 +1120,76 @@ export default function GroupWorkoutPage() {
 
         {/* Exercises */}
         <div className="space-y-4">
-          {workout.exercises?.map((exercise, exerciseIndex) => {
+          {groupExercisesForDisplay(workout.exercises || []).map((group, groupIndex) => {
+            // ── Superset View Card ──
+            if (group.type === 'superset') {
+              const { exerciseA, exerciseB } = group
+              const renderSSInfo = (ex, set) => {
+                const isTime = ex.type === 'time'; const isBW = ex.type === 'bodyweight'
+                const hasActual = isTime ? !!set.actualTime : isBW ? !!set.actualReps : !!(set.actualWeight || set.actualReps)
+                if (isTime) return isCompleted && hasActual
+                  ? <span className="text-base font-bold text-flame-400">{set.actualTime}s <span className="text-xs text-iron-500 font-normal">target {set.prescribedTime || '—'}s</span></span>
+                  : <span className="text-base font-bold text-iron-100">{set.prescribedTime || '—'}s</span>
+                if (isBW) return isCompleted && hasActual
+                  ? <span className="text-base font-bold text-flame-400">{set.actualReps || '—'} reps <span className="text-xs text-iron-500 font-normal">target {set.prescribedReps || '—'}</span></span>
+                  : <span className="text-base font-bold text-iron-100">{set.prescribedReps || '—'} reps</span>
+                return isCompleted && hasActual
+                  ? <span className="text-base font-bold text-flame-400">{set.actualWeight || '—'} × {set.actualReps || '—'} <span className="text-xs text-iron-500 font-normal">target {set.prescribedWeight || '—'} × {set.prescribedReps || '—'}</span></span>
+                  : <span className="text-base font-bold text-iron-100">{set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'}</span>
+              }
+              return (
+                <div key={`ss-${group.supersetGroup}`} className="card-steel overflow-hidden border border-purple-500/20">
+                  <div className="p-4 border-b border-iron-800">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 text-xs font-semibold">
+                        <Zap className="w-3 h-3" /> Superset
+                      </div>
+                      <h3 className="text-lg font-semibold text-iron-50 flex-1">{exerciseA.name} <span className="text-iron-600">/</span> {exerciseB.name}</h3>
+                    </div>
+                    <p className="text-sm text-iron-500 mt-1">{exerciseA.sets?.length || 0} sets</p>
+                  </div>
+                  <div className="divide-y divide-iron-800/50">
+                    {exerciseA.sets?.map((setA, setIndex) => {
+                      const setB = exerciseB.sets?.[setIndex]
+                      return (
+                        <div key={setIndex} className="p-4">
+                          <div className="flex items-start gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-iron-800 flex items-center justify-center flex-shrink-0">
+                              <span className="text-lg font-bold text-iron-400">{setIndex + 1}</span>
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              <div>
+                                <p className="text-xs text-purple-400 font-medium mb-0.5">A — {exerciseA.name}</p>
+                                {renderSSInfo(exerciseA, setA)}
+                              </div>
+                              {setB && (
+                                <div className="pt-1.5 border-t border-iron-700/30">
+                                  <p className="text-xs text-purple-400 font-medium mb-0.5">B — {exerciseB.name}</p>
+                                  {renderSSInfo(exerciseB, setB)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {(exerciseA.notes || exerciseB.notes) && (
+                    <div className="px-4 pb-2 space-y-1">
+                      {exerciseA.notes && <div className="flex items-start gap-2 bg-iron-800/30 rounded-lg p-3"><MessageSquare className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" /><p className="text-sm text-iron-400"><span className="text-purple-400">A:</span> {exerciseA.notes}</p></div>}
+                      {exerciseB.notes && <div className="flex items-start gap-2 bg-iron-800/30 rounded-lg p-3"><MessageSquare className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" /><p className="text-sm text-iron-400"><span className="text-purple-400">B:</span> {exerciseB.notes}</p></div>}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            // ── Single Exercise View Card ──
+            const exercise = group.exercise
+            const exerciseIndex = group.index
             const type = getExerciseType(exercise)
             const typeTag = getTypeTag(type)
-            
+
             return (
             <div key={exerciseIndex} className="card-steel overflow-hidden">
               <div className="p-4 border-b border-iron-800">
@@ -1533,7 +1611,141 @@ export default function GroupWorkoutPage() {
 
       {/* Exercises */}
       <div className="space-y-4">
-        {exercises.map((exercise, exerciseIndex) => {
+        {groupExercisesForDisplay(exercises).map((group, groupIndex) => {
+          // ── Superset Log Card ──
+          if (group.type === 'superset') {
+            const { exerciseA, exerciseB, indexA: idxA, indexB: idxB } = group
+            const renderSSLogInputs = (exIdx, ex, set, si) => {
+              const t = ex.type || getExerciseType(ex)
+              if (t === 'time') return (
+                <div>
+                  <input type="number" inputMode="numeric" value={set.actualTime || ''}
+                    onChange={e => updateSet(exIdx, si, 'actualTime', e.target.value)}
+                    placeholder={set.prescribedTime || '—'}
+                    className="w-full input-field text-lg py-2 px-3 text-center font-semibold" />
+                  <p className="text-[10px] text-iron-600 text-center mt-0.5">seconds</p>
+                </div>
+              )
+              if (t === 'bodyweight') return (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <input type="number" inputMode="numeric" value={set.actualReps || ''}
+                      onChange={e => updateSet(exIdx, si, 'actualReps', e.target.value)}
+                      placeholder={set.prescribedReps || '—'}
+                      className="w-full input-field text-lg py-2 px-3 text-center font-semibold" />
+                    <p className="text-[10px] text-iron-600 text-center mt-0.5">reps</p>
+                  </div>
+                </div>
+              )
+              return (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <input type="text" value={set.actualWeight || ''}
+                      onChange={e => updateSet(exIdx, si, 'actualWeight', e.target.value)}
+                      placeholder={set.prescribedWeight || 'lbs'}
+                      className="w-full input-field text-lg py-2 px-3 text-center font-semibold" />
+                    <p className="text-[10px] text-iron-600 text-center mt-0.5">lbs</p>
+                  </div>
+                  <div>
+                    <input type="number" inputMode="numeric" value={set.actualReps || ''}
+                      onChange={e => updateSet(exIdx, si, 'actualReps', e.target.value)}
+                      placeholder={set.prescribedReps || '—'}
+                      className="w-full input-field text-lg py-2 px-3 text-center font-semibold" />
+                    <p className="text-[10px] text-iron-600 text-center mt-0.5">reps</p>
+                  </div>
+                </div>
+              )
+            }
+            const fillFromTarget = (exIdx, ex, set, si) => {
+              const t = ex.type || getExerciseType(ex)
+              if (t === 'time') { updateSet(exIdx, si, 'actualTime', set.prescribedTime || '') }
+              else if (t === 'bodyweight') { updateSet(exIdx, si, 'actualReps', set.prescribedReps || '') }
+              else { updateSet(exIdx, si, 'actualWeight', set.prescribedWeight || ''); updateSet(exIdx, si, 'actualReps', set.prescribedReps || '') }
+            }
+            const getTargetLabel = (ex, set) => {
+              const t = ex.type || getExerciseType(ex)
+              if (t === 'time') return `${set.prescribedTime || '—'}s`
+              if (t === 'bodyweight') return `${set.prescribedReps || '—'} reps`
+              return `${set.prescribedWeight || '—'} × ${set.prescribedReps || '—'}`
+            }
+            return (
+              <div key={`ss-${group.supersetGroup}`} className="card-steel overflow-hidden border border-purple-500/20">
+                <div className="p-4 bg-iron-800/30">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 text-xs font-semibold">
+                      <Zap className="w-3 h-3" /> Superset
+                    </div>
+                    <h3 className="text-lg font-bold text-iron-50 flex-1">{exerciseA.name} <span className="text-iron-600">/</span> {exerciseB.name}</h3>
+                    {exercises.length > 2 && (
+                      <button onClick={() => removeExercise(idxA)} className="p-1.5 text-iron-600 hover:text-red-400 transition-colors" title="Remove superset">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-sm text-iron-500 mt-1">{exerciseA.sets?.length || 0} sets</p>
+                </div>
+                <div className="divide-y divide-iron-800/50">
+                  {exerciseA.sets?.map((setA, setIndex) => {
+                    const setB = exerciseB.sets?.[setIndex]
+                    const isFilledA = (() => { const t = exerciseA.type || getExerciseType(exerciseA); return t === 'time' ? !!setA.actualTime : t === 'bodyweight' ? !!setA.actualReps : !!(setA.actualWeight && setA.actualReps) })()
+                    const isFilledB = setB ? (() => { const t = exerciseB.type || getExerciseType(exerciseB); return t === 'time' ? !!setB.actualTime : t === 'bodyweight' ? !!setB.actualReps : !!(setB.actualWeight && setB.actualReps) })() : false
+                    const bothFilled = isFilledA && isFilledB
+                    return (
+                      <div key={setIndex} className="p-4 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${bothFilled ? 'bg-green-500/15 ring-1 ring-green-500/30' : 'bg-iron-800'}`}>
+                            <span className={`text-lg font-bold ${bothFilled ? 'text-green-400' : 'text-iron-400'}`}>{setIndex + 1}</span>
+                          </div>
+                          <button
+                            onClick={() => { fillFromTarget(idxA, exerciseA, setA, setIndex); if (setB) fillFromTarget(idxB, exerciseB, setB, setIndex) }}
+                            className="flex-1 text-left hover:text-flame-400 active:scale-[0.98] transition-all" title="Tap to fill both with targets">
+                            <span className="text-[10px] uppercase tracking-wider text-iron-600 block">Targets</span>
+                            <span className="text-xs font-medium text-iron-400">A: {getTargetLabel(exerciseA, setA)} · B: {setB ? getTargetLabel(exerciseB, setB) : '—'}</span>
+                          </button>
+                          {exerciseA.sets.length > 1 && (
+                            <button onClick={() => removeSet(idxA, setIndex)} className="p-1.5 text-iron-600 hover:text-red-400 transition-colors">
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs text-purple-400 font-medium mb-1.5">A — {exerciseA.name}</p>
+                          {renderSSLogInputs(idxA, exerciseA, setA, setIndex)}
+                        </div>
+                        {setB && (
+                          <div className="pt-2 border-t border-iron-700/30">
+                            <p className="text-xs text-purple-400 font-medium mb-1.5">B — {exerciseB.name}</p>
+                            {renderSSLogInputs(idxB, exerciseB, setB, setIndex)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="px-4 pt-2 pb-1">
+                  <button onClick={() => addSet(idxA)}
+                    className="w-full py-2.5 border border-dashed border-iron-700 rounded-lg text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600 flex items-center justify-center gap-1.5 transition-colors">
+                    <Plus className="w-4 h-4" /> Add Set
+                  </button>
+                </div>
+                <div className="px-4 pb-4">
+                  {(exerciseA.userNotes || exerciseB.userNotes || openNotes[`ss-${group.supersetGroup}`]) ? (
+                    <textarea value={exerciseA.userNotes || ''} onChange={e => { updateExerciseNotes(idxA, e.target.value); updateExerciseNotes(idxB, e.target.value) }}
+                      placeholder="How did the superset feel?" rows={2} className="w-full input-field text-sm resize-none" />
+                  ) : (
+                    <button onClick={() => setOpenNotes(prev => ({ ...prev, [`ss-${group.supersetGroup}`]: true }))}
+                      className="w-full text-left text-sm text-iron-600 hover:text-iron-400 py-2 transition-colors flex items-center gap-2">
+                      <Pencil className="w-3.5 h-3.5" /> Add notes...
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          }
+
+          // ── Single Exercise Log Card ──
+          const exercise = group.exercise
+          const exerciseIndex = group.index
           const type = exercise.type || getExerciseType(exercise)
           const typeTag = getTypeTag(type)
 

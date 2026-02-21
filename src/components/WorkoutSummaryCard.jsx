@@ -1,4 +1,5 @@
-import { ListChecks } from 'lucide-react'
+import { ListChecks, Zap } from 'lucide-react'
+import { groupExercisesForDisplay } from '../utils/workoutUtils'
 
 const getExerciseType = (exercise) => {
   if (exercise.type) return exercise.type
@@ -61,7 +62,32 @@ export default function WorkoutSummaryCard({ exercises, isCompleted }) {
         <h3 className="font-semibold text-iron-100 text-sm">Workout Summary</h3>
       </div>
       <div className="space-y-1.5">
-        {exercises.map((exercise, i) => {
+        {groupExercisesForDisplay(exercises).map((group, i) => {
+          if (group.type === 'superset') {
+            const { exerciseA, exerciseB } = group
+            const summaryA = getSummaryText(exerciseA, isCompleted)
+            const summaryB = getSummaryText(exerciseB, isCompleted)
+            const hasActualA = isCompleted && exerciseA.sets?.some(s => s.actualWeight || s.actualReps || s.actualTime)
+            const hasActualB = isCompleted && exerciseB.sets?.some(s => s.actualWeight || s.actualReps || s.actualTime)
+            return (
+              <div key={`ss-${group.supersetGroup}`} className="py-1.5 border-b border-iron-800/50 last:border-0">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Zap className="w-3 h-3 text-purple-400 flex-shrink-0" />
+                  <span className="text-[10px] text-purple-400 font-semibold uppercase">Superset</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-iron-200 truncate">{exerciseA.name}</span>
+                  <span className={`text-sm font-semibold flex-shrink-0 ml-3 ${isCompleted && hasActualA ? 'text-flame-400' : 'text-iron-300'}`}>{summaryA}</span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-sm font-medium text-iron-200 truncate">{exerciseB.name}</span>
+                  <span className={`text-sm font-semibold flex-shrink-0 ml-3 ${isCompleted && hasActualB ? 'text-flame-400' : 'text-iron-300'}`}>{summaryB}</span>
+                </div>
+              </div>
+            )
+          }
+
+          const exercise = group.exercise
           const type = getExerciseType(exercise)
           const summary = getSummaryText(exercise, isCompleted)
           const hasActualData = isCompleted && exercise.sets?.some(s =>
