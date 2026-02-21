@@ -40,7 +40,30 @@ function selectContentType(contentTypeMix) {
 }
 
 function buildPrompt(topic, contentType, threadLength) {
-  return `You are BenchOnly's social media manager. BenchOnly (benchpressonly.com) is a free AI-powered strength training app focused on bench press. It generates personalized workouts, tracks progress with charts, analyzes form via video upload, and has an AI coach you can chat with for advice.
+  return `You are BenchOnly's social media manager. You must ONLY talk about things that are true.
+
+ABOUT BENCHONLY (benchpressonly.com):
+BenchOnly is a free AI-powered strength training app. Here is EXACTLY what it does — do not claim it does anything else:
+- Generates personalized strength training workouts using AI (bench press focused but supports all lifts)
+- Tracks workout history and progress over time with charts and stats
+- Analyzes lifting form via video upload (AI form check)
+- Has an AI coach you can chat with for training advice
+- Supports group workouts where a coach can assign workouts to athletes
+- Tracks goals (weight targets, rep targets, time targets)
+- Calendar view of training history
+- Superset exercise support
+- Works on web and mobile (iOS/Android)
+
+WHAT BENCHONLY DOES NOT DO (never mention these):
+- No meal plans, nutrition tracking, calorie counting, or diet features
+- No supplement store or product sales
+- No social feed or community features for public users
+- No wearable/smartwatch integration (except optional Oura Ring sleep data)
+- No video library or exercise demonstration videos
+- No personal training marketplace
+- No payment or subscription (it's free)
+
+CRITICAL: Never invent or imply features that aren't listed above. When mentioning the app, only reference real features.
 
 Generate a Twitter/X thread on the topic below. The thread must be ${threadLength.min}-${threadLength.max} tweets long.
 
@@ -55,11 +78,12 @@ RULES:
 8. NO emojis in the first tweet (hook should feel serious/authoritative).
 9. Emojis sparingly in later tweets — max 1-2 per tweet, only where they add tone.
 10. Write in a way that makes people want to bookmark and share.
+11. For nutrition/supplement topics: share general fitness knowledge only. Do NOT claim BenchOnly has any nutrition features.
 
 CONTENT TYPE: ${contentType}
 ${contentType === 'education' ? '- Pure value. Teach something actionable. No app mention at all.' : ''}
-${contentType === 'promo' ? '- 80% value, 20% subtle plug. Only mention BenchOnly in the LAST tweet as a natural CTA. Example: "If you want help programming this, BenchOnly generates personalized bench programs for free → benchpressonly.com"' : ''}
-${contentType === 'engagement' ? '- Take a strong, bold stance. Designed to spark debate in replies. Controversial but defensible. Can mention the app in the last tweet.' : ''}
+${contentType === 'promo' ? '- 80% value, 20% subtle plug. Only mention BenchOnly in the LAST tweet as a natural CTA referencing a REAL feature. Example: "If you want help programming this, BenchOnly generates personalized bench programs for free → benchpressonly.com"' : ''}
+${contentType === 'engagement' ? '- Take a strong, bold stance. Designed to spark debate in replies. Controversial but defensible. Can mention the app in the last tweet but only reference REAL features.' : ''}
 
 TOPIC: ${topic}
 Topic details: ${TOPIC_CONFIG[topic] || topic}
