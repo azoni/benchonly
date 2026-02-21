@@ -56,7 +56,7 @@ export async function handler(event) {
 
     const contextStr = buildContext(context, workoutFocus, intensity, adminSettings, duration, exerciseCount, maxExercise, includeWarmup, includeStretches, category);
 
-    const systemPrompt = `You are an expert strength coach. Create a personalized workout.
+    let systemPrompt = `You are an expert strength coach. Create a personalized workout.
 
 CRITICAL RULES FOR REPEATING PREVIOUS WORKOUTS:
 If the user asks to "repeat", "same as", "copy", or reference a previous workout:
