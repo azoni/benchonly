@@ -34,7 +34,7 @@ import { collection, query, where, orderBy, limit, getDocs, doc, onSnapshot, set
 import { db } from '../services/firebase'
 import usePageTitle from '../utils/usePageTitle'
 import { apiUrl } from '../utils/platform'
-import { estimatePoses } from '../utils/poseEstimation'
+import { getLandmarker, extractMetrics } from '../utils/poseEstimation'
 
 const FRAME_PRESETS = {
   quick:    { frames: 5,  label: 'Quick',    desc: '5 frames',  credits: 10 },
@@ -54,6 +54,71 @@ const ANALYZING_TIPS = [
   'Tip: Good lighting makes a huge difference in analysis quality',
   'Tip: Shorter clips (5-15s) give the best frame coverage',
 ]
+
+// ─── Key Frame Selection ───
+// Picks the most biomechanically significant frames from a pose scan timeline.
+// Prioritises direction reversals (rep transitions: bottom/lockout of each rep),
+// then highest-confidence frames, spread across the clip duration.
+
+function selectKeyFrames(scanResults, targetCount, exercise) {
+  const ex = (exercise || '').toLowerCase()
+  const isSquatLike = ex.includes('squat') || ex.includes('rdl') || ex.includes('deadlift') || ex.includes('lunge') || ex.includes('hip thrust')
+
+  const selectEvenly = (arr, n) => {
+    if (arr.length <= n) return arr
+    const step = (arr.length - 1) / (n - 1)
+    return Array.from({ length: n }, (_, i) => arr[Math.round(i * step)])
+  }
+
+  const detected = scanResults.filter(f => f.pose?.poseDetected)
+  if (detected.length === 0) return selectEvenly(scanResults, targetCount)
+  if (detected.length <= targetCount) return detected
+
+  // Score each detected frame
+  const scored = detected.map((frame, i) => {
+    const prev = detected[i - 1]?.pose
+    const next = detected[i + 1]?.pose
+    let score = (frame.pose.confidence || 0) * 0.5 // base: visibility confidence
+
+    // Large bonus for direction reversals — these are the actual rep transitions
+    const reversal = (curr, p, n) => {
+      if (curr == null || p == null || n == null) return 0
+      return (curr <= p && curr <= n) || (curr >= p && curr >= n) ? 80 : 0
+    }
+
+    score += reversal(frame.pose.elbowFlexion?.left,  prev?.elbowFlexion?.left,  next?.elbowFlexion?.left)
+    score += reversal(frame.pose.elbowFlexion?.right, prev?.elbowFlexion?.right, next?.elbowFlexion?.right)
+    if (isSquatLike) {
+      score += reversal(frame.pose.kneeAngle?.left, prev?.kneeAngle?.left, next?.kneeAngle?.left) * 1.5
+      score += reversal(frame.pose.hipAngle?.left,  prev?.hipAngle?.left,  next?.hipAngle?.left)
+    }
+
+    return { frame, score }
+  })
+
+  // Always anchor with first + last detected frame for context
+  const selected = [detected[0]]
+  const used = new Set([detected[0].timestamp])
+  if (detected.length > 1) {
+    selected.push(detected[detected.length - 1])
+    used.add(detected[detected.length - 1].timestamp)
+  }
+
+  // Fill remaining slots with highest-scored frames, enforcing minimum time spread
+  const totalDur = scanResults[scanResults.length - 1].timestamp - scanResults[0].timestamp
+  const minGap = totalDur / (targetCount * 2)
+  const byScore = [...scored].sort((a, b) => b.score - a.score)
+
+  for (const { frame } of byScore) {
+    if (selected.length >= targetCount) break
+    if (used.has(frame.timestamp)) continue
+    if (selected.some(s => Math.abs(s.timestamp - frame.timestamp) < minGap)) continue
+    selected.push(frame)
+    used.add(frame.timestamp)
+  }
+
+  return selected.sort((a, b) => a.timestamp - b.timestamp)
+}
 
 // ─── Score Utilities ───
 
@@ -556,24 +621,14 @@ export default function FormCheckPage() {
     const isRealFrame = () => {
       const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
       const step = Math.max(4, Math.floor(data.length / 500)) * 4
-      // Check 1: variance (gray frames have near-zero variance)
       let sum = 0, count = 0
-      for (let p = 0; p < data.length; p += step) {
-        sum += data[p] + data[p + 1] + data[p + 2]
-        count++
-      }
+      for (let p = 0; p < data.length; p += step) { sum += data[p] + data[p + 1] + data[p + 2]; count++ }
       const avg = sum / (count * 3)
       let variance = 0
-      for (let p = 0; p < data.length; p += step) {
-        const v = (data[p] + data[p + 1] + data[p + 2]) / 3 - avg
-        variance += v * v
-      }
+      for (let p = 0; p < data.length; p += step) { const v = (data[p] + data[p + 1] + data[p + 2]) / 3 - avg; variance += v * v }
       variance /= count
-      // Check 2: unique color count (gray frames have very few unique values)
       const colors = new Set()
-      for (let p = 0; p < data.length; p += step) {
-        colors.add((data[p] >> 4) * 256 + (data[p + 1] >> 4) * 16 + (data[p + 2] >> 4))
-      }
+      for (let p = 0; p < data.length; p += step) colors.add((data[p] >> 4) * 256 + (data[p + 1] >> 4) * 16 + (data[p + 2] >> 4))
       return variance > 200 || colors.size > 20
     }
 
@@ -589,140 +644,95 @@ export default function FormCheckPage() {
         setError('Could not read video duration. Try a different file.'); setStep('upload'); return
       }
 
-      // ─── Pass 1: Low-res motion scan ───
-      const SCAN_WIDTH = 160
+      // ─── Load MediaPipe ───
+      setExtractPhase('Loading pose model...')
+      let landmarker = null
+      try {
+        landmarker = await getLandmarker()
+      } catch (e) {
+        console.warn('[extract] MediaPipe unavailable, will skip pose scan:', e.message)
+      }
+
+      // ─── Pass 1: Pose scan at 320px ───
+      // Seeks through the clip at regular intervals, runs MediaPipe VIDEO mode on each frame.
+      // No pixel diff — we let pose data decide which frames are interesting.
+      const SCAN_WIDTH = 320
       const scanScale = Math.min(1, SCAN_WIDTH / video.videoWidth)
       canvas.width = Math.round(video.videoWidth * scanScale)
       canvas.height = Math.round(video.videoHeight * scanScale)
-      const scanCount = Math.max(2, Math.min(30, Math.floor(duration * 2)))
-      const scanInterval = duration / scanCount
-      const motionScores = []
-      let prevData = null
 
-      for (let i = 0; i < scanCount; i++) {
+      const SCAN_TARGETS = Math.min(60, Math.max(maxFrames * 4, Math.ceil(duration * 5)))
+      const scanInterval = duration / SCAN_TARGETS
+      const scanResults = []
+      let lastTimestampMs = -1
+
+      for (let i = 0; i < SCAN_TARGETS; i++) {
         const time = i * scanInterval
+        setExtractPhase(`Scanning movement... (${i + 1}/${SCAN_TARGETS})`)
+        setExtractProgress(Math.round(((i + 1) / SCAN_TARGETS) * 60))
+
         await seekTo(time)
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-        if (prevData) {
-          let diff = 0
-          for (let p = 0; p < imgData.length; p += 16) {
-            diff += Math.abs(imgData[p] - prevData[p])
-              + Math.abs(imgData[p + 1] - prevData[p + 1])
-              + Math.abs(imgData[p + 2] - prevData[p + 2])
-          }
-          motionScores.push({ time, score: diff })
+        if (!isRealFrame()) continue
+
+        let pose = { poseDetected: false, timestamp: time }
+        if (landmarker) {
+          try {
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+            const img = new Image()
+            await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl })
+            const tsMs = Math.max(lastTimestampMs + 1, Math.round(time * 1000))
+            lastTimestampMs = tsMs
+            const raw = landmarker.detectForVideo(img, tsMs)
+            const lm = raw.landmarks?.[0]
+            if (lm) pose = extractMetrics(lm, time)
+          } catch { /* pose stays not detected */ }
         }
-        prevData = new Uint8Array(imgData)
-        setExtractProgress(Math.round(((i + 1) / scanCount) * 20))
+
+        scanResults.push({ timestamp: time, pose })
       }
 
-      // ─── Burst detection: find where the actual lift happens ───
-      let startTime = 0, endTime = duration
-      if (motionScores.length > maxFrames) {
-        const sorted = [...motionScores].map(m => m.score).sort((a, b) => a - b)
-        const median = sorted[Math.floor(sorted.length / 2)]
-        const p75 = sorted[Math.floor(sorted.length * 0.75)]
-        const threshold = (median + p75) / 2
-
-        const bursts = []
-        let currentBurst = null
-        for (let i = 0; i < motionScores.length; i++) {
-          if (motionScores[i].score >= threshold) {
-            if (!currentBurst) currentBurst = { start: i, end: i, totalScore: 0 }
-            currentBurst.end = i
-            currentBurst.totalScore += motionScores[i].score
-          } else {
-            if (currentBurst && i - currentBurst.end <= 2) {
-              currentBurst.end = i
-              currentBurst.totalScore += motionScores[i].score
-            } else if (currentBurst) {
-              bursts.push(currentBurst)
-              currentBurst = null
-            }
-          }
-        }
-        if (currentBurst) bursts.push(currentBurst)
-
-        let bestBurst = bursts.length > 0
-          ? bursts.reduce((a, b) => a.totalScore > b.totalScore ? a : b)
-          : null
-
-        if (bestBurst) {
-          const ws = Math.max(0, bestBurst.start - 1)
-          const we = Math.min(motionScores.length - 1, bestBurst.end + 1)
-          startTime = motionScores[ws].time
-          endTime = motionScores[we].time
-        } else {
-          const windowSize = Math.min(maxFrames, motionScores.length)
-          let bestSum = 0, bestStart = 0
-          for (let i = 0; i <= motionScores.length - windowSize; i++) {
-            let sum = 0
-            for (let j = i; j < i + windowSize; j++) sum += motionScores[j].score
-            if (sum > bestSum) { bestSum = sum; bestStart = i }
-          }
-          const ws = Math.max(0, bestStart - 1)
-          const we = Math.min(motionScores.length - 1, bestStart + windowSize)
-          startTime = motionScores[ws].time
-          endTime = motionScores[we].time
-        }
+      if (scanResults.length === 0) {
+        setError('Could not read frames from this video. Try a different file.')
+        setStep('upload'); return
       }
 
-      // ─── Pass 2: Full-res frame capture from the detected lift window ───
-      const windowDuration = endTime - startTime
-      const totalFrames = Math.max(1, Math.min(maxFrames, Math.floor(windowDuration)))
-      const interval = windowDuration / totalFrames
+      // ─── Select key frames using pose timeline ───
+      setExtractPhase('Selecting key frames...')
+      const selectedMoments = selectKeyFrames(scanResults, maxFrames, exercise)
 
+      // ─── Pass 2: Re-extract selected timestamps at full quality ───
       const finalScale = Math.min(1, FRAME_WIDTH / video.videoWidth)
       canvas.width = Math.round(video.videoWidth * finalScale)
       canvas.height = Math.round(video.videoHeight * finalScale)
 
       const extractedFrames = []
-      for (let i = 0; i < totalFrames; i++) {
-        const time = startTime + (i * interval)
-        let dataUrl, base64
-        let gotReal = false
+      for (let i = 0; i < selectedMoments.length; i++) {
+        const { timestamp: time, pose } = selectedMoments[i]
+        setExtractPhase(`Capturing frame ${i + 1}/${selectedMoments.length}...`)
+        setExtractProgress(60 + Math.round(((i + 1) / selectedMoments.length) * 38))
 
-        // Try up to 5 times with escalating decode waits
+        // Up to 5 attempts with escalating waits for slow decoders
         for (let attempt = 0; attempt < 5; attempt++) {
           await seekTo(time + (attempt > 0 ? 0.02 * attempt : 0))
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-
-          if (isRealFrame()) {
-            gotReal = true
-            break
-          }
-
-          // Escalating wait: 100, 200, 300, 400ms
+          if (isRealFrame()) break
           await new Promise(r => setTimeout(r, 100 * (attempt + 1)))
-          // Re-draw after waiting (frame may have decoded)
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-          if (isRealFrame()) {
-            gotReal = true
-            break
-          }
+          if (isRealFrame()) break
         }
 
-        dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
-        base64 = dataUrl.split(',')[1]
-        extractedFrames.push({ dataUrl, base64, timestamp: time, index: i + 1 })
-        setExtractProgress(20 + Math.round(((i + 1) / totalFrames) * 40))
+        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
+        const base64 = dataUrl.split(',')[1]
+        extractedFrames.push({ dataUrl, base64, timestamp: time, index: i + 1, pose })
       }
-      setFrames(extractedFrames)
 
-      // ─── Pose estimation (runs in-browser, no server cost) ───
-      let poses = []
-      try {
-        poses = await estimatePoses(extractedFrames, (msg) => {
-          setExtractPhase(msg)
-          setExtractProgress(prev => Math.min(prev + Math.round(35 / extractedFrames.length), 95))
-        })
-      } catch (poseErr) {
-        console.warn('[pose] Estimation skipped:', poseErr.message)
-      }
       // Split: raw joints stay client-side for overlay, metrics go to server
-      const poseMetrics = poses.map(({ joints: _, ...metrics }) => metrics)
-      const landmarks = poses.map(p => p.joints || null)
+      const poseMetrics = extractedFrames.map(f => { const { joints: _, ...m } = (f.pose || {}); return m })
+      const landmarks = extractedFrames.map(f => f.pose?.joints || null)
+      const frameData = extractedFrames.map(({ pose: _, ...f }) => f)
+
+      setFrames(frameData)
       setPoseData(poseMetrics)
       setPoseLandmarks(landmarks)
       setExtractProgress(100)
@@ -732,7 +742,7 @@ export default function FormCheckPage() {
       setError(err.message || 'Could not extract frames. Try a different file.')
       setStep('upload')
     }
-  }, [videoUrl, quality])
+  }, [videoUrl, quality, exercise])
 
   // ─── Analysis ───
 

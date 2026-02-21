@@ -19,7 +19,7 @@ const LM = {
 let _landmarker = null
 let _loadPromise = null
 
-async function getLandmarker() {
+export async function getLandmarker() {
   if (_landmarker) return _landmarker
   if (_loadPromise) return _loadPromise
 
@@ -35,7 +35,7 @@ async function getLandmarker() {
       try {
         _landmarker = await PoseLandmarker.createFromOptions(resolver, {
           baseOptions: { ...baseOptions, delegate: 'GPU' },
-          runningMode: 'IMAGE',
+          runningMode: 'VIDEO',
           numPoses: 1,
           minPoseDetectionConfidence: 0.5,
           minPosePresenceConfidence: 0.5,
@@ -44,7 +44,7 @@ async function getLandmarker() {
         console.warn('[pose] GPU delegate failed, retrying with CPU')
         _landmarker = await PoseLandmarker.createFromOptions(resolver, {
           baseOptions: { ...baseOptions, delegate: 'CPU' },
-          runningMode: 'IMAGE',
+          runningMode: 'VIDEO',
           numPoses: 1,
           minPoseDetectionConfidence: 0.5,
           minPosePresenceConfidence: 0.5,
@@ -72,7 +72,7 @@ function calcAngle3D(a, b, c) {
   return Math.round(Math.acos(Math.max(-1, Math.min(1, dot / (m1 * m2)))) * (180 / Math.PI))
 }
 
-function extractMetrics(lm, timestamp) {
+export function extractMetrics(lm, timestamp) {
   // 3D angles for all joint calculations
   const leftElbow  = calcAngle3D(lm[LM.LEFT_SHOULDER],  lm[LM.LEFT_ELBOW],  lm[LM.LEFT_WRIST])
   const rightElbow = calcAngle3D(lm[LM.RIGHT_SHOULDER], lm[LM.RIGHT_ELBOW], lm[LM.RIGHT_WRIST])
@@ -126,6 +126,7 @@ function extractMetrics(lm, timestamp) {
 
 /**
  * Run MediaPipe pose estimation on an array of extracted video frames.
+ * Uses VIDEO mode with monotonically increasing timestamps for tracking.
  * Falls back gracefully if MediaPipe fails to load.
  * @param {Array<{dataUrl: string, timestamp: number}>} frames
  * @param {(msg: string) => void} [onProgress]
@@ -142,12 +143,16 @@ export async function estimatePoses(frames, onProgress) {
   }
 
   const results = []
+  let lastTimestampMs = -1
   for (let i = 0; i < frames.length; i++) {
     onProgress?.(`Mapping movement... (${i + 1}/${frames.length})`)
     try {
       const img = new Image()
       await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = frames[i].dataUrl })
-      const raw = landmarker.detect(img)
+      // VIDEO mode requires strictly monotonically increasing timestamps in ms
+      const tsMs = Math.max(lastTimestampMs + 1, Math.round(frames[i].timestamp * 1000))
+      lastTimestampMs = tsMs
+      const raw = landmarker.detectForVideo(img, tsMs)
       const lm = raw.landmarks?.[0]
       results.push(lm
         ? extractMetrics(lm, frames[i].timestamp)
