@@ -113,6 +113,14 @@ export default function OnboardingPage() {
 
       await updateProfile(updates)
 
+      // Post to feed so friends see the new member
+      try {
+        const { feedService } = await import('../services/feedService')
+        await feedService.createFeedItem(user.uid, 'user_joined', {
+          displayName: user.displayName || 'Someone new',
+        }, 'public')
+      } catch {}
+
       // Create goal if provided
       if (!skipGoal && goal.currentWeight && goal.targetWeight) {
         const { goalService } = await import('../services/firestore')

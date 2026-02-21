@@ -24,6 +24,7 @@ import {
   Timer,
   Zap,
   TrendingUp,
+  Sparkles,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { feedService, notificationService } from '../services/feedService'
@@ -277,6 +278,8 @@ export default function FeedPage() {
         return <Target className="w-5 h-5 text-purple-400" />
       case 'personal_record':
         return <Flame className="w-5 h-5 text-flame-400" />
+      case 'user_joined':
+        return <Sparkles className="w-5 h-5 text-cyan-400" />
       default:
         return <Activity className="w-5 h-5 text-iron-400" />
     }
@@ -308,6 +311,8 @@ export default function FeedPage() {
         return <><strong>{userName}</strong> set a new goal: <span className="text-purple-400">{item.data?.lift} - {item.data?.targetValue} {item.data?.unit}</span></>
       case 'personal_record':
         return <><strong>{userName}</strong> hit a new PR: <span className="text-flame-400">{item.data?.exercise} - {item.data?.weight}lbs</span></>
+      case 'user_joined':
+        return <><strong>{userName}</strong> just joined Bench Only 🎉</>
       default:
         return <><strong>{userName}</strong> was active</>
     }
