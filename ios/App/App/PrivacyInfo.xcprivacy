@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Does this app use data for tracking? No. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+
+	<!-- Domains used for tracking — none. -->
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!-- Privacy-sensitive APIs accessed by this app's native code. -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- NSUserDefaults: Capacitor plugins use NSUserDefaults to store preferences. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- CA92.1: Access user defaults to read/write app-specific settings. -->
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Data types collected by this app.
+	     User-generated workout data and account info are sent to Firebase (not Apple).
+	     No data is collected by Apple on our behalf. -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+</dict>
+</plist>

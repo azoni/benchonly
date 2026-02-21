@@ -28,7 +28,7 @@
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
@@ -45,5 +45,11 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Bench Only uses your camera so you can record your lifting sets for AI form analysis.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Bench Only needs access to your photo library so you can select an existing video for form analysis.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Bench Only accesses the microphone when recording video for form analysis.</string>
 </dict>
 </plist>

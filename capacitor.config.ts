@@ -11,6 +11,7 @@ const config: CapacitorConfig = {
       'benchpressonly.com',
       '*.firebaseapp.com',
       '*.googleapis.com',
+      'cloud.ouraring.com',
     ],
   },
 
