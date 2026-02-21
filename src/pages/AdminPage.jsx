@@ -19,12 +19,13 @@ import {
   Zap,
   ArrowLeft
 } from 'lucide-react'
-import { ClipboardList, Loader2, MessageCircle } from 'lucide-react'
+import { ClipboardList, Loader2, MessageCircle, Share2, ExternalLink, RefreshCw, Play, Clock } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { collection, getDocs, query, orderBy, limit, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import { workoutService, goalService, creditService, trainerService, tokenUsageService } from '../services/firestore'
 import { analyticsService } from '../services/analyticsService'
+import { socialService } from '../services/socialService'
 import { format, formatDistanceToNow } from 'date-fns'
 import usePageTitle from '../utils/usePageTitle'
 import AdminUserSummary from '../components/AdminUserSummary'
@@ -57,6 +58,18 @@ export default function AdminPage() {
   // Feedback state
   const [feedbackItems, setFeedbackItems] = useState([])
   const [feedbackLoading, setFeedbackLoading] = useState(false)
+
+  // Social engine state
+  const [socialSettings, setSocialSettings] = useState(null)
+  const [socialThreads, setSocialThreads] = useState([])
+  const [socialStats, setSocialStats] = useState(null)
+  const [socialLoading, setSocialLoading] = useState(false)
+  const [socialSettingsSaving, setSocialSettingsSaving] = useState(false)
+  const [socialSettingsSaved, setSocialSettingsSaved] = useState(false)
+  const [socialGenerating, setSocialGenerating] = useState(false)
+  const [socialPosting, setSocialPosting] = useState(null)
+  const [socialSubTab, setSocialSubTab] = useState('dashboard')
+  const [expandedThread, setExpandedThread] = useState(null)
   
   // AI Settings state
   const [aiSettings, setAiSettings] = useState({
@@ -244,6 +257,9 @@ export default function AdminPage() {
     if (activeTab === 'feedback' && feedbackItems.length === 0) {
       loadFeedback()
     }
+    if (activeTab === 'social' && !socialStats) {
+      loadSocialData()
+    }
   }, [activeTab])
 
   const loadFeedback = async () => {
@@ -265,6 +281,112 @@ export default function AdminPage() {
       setFeedbackItems(prev => prev.map(f => f.id === feedbackId ? { ...f, status } : f))
     } catch (e) {
       console.error('Failed to update feedback:', e)
+    }
+  }
+
+  // ─── Social engine functions ───
+  const DEFAULT_SOCIAL_SETTINGS = {
+    enabled: false,
+    frequencyHours: 12,
+    topicWeights: { bench_technique: 20, programming: 15, nutrition: 10, recovery: 10, myth_busting: 15, motivation: 5, app_promo: 15, hot_takes: 10 },
+    contentTypeMix: { education: 50, promo: 25, engagement: 25 },
+    threadLength: { min: 4, max: 8 },
+    totalThreadsPosted: 0,
+  }
+
+  const TOPIC_LABELS = {
+    bench_technique: 'Bench Technique',
+    programming: 'Programming',
+    nutrition: 'Nutrition',
+    recovery: 'Recovery',
+    myth_busting: 'Myth Busting',
+    motivation: 'Motivation',
+    app_promo: 'App Promo',
+    hot_takes: 'Hot Takes',
+  }
+
+  const loadSocialData = async () => {
+    setSocialLoading(true)
+    try {
+      const [settings, threads, stats] = await Promise.all([
+        socialService.getSettings(),
+        socialService.getThreads(null, 100),
+        socialService.getStats(),
+      ])
+      setSocialSettings(settings || { ...DEFAULT_SOCIAL_SETTINGS })
+      setSocialThreads(threads)
+      setSocialStats(stats)
+    } catch (e) {
+      console.error('Failed to load social data:', e)
+    } finally {
+      setSocialLoading(false)
+    }
+  }
+
+  const handleSaveSocialSettings = async () => {
+    if (!socialSettings) return
+    setSocialSettingsSaving(true)
+    setSocialSettingsSaved(false)
+    try {
+      await socialService.saveSettings(socialSettings)
+      setSocialSettingsSaved(true)
+      setTimeout(() => setSocialSettingsSaved(false), 2000)
+    } catch (e) {
+      console.error('Failed to save social settings:', e)
+    } finally {
+      setSocialSettingsSaving(false)
+    }
+  }
+
+  const handleGenerateThread = async (andPost = false) => {
+    setSocialGenerating(true)
+    try {
+      const result = await socialService.generateThread()
+      if (andPost && result.threadId) {
+        setSocialPosting(result.threadId)
+        await socialService.postThread(result.threadId)
+        setSocialPosting(null)
+      }
+      await loadSocialData()
+    } catch (e) {
+      console.error('Failed to generate thread:', e)
+      alert('Failed: ' + e.message)
+    } finally {
+      setSocialGenerating(false)
+      setSocialPosting(null)
+    }
+  }
+
+  const handlePostThread = async (threadId) => {
+    setSocialPosting(threadId)
+    try {
+      await socialService.postThread(threadId)
+      await loadSocialData()
+    } catch (e) {
+      console.error('Failed to post thread:', e)
+      alert('Failed: ' + e.message)
+    } finally {
+      setSocialPosting(null)
+    }
+  }
+
+  const handleDeleteThread = async (threadId) => {
+    if (!confirm('Delete this thread?')) return
+    try {
+      await socialService.deleteThread(threadId)
+      setSocialThreads(prev => prev.filter(t => t.id !== threadId))
+      setSocialStats(prev => prev ? { ...prev, queued: prev.queued - 1 } : prev)
+    } catch (e) {
+      console.error('Failed to delete thread:', e)
+    }
+  }
+
+  const handleRetryThread = async (threadId) => {
+    try {
+      await socialService.retryThread(threadId)
+      await loadSocialData()
+    } catch (e) {
+      console.error('Failed to retry thread:', e)
     }
   }
 
@@ -487,6 +609,7 @@ export default function AdminPage() {
           { key: 'settings', icon: Settings, label: 'Settings' },
           { key: 'trainers', icon: ClipboardList, label: 'Trainers' },
           { key: 'feedback', icon: MessageCircle, label: 'Feedback' },
+          { key: 'social', icon: Share2, label: 'Social' },
         ].map(tab => (
           <button
             key={tab.key}
@@ -1668,6 +1791,431 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════ SOCIAL TAB ═══════ */}
+      {activeTab === 'social' && (
+        <div className="space-y-6">
+          {/* Sub-tabs */}
+          <div className="flex gap-1 border-b border-iron-800 pb-2">
+            {['dashboard', 'queue', 'history', 'settings'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setSocialSubTab(tab)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
+                  socialSubTab === tab
+                    ? 'bg-iron-800 text-iron-100'
+                    : 'text-iron-500 hover:text-iron-300'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {socialLoading ? (
+            <div className="flex items-center gap-2 text-sm text-iron-500 py-8">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading social data...
+            </div>
+          ) : (
+            <>
+              {/* ── Dashboard ── */}
+              {socialSubTab === 'dashboard' && socialStats && (
+                <div className="space-y-6">
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { label: 'Posts Today', value: socialStats.postsToday, color: 'text-flame-400' },
+                      { label: 'Total Posted', value: socialStats.totalPosted, color: 'text-iron-100' },
+                      { label: 'Queued', value: socialStats.queued, color: 'text-blue-400' },
+                      { label: 'Failed', value: socialStats.failed, color: socialStats.failed > 0 ? 'text-red-400' : 'text-iron-500' },
+                    ].map(s => (
+                      <div key={s.label} className="card-steel p-4 text-center">
+                        <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                        <p className="text-xs text-iron-500 mt-1">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Engagement */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Impressions', value: socialStats.totalImpressions.toLocaleString() },
+                      { label: 'Likes', value: socialStats.totalLikes.toLocaleString() },
+                      { label: 'Retweets', value: socialStats.totalRetweets.toLocaleString() },
+                    ].map(s => (
+                      <div key={s.label} className="card-steel p-3 text-center">
+                        <p className="text-lg font-semibold text-iron-200">{s.value}</p>
+                        <p className="text-[10px] text-iron-500 mt-0.5">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Status + Actions */}
+                  <div className="card-steel p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${socialSettings?.enabled ? 'bg-green-400 animate-pulse' : 'bg-iron-600'}`} />
+                          <span className="text-sm font-medium text-iron-200">
+                            {socialSettings?.enabled ? 'Auto-posting active' : 'Auto-posting disabled'}
+                          </span>
+                        </div>
+                        {socialSettings?.lastPostedAt && (
+                          <p className="text-xs text-iron-500 mt-1 ml-4">
+                            Last posted: {formatDistanceToNow(socialSettings.lastPostedAt.toDate(), { addSuffix: true })}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={loadSocialData}
+                        className="text-iron-500 hover:text-iron-300 transition-colors"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleGenerateThread(false)}
+                        disabled={socialGenerating}
+                        className="btn-secondary text-sm flex items-center gap-1.5"
+                      >
+                        {socialGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                        Generate Thread
+                      </button>
+                      <button
+                        onClick={() => handleGenerateThread(true)}
+                        disabled={socialGenerating || socialPosting}
+                        className="btn-primary text-sm flex items-center gap-1.5"
+                      >
+                        {socialPosting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                        Generate & Post Now
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Queue ── */}
+              {socialSubTab === 'queue' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-display text-lg text-iron-100">Queued Threads</h2>
+                    <button onClick={loadSocialData} className="text-xs text-iron-500 hover:text-iron-300 transition-colors">Refresh</button>
+                  </div>
+                  {socialThreads.filter(t => t.status === 'queued').length === 0 ? (
+                    <div className="card-steel p-8 text-center">
+                      <Clock className="w-10 h-10 text-iron-700 mx-auto mb-2" />
+                      <p className="text-sm text-iron-500">No threads in queue.</p>
+                    </div>
+                  ) : (
+                    socialThreads.filter(t => t.status === 'queued').map(thread => (
+                      <div key={thread.id} className="card-steel p-4">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider rounded font-semibold bg-blue-500/15 text-blue-400">
+                              {TOPIC_LABELS[thread.topic] || thread.topic}
+                            </span>
+                            <span className={`px-2 py-0.5 text-[10px] uppercase tracking-wider rounded font-semibold ${
+                              thread.contentType === 'education' ? 'bg-emerald-500/15 text-emerald-400'
+                              : thread.contentType === 'promo' ? 'bg-flame-500/15 text-flame-400'
+                              : 'bg-purple-500/15 text-purple-400'
+                            }`}>{thread.contentType}</span>
+                            <span className="text-xs text-iron-500">{thread.tweetCount} tweets</span>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              onClick={() => handlePostThread(thread.id)}
+                              disabled={socialPosting === thread.id}
+                              className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-colors"
+                              title="Post now"
+                            >
+                              {socialPosting === thread.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteThread(thread.id)}
+                              className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Preview toggle */}
+                        <button
+                          onClick={() => setExpandedThread(expandedThread === thread.id ? null : thread.id)}
+                          className="text-xs text-iron-500 hover:text-iron-300 transition-colors mb-2"
+                        >
+                          {expandedThread === thread.id ? 'Hide preview' : 'Show preview'}
+                        </button>
+
+                        {expandedThread === thread.id && (
+                          <div className="space-y-2 mt-2 border-t border-iron-800 pt-3">
+                            {thread.tweets?.map((tweet, i) => (
+                              <div key={i} className="flex gap-2">
+                                <span className="text-[10px] text-iron-600 font-mono w-4 flex-shrink-0 mt-0.5">{i + 1}</span>
+                                <p className="text-sm text-iron-300 leading-relaxed">{tweet.text}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* ── History ── */}
+              {socialSubTab === 'history' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-display text-lg text-iron-100">Post History</h2>
+                    <button onClick={loadSocialData} className="text-xs text-iron-500 hover:text-iron-300 transition-colors">Refresh</button>
+                  </div>
+                  {socialThreads.filter(t => t.status === 'posted' || t.status === 'failed').length === 0 ? (
+                    <div className="card-steel p-8 text-center">
+                      <Share2 className="w-10 h-10 text-iron-700 mx-auto mb-2" />
+                      <p className="text-sm text-iron-500">No posts yet.</p>
+                    </div>
+                  ) : (
+                    socialThreads
+                      .filter(t => t.status === 'posted' || t.status === 'failed')
+                      .map(thread => (
+                        <div key={thread.id} className={`card-steel p-4 ${thread.status === 'failed' ? 'border-l-2 border-l-red-500' : ''}`}>
+                          <div className="flex items-start justify-between gap-3 mb-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`px-2 py-0.5 text-[10px] uppercase tracking-wider rounded font-semibold ${
+                                thread.status === 'failed' ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400'
+                              }`}>{thread.status}</span>
+                              <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider rounded font-semibold bg-blue-500/15 text-blue-400">
+                                {TOPIC_LABELS[thread.topic] || thread.topic}
+                              </span>
+                              <span className="text-xs text-iron-500">{thread.tweetCount} tweets</span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              {thread.threadUrl && (
+                                <a
+                                  href={thread.threadUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 rounded-lg text-iron-400 hover:text-iron-200 hover:bg-iron-800 transition-colors"
+                                  title="View on X"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </a>
+                              )}
+                              {thread.status === 'failed' && (
+                                <button
+                                  onClick={() => handleRetryThread(thread.id)}
+                                  className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-colors"
+                                  title="Retry"
+                                >
+                                  <RefreshCw className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {thread.error && (
+                            <p className="text-xs text-red-400 mb-2">{thread.error}</p>
+                          )}
+
+                          <div className="flex items-center gap-3 text-xs text-iron-500">
+                            {thread.postedAt?.toDate && (
+                              <span>{format(thread.postedAt.toDate(), 'MMM d, h:mm a')}</span>
+                            )}
+                            {thread.impressions > 0 && <span>{thread.impressions.toLocaleString()} views</span>}
+                            {thread.likes > 0 && <span>{thread.likes} likes</span>}
+                            {thread.retweets > 0 && <span>{thread.retweets} RTs</span>}
+                          </div>
+
+                          {/* Preview toggle */}
+                          <button
+                            onClick={() => setExpandedThread(expandedThread === thread.id ? null : thread.id)}
+                            className="text-xs text-iron-500 hover:text-iron-300 transition-colors mt-2"
+                          >
+                            {expandedThread === thread.id ? 'Hide' : 'Show thread'}
+                          </button>
+
+                          {expandedThread === thread.id && (
+                            <div className="space-y-2 mt-2 border-t border-iron-800 pt-3">
+                              {thread.tweets?.map((tweet, i) => (
+                                <div key={i} className="flex gap-2">
+                                  <span className="text-[10px] text-iron-600 font-mono w-4 flex-shrink-0 mt-0.5">{i + 1}</span>
+                                  <p className="text-sm text-iron-300 leading-relaxed">{tweet.text}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                  )}
+                </div>
+              )}
+
+              {/* ── Settings ── */}
+              {socialSubTab === 'settings' && socialSettings && (
+                <div className="max-w-lg space-y-6">
+                  {/* Master toggle */}
+                  <div className="card-steel p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-iron-100">Auto-posting</h3>
+                        <p className="text-xs text-iron-500 mt-0.5">Automatically generate and post threads on schedule</p>
+                      </div>
+                      <button
+                        onClick={() => setSocialSettings(prev => ({ ...prev, enabled: !prev.enabled }))}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${
+                          socialSettings.enabled ? 'bg-flame-500' : 'bg-iron-700'
+                        }`}
+                      >
+                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                          socialSettings.enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Frequency */}
+                  <div className="card-steel p-4">
+                    <h3 className="text-sm font-semibold text-iron-100 mb-3">Posting Frequency</h3>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[6, 8, 12, 24].map(h => (
+                        <button
+                          key={h}
+                          onClick={() => setSocialSettings(prev => ({ ...prev, frequencyHours: h }))}
+                          className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                            socialSettings.frequencyHours === h
+                              ? 'bg-flame-500 text-white'
+                              : 'bg-iron-800 text-iron-400 hover:bg-iron-700'
+                          }`}
+                        >
+                          {h}h
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-iron-500 mt-2">
+                      ~{Math.round(24 / (socialSettings.frequencyHours || 12))} posts per day
+                    </p>
+                  </div>
+
+                  {/* Topic weights */}
+                  <div className="card-steel p-4">
+                    <h3 className="text-sm font-semibold text-iron-100 mb-3">Topic Weights</h3>
+                    <p className="text-xs text-iron-500 mb-3">Higher weight = more likely to be selected. Recent topics are auto-avoided.</p>
+                    <div className="space-y-2">
+                      {Object.entries(TOPIC_LABELS).map(([key, label]) => (
+                        <div key={key} className="flex items-center gap-3">
+                          <span className="text-sm text-iron-300 w-32 flex-shrink-0">{label}</span>
+                          <input
+                            type="range"
+                            min="0"
+                            max="30"
+                            value={socialSettings.topicWeights?.[key] || 0}
+                            onChange={(e) => setSocialSettings(prev => ({
+                              ...prev,
+                              topicWeights: { ...prev.topicWeights, [key]: parseInt(e.target.value) }
+                            }))}
+                            className="flex-1 accent-flame-500"
+                          />
+                          <span className="text-xs text-iron-500 w-6 text-right">{socialSettings.topicWeights?.[key] || 0}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Content type mix */}
+                  <div className="card-steel p-4">
+                    <h3 className="text-sm font-semibold text-iron-100 mb-3">Content Type Mix (%)</h3>
+                    <div className="space-y-2">
+                      {[
+                        { key: 'education', label: 'Education', desc: 'Pure fitness tips, no app mention' },
+                        { key: 'promo', label: 'Promo', desc: 'Tips + subtle BenchOnly plug in last tweet' },
+                        { key: 'engagement', label: 'Engagement', desc: 'Hot takes, debate starters, viral hooks' },
+                      ].map(ct => (
+                        <div key={ct.key} className="flex items-center gap-3">
+                          <div className="w-28 flex-shrink-0">
+                            <span className="text-sm text-iron-300">{ct.label}</span>
+                            <p className="text-[10px] text-iron-600 leading-tight">{ct.desc}</p>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={socialSettings.contentTypeMix?.[ct.key] || 0}
+                            onChange={(e) => setSocialSettings(prev => ({
+                              ...prev,
+                              contentTypeMix: { ...prev.contentTypeMix, [ct.key]: parseInt(e.target.value) || 0 }
+                            }))}
+                            className="input-field w-20 text-center"
+                          />
+                          <span className="text-xs text-iron-500">%</span>
+                        </div>
+                      ))}
+                      {(() => {
+                        const total = Object.values(socialSettings.contentTypeMix || {}).reduce((s, v) => s + v, 0)
+                        return total !== 100 && (
+                          <p className="text-xs text-amber-400 mt-1">Total: {total}% (should be 100%)</p>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Thread length */}
+                  <div className="card-steel p-4">
+                    <h3 className="text-sm font-semibold text-iron-100 mb-3">Thread Length</h3>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-iron-400">Min</span>
+                      <input
+                        type="number"
+                        min="3"
+                        max="10"
+                        value={socialSettings.threadLength?.min || 4}
+                        onChange={(e) => setSocialSettings(prev => ({
+                          ...prev,
+                          threadLength: { ...prev.threadLength, min: parseInt(e.target.value) || 4 }
+                        }))}
+                        className="input-field w-16 text-center"
+                      />
+                      <span className="text-sm text-iron-400">Max</span>
+                      <input
+                        type="number"
+                        min="3"
+                        max="15"
+                        value={socialSettings.threadLength?.max || 8}
+                        onChange={(e) => setSocialSettings(prev => ({
+                          ...prev,
+                          threadLength: { ...prev.threadLength, max: parseInt(e.target.value) || 8 }
+                        }))}
+                        className="input-field w-16 text-center"
+                      />
+                      <span className="text-sm text-iron-500">tweets</span>
+                    </div>
+                  </div>
+
+                  {/* Save */}
+                  <button
+                    onClick={handleSaveSocialSettings}
+                    disabled={socialSettingsSaving}
+                    className="btn-primary w-full flex items-center justify-center gap-2"
+                  >
+                    {socialSettingsSaving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : socialSettingsSaved ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    {socialSettingsSaved ? 'Saved!' : 'Save Settings'}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

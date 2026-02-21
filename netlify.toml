@@ -43,6 +43,16 @@
 [functions."analyze-form-background"]
   type = "background"
 
+# Social thread engine
+[functions."generate-social-thread"]
+  timeout = 26
+
+[functions."post-social-thread"]
+  timeout = 26
+
+[functions."social-cron"]
+  schedule = "0 */2 * * *"
+
 # Headers for security and caching
 [[headers]]
   for = "/*"
