@@ -23,6 +23,8 @@ import {
   ChevronUp,
   ArrowRight,
   Clock,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { creditService } from '../services/firestore'
@@ -30,6 +32,7 @@ import { collection, query, where, orderBy, limit, getDocs, doc, onSnapshot, set
 import { db } from '../services/firebase'
 import usePageTitle from '../utils/usePageTitle'
 import { apiUrl } from '../utils/platform'
+import { estimatePoses } from '../utils/poseEstimation'
 
 const FRAME_PRESETS = {
   quick:    { frames: 5,  label: 'Quick',    desc: '5 frames',  credits: 10 },
@@ -101,6 +104,182 @@ function severityIcon(sev) {
   if (sev === 'high') return '🔴'
   if (sev === 'medium') return '🟡'
   return '🟢'
+}
+
+// ─── Camera Guide ───
+
+const CAMERA_GUIDES = {
+  'bench press':       { angle: 'Side view',        height: 'Chest height', mode: 'Landscape', tip: 'Place phone on the floor beside the bench pointing toward you — level with your chest' },
+  'front squat':       { angle: 'Side view',        height: 'Hip height',   mode: 'Landscape', tip: 'Set phone on a rack safety bar or box to your right or left at hip height' },
+  'squat':             { angle: 'Side view',        height: 'Hip height',   mode: 'Landscape', tip: 'Set phone on a rack safety bar or box to your right or left at hip height' },
+  'romanian deadlift': { angle: 'Side view',        height: 'Hip height',   mode: 'Landscape', tip: 'Same as deadlift — side profile at hip height shows the hip hinge and back angle best' },
+  'rdl':               { angle: 'Side view',        height: 'Hip height',   mode: 'Landscape', tip: 'Same as deadlift — side profile at hip height shows the hip hinge and back angle best' },
+  'deadlift':          { angle: 'Side view',        height: 'Hip height',   mode: 'Landscape', tip: 'Set phone on a box or plate stack to your side — hip height gives the clearest bar path' },
+  'overhead press':    { angle: 'Side view',        height: 'Hip height',   mode: 'Landscape', tip: 'Side view shows bar path and lockout position clearly' },
+  'barbell row':       { angle: 'Side view',        height: 'Hip height',   mode: 'Landscape', tip: 'Side view shows your hinge angle and elbow drive path' },
+  'pull-up':           { angle: 'Front view',       height: 'Chest height', mode: 'Portrait',  tip: 'Face the camera — place phone 2–3m in front on a surface at chest height' },
+  'chin-up':           { angle: 'Front view',       height: 'Chest height', mode: 'Portrait',  tip: 'Face the camera — place phone 2–3m in front on a surface at chest height' },
+  'hip thrust':        { angle: 'Side view',        height: 'Hip height',   mode: 'Landscape', tip: 'Side view shows lockout and bar position over hips most clearly' },
+  'lunge':             { angle: 'Side view',        height: 'Hip height',   mode: 'Landscape', tip: 'Side view shows step length, knee tracking, and torso angle' },
+}
+
+function CameraGuide({ exercise }) {
+  const ex = (exercise || '').toLowerCase()
+  const guide = Object.entries(CAMERA_GUIDES).find(([key]) => ex.includes(key))?.[1] || {
+    angle: '45° or side view', height: 'Hip height', mode: 'Landscape',
+    tip: 'Side view gives the most accurate joint angle measurements — set your phone at hip height',
+  }
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
+      <Camera className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+      <div>
+        <p className="text-xs font-semibold text-blue-300 mb-1">Camera Placement</p>
+        <p className="text-xs text-iron-400 leading-relaxed mb-2">{guide.tip}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {[guide.angle, guide.height, guide.mode].map((t) => (
+            <span key={t} className="text-[10px] px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-300">{t}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Annotated Frame (skeleton overlay) ───
+
+const SKELETON_CONNECTIONS = [
+  ['leftShoulder', 'rightShoulder'],
+  ['leftShoulder', 'leftElbow'],   ['leftElbow',  'leftWrist'],
+  ['rightShoulder', 'rightElbow'], ['rightElbow', 'rightWrist'],
+  ['leftShoulder', 'leftHip'],     ['rightShoulder', 'rightHip'],
+  ['leftHip', 'rightHip'],
+  ['leftHip', 'leftKnee'],   ['leftKnee',  'leftAnkle'],
+  ['rightHip', 'rightKnee'], ['rightKnee', 'rightAnkle'],
+]
+
+function AnnotatedFrame({ dataUrl, joints, metrics, exercise, show }) {
+  const containerRef = useRef(null)
+  const canvasRef = useRef(null)
+  const imgRef = useRef(null)
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current
+    const img = imgRef.current
+    const container = containerRef.current
+    if (!canvas || !container) return
+
+    const cW = container.offsetWidth
+    const cH = container.offsetHeight
+    if (!cW || !cH) return
+
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = cW * dpr
+    canvas.height = cH * dpr
+    const ctx = canvas.getContext('2d')
+    ctx.scale(dpr, dpr)
+    ctx.clearRect(0, 0, cW, cH)
+
+    if (!show || !joints || !img?.naturalWidth) return
+
+    // Compute letterbox rect for object-contain fitting
+    const iW = img.naturalWidth
+    const iH = img.naturalHeight
+    const scale = Math.min(cW / iW, cH / iH)
+    const rW = iW * scale
+    const rH = iH * scale
+    const ox = (cW - rW) / 2
+    const oy = (cH - rH) / 2
+
+    // Convert normalized landmark (0–1) to canvas pixel
+    const toPx = (j) => j ? { x: j.x * rW + ox, y: j.y * rH + oy, v: j.v ?? 1 } : null
+
+    // Draw skeleton lines
+    const lw = Math.max(1.5, cW / 220)
+    ctx.lineWidth = lw
+    SKELETON_CONNECTIONS.forEach(([a, b]) => {
+      const pa = toPx(joints[a])
+      const pb = toPx(joints[b])
+      if (!pa || !pb || pa.v < 0.25 || pb.v < 0.25) return
+      const alpha = Math.min(0.8, (pa.v + pb.v) / 2)
+      ctx.strokeStyle = `rgba(255,255,255,${alpha})`
+      ctx.beginPath()
+      ctx.moveTo(pa.x, pa.y)
+      ctx.lineTo(pb.x, pb.y)
+      ctx.stroke()
+    })
+
+    // Draw joint dots
+    const dotR = Math.max(3, cW / 130)
+    Object.values(joints).forEach((j) => {
+      if (!j || j.v < 0.3) return
+      const p = toPx(j)
+      if (!p) return
+      ctx.fillStyle = `rgba(251,146,60,${Math.min(0.95, j.v)})`
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2)
+      ctx.fill()
+    })
+
+    // Draw angle labels at key joints
+    if (!metrics) return
+    const ex = (exercise || '').toLowerCase()
+    const fontSize = Math.max(10, Math.round(cW / 42))
+    ctx.font = `bold ${fontSize}px monospace`
+    ctx.textBaseline = 'top'
+
+    const elbowColor = ex.includes('bench')
+      ? (a) => a >= 80 && a <= 105 ? '#4ade80' : a >= 65 && a <= 120 ? '#facc15' : '#f87171'
+      : () => '#94a3b8'
+
+    const kneeColor = (ex.includes('squat') || ex.includes('deadlift') || ex.includes('rdl'))
+      ? (a) => a <= 90 ? '#4ade80' : a <= 115 ? '#facc15' : '#f87171'
+      : () => '#94a3b8'
+
+    const drawLabel = (jointName, angle, colorFn) => {
+      if (!angle || !joints[jointName] || (joints[jointName]?.v ?? 0) < 0.4) return
+      const p = toPx(joints[jointName])
+      if (!p) return
+      const label = `${angle}°`
+      const color = colorFn(angle)
+      const tw = ctx.measureText(label).width
+      const pad = 3
+      const bx = p.x + dotR + 4
+      const by = p.y - fontSize / 2 - pad
+      ctx.fillStyle = 'rgba(0,0,0,0.72)'
+      ctx.fillRect(bx - pad, by, tw + pad * 2, fontSize + pad * 2)
+      ctx.fillStyle = color
+      ctx.fillText(label, bx, by + pad)
+    }
+
+    drawLabel('leftElbow',  metrics?.elbowFlexion?.left,  elbowColor)
+    drawLabel('rightElbow', metrics?.elbowFlexion?.right, elbowColor)
+    drawLabel('leftKnee',   metrics?.kneeAngle?.left,     kneeColor)
+    drawLabel('rightKnee',  metrics?.kneeAngle?.right,    kneeColor)
+    drawLabel('leftHip',    metrics?.hipAngle?.left,      () => '#94a3b8')
+    drawLabel('rightHip',   metrics?.hipAngle?.right,     () => '#94a3b8')
+  }, [joints, metrics, exercise, show])
+
+  useEffect(() => {
+    const img = imgRef.current
+    if (img?.complete && img.naturalWidth) draw()
+  }, [draw])
+
+  return (
+    <div ref={containerRef} className="relative w-full aspect-video bg-black">
+      <img
+        ref={imgRef}
+        src={dataUrl}
+        alt="Frame"
+        className="w-full h-full object-contain"
+        onLoad={draw}
+      />
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 pointer-events-none"
+        style={{ width: '100%', height: '100%' }}
+      />
+    </div>
+  )
 }
 
 // ─── Score Arc ───
@@ -217,6 +396,10 @@ export default function FormCheckPage() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
   const [analyzingTip, setAnalyzingTip] = useState(0)
   const [showAllRecs, setShowAllRecs] = useState(false)
+  const [poseData, setPoseData] = useState([])
+  const [poseLandmarks, setPoseLandmarks] = useState([])
+  const [showOverlay, setShowOverlay] = useState(true)
+  const [extractPhase, setExtractPhase] = useState('')
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -428,7 +611,7 @@ export default function FormCheckPage() {
           motionScores.push({ time, score: diff })
         }
         prevData = new Uint8Array(imgData)
-        setExtractProgress(Math.round(((i + 1) / scanCount) * 30))
+        setExtractProgress(Math.round(((i + 1) / scanCount) * 20))
       }
 
       // ─── Burst detection: find where the actual lift happens ───
@@ -520,9 +703,26 @@ export default function FormCheckPage() {
         dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
         base64 = dataUrl.split(',')[1]
         extractedFrames.push({ dataUrl, base64, timestamp: time, index: i + 1 })
-        setExtractProgress(30 + Math.round(((i + 1) / totalFrames) * 70))
+        setExtractProgress(20 + Math.round(((i + 1) / totalFrames) * 40))
       }
       setFrames(extractedFrames)
+
+      // ─── Pose estimation (runs in-browser, no server cost) ───
+      let poses = []
+      try {
+        poses = await estimatePoses(extractedFrames, (msg) => {
+          setExtractPhase(msg)
+          setExtractProgress(prev => Math.min(prev + Math.round(35 / extractedFrames.length), 95))
+        })
+      } catch (poseErr) {
+        console.warn('[pose] Estimation skipped:', poseErr.message)
+      }
+      // Split: raw joints stay client-side for overlay, metrics go to server
+      const poseMetrics = poses.map(({ joints: _, ...metrics }) => metrics)
+      const landmarks = poses.map(p => p.joints || null)
+      setPoseData(poseMetrics)
+      setPoseLandmarks(landmarks)
+      setExtractProgress(100)
       setStep('preview')
     } catch (err) {
       console.error('Frame extraction error:', err)
@@ -583,6 +783,7 @@ export default function FormCheckPage() {
           exercise: exercise || undefined,
           model: isPremium ? 'premium' : 'standard',
           quality,
+          poseData: poseData.length > 0 ? poseData : undefined,
         }),
       })
 
@@ -669,6 +870,7 @@ export default function FormCheckPage() {
     setVideoUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null })
     setFrames([]); setNote(''); setModel('standard'); setQuality('standard')
     setAnalysis(null); setError(null); setActiveFrame(0); setShowAllRecs(false)
+    setPoseData([]); setPoseLandmarks([]); setExtractPhase('')
   }
 
   const cfa = analysis?.frames?.[activeFrame]
@@ -783,6 +985,8 @@ export default function FormCheckPage() {
             </select>
           </div>
 
+          <CameraGuide exercise={exercise} />
+
           <div>
             <label className="text-sm text-iron-400 mb-1.5 block">Note (optional)</label>
             <input type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200}
@@ -828,7 +1032,7 @@ export default function FormCheckPage() {
           <div className="flex items-start gap-2.5 p-3 bg-iron-800/40 rounded-xl">
             <Info className="w-4 h-4 text-iron-500 mt-0.5 flex-shrink-0" />
             <p className="text-xs text-iron-500 leading-relaxed">
-              Video is processed on your device — only extracted frames are sent. For best results, trim your video to start near your first rep. Side or 45° angle recommended.
+              Video is processed on your device — only extracted frames are sent for AI analysis. Trim your clip to start right before your first rep for the best frame selection.
             </p>
           </div>
 
@@ -900,10 +1104,12 @@ export default function FormCheckPage() {
             </div>
           </div>
           <p className="text-iron-200 font-semibold mb-1">
-            {extractProgress <= 30 ? 'Scanning for the actual lift...' : 'Extracting key frames...'}
+            {extractProgress <= 20 ? 'Scanning for the actual lift...' : extractProgress <= 60 ? 'Extracting key frames...' : 'Mapping movement...'}
           </p>
           <p className="text-xs text-iron-500 mb-4">
-            {extractProgress <= 30 ? 'Detecting when the lift starts' : `Capturing ${FRAME_PRESETS[quality].frames} frames`}
+            {extractProgress <= 20 ? 'Detecting when the lift starts'
+              : extractProgress <= 60 ? `Capturing ${FRAME_PRESETS[quality].frames} frames`
+              : extractPhase || 'Running pose estimation on each frame'}
           </p>
           <div className="w-56 h-2.5 bg-iron-800 rounded-full mx-auto overflow-hidden">
             <motion.div className="h-full bg-gradient-to-r from-flame-500 to-flame-400 rounded-full"
@@ -918,7 +1124,18 @@ export default function FormCheckPage() {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
           <div className="card-steel p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-iron-200">{frames.length} frames captured</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-iron-200">{frames.length} frames captured</h3>
+                {poseData.length > 0 && (() => {
+                  const detected = poseData.filter(p => p.poseDetected).length
+                  return detected > 0 ? (
+                    <span className="flex items-center gap-1 text-[10px] font-medium text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+                      Movement mapped
+                    </span>
+                  ) : null
+                })()}
+              </div>
               <span className="text-[11px] text-iron-500">
                 {frames.length > 0 && `${frames[0].timestamp.toFixed(1)}s – ${frames[frames.length-1].timestamp.toFixed(1)}s`}
               </span>
@@ -1068,26 +1285,42 @@ export default function FormCheckPage() {
             <motion.div className="card-steel overflow-hidden" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
               <h3 className="text-xs font-semibold text-iron-400 uppercase tracking-wider px-4 pt-4 pb-2">Frame-by-Frame</h3>
 
-              <div className="relative bg-black"
+              <div className="relative"
                 onTouchStart={(e) => { e.currentTarget.dataset.touchX = e.touches[0].clientX }}
                 onTouchEnd={(e) => {
                   const dx = e.changedTouches[0].clientX - Number(e.currentTarget.dataset.touchX || 0)
                   if (dx > 50 && activeFrame > 0) setActiveFrame(activeFrame - 1)
                   if (dx < -50 && activeFrame < frames.length - 1) setActiveFrame(activeFrame + 1)
                 }}>
-                <AnimatePresence mode="wait">
-                  <motion.img key={activeFrame} src={frames[activeFrame]?.dataUrl} alt={`Frame ${activeFrame + 1}`}
-                    className="w-full aspect-video object-contain"
-                    initial={{ opacity: 0.6 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }} />
-                </AnimatePresence>
+                <AnnotatedFrame
+                  dataUrl={frames[activeFrame]?.dataUrl}
+                  joints={poseLandmarks[activeFrame] || null}
+                  metrics={poseData[activeFrame] || null}
+                  exercise={analysis.exercise}
+                  show={showOverlay}
+                />
 
+                {/* Score badge */}
                 <div className="absolute top-3 left-3 flex items-center gap-2">
                   {cfa && (Number(cfa.formScore) > 0
                     ? <span className={`text-xs font-bold px-2 py-1 rounded-lg backdrop-blur-sm ${scoreBg(Number(cfa.formScore))} ${scoreColor(Number(cfa.formScore))}`}>{cfa.formScore}/10</span>
                     : <span className="text-xs font-medium px-2 py-1 rounded-lg backdrop-blur-sm bg-iron-700/80 text-iron-400">Not scored</span>
                   )}
+                  {cfa?.phase && <PhasePill phase={cfa.phase} />}
                 </div>
-                {cfa?.phase && <div className="absolute top-3 right-3"><PhasePill phase={cfa.phase} /></div>}
+
+                {/* Overlay toggle — only shown when pose data exists */}
+                {poseLandmarks.some(l => l !== null) && (
+                  <button
+                    onClick={() => setShowOverlay(v => !v)}
+                    className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm hover:bg-black/80 transition-colors"
+                    title={showOverlay ? 'Hide skeleton overlay' : 'Show skeleton overlay'}
+                  >
+                    {showOverlay
+                      ? <Eye className="w-4 h-4 text-white/80" />
+                      : <EyeOff className="w-4 h-4 text-white/40" />}
+                  </button>
+                )}
               </div>
 
               {/* Navigation bar */}

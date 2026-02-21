@@ -414,7 +414,15 @@ function SectionContent({ id }) {
     case 'formcheck':
       return (
         <div>
-          <h1 className="text-2xl lg:text-3xl font-display text-iron-50 mb-3">AI Form Check</h1>
+          <div className="flex items-center gap-3 mb-3">
+            <h1 className="text-2xl lg:text-3xl font-display text-iron-50">AI Form Check</h1>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">BETA</span>
+          </div>
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 mb-6">
+            <p className="text-sm text-amber-300/80 leading-relaxed">
+              AI Form Check is currently in beta. Results may vary depending on video quality, lighting, and camera angle. We're actively improving accuracy.
+            </p>
+          </div>
           <p className="text-iron-300 leading-relaxed mb-6">
             Upload a video of your lift and get instant AI-powered form analysis. The system extracts
             key frames, identifies the exercise, and scores each phase of the movement.
@@ -700,10 +708,17 @@ function SectionContent({ id }) {
     case 'credits':
       return (
         <div>
-          <h1 className="text-2xl lg:text-3xl font-display text-iron-50 mb-3">Credits</h1>
+          <div className="flex items-center gap-3 mb-3">
+            <h1 className="text-2xl lg:text-3xl font-display text-iron-50">Credits</h1>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">BETA</span>
+          </div>
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 mb-6">
+            <p className="text-sm text-amber-300/80 leading-relaxed">
+              The credit system is in beta. Pricing and earning rates may change as we continue development.
+            </p>
+          </div>
           <p className="text-iron-300 leading-relaxed mb-6">
-            Credits are the currency for AI features. New accounts start with 50 free credits, and you can
-            earn more by completing tasks.
+            Credits power AI features. You start with 50 and earn more by completing onboarding tasks and training consistently.
           </p>
 
           <h2 className="text-lg font-display text-iron-100 mb-3">Earning Credits</h2>
@@ -853,7 +868,7 @@ function SectionContent({ id }) {
 export default function DocsPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, loading: authLoading } = useAuth()
+  const { user } = useAuth()
   const [activeSection, setActiveSection] = useState('overview')
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const contentRef = useRef(null)

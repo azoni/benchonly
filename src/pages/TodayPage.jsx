@@ -928,11 +928,11 @@ export default function TodayPage() {
                   } else {
                     navigate(`/workouts/${dayWorkout.id}`)
                   }
-                } else if (isEmpty) {
-                  // Truly empty day — offer to generate
+                } else if (isEmpty && !isPastDay) {
+                  // Truly empty future/today — offer to generate
                   navigate(`/workouts/generate?date=${dayStr}`)
                 }
-                // If it's a recurring-schedule-only dot (green but no workout ID), do nothing
+                // Past empty days and recurring-schedule-only dots do nothing
               }
 
               return (

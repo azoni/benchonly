@@ -75,15 +75,22 @@ export async function deductCredits(userId, feature, customCost = null, isAdmin 
 
   try {
     const userRef = db.collection('users').doc(userId);
-    const snap = await userRef.get();
-    const balance = snap.exists ? (snap.data().credits || 0) : 0;
+    let result;
 
-    if (balance < cost) {
-      return { success: false, balance, cost, error: 'insufficient_credits' };
-    }
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(userRef);
+      const balance = snap.exists ? (snap.data().credits || 0) : 0;
 
-    await userRef.update({ credits: admin.firestore.FieldValue.increment(-cost) });
-    return { success: true, balance: balance - cost, cost };
+      if (balance < cost) {
+        result = { success: false, balance, cost, error: 'insufficient_credits' };
+        return;
+      }
+
+      tx.update(userRef, { credits: admin.firestore.FieldValue.increment(-cost) });
+      result = { success: true, balance: balance - cost, cost };
+    });
+
+    return result;
   } catch (err) {
     console.error('[credits] Deduction failed:', err.message);
     return { success: false, error: 'Credit deduction failed' };

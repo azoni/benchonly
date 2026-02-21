@@ -518,6 +518,7 @@ export default function LoginPage() {
                   <div className="flex items-center gap-2 mb-3">
                     <Video className="w-5 h-5 text-purple-400" />
                     <h2 className="font-display text-2xl text-iron-100">AI FORM CHECK</h2>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">BETA</span>
                   </div>
                   <p className="text-iron-400 mb-4 leading-relaxed">
                     Upload a video of your lift and get instant frame-by-frame form analysis from AI. 
@@ -551,7 +552,7 @@ export default function LoginPage() {
               <div className="flex flex-wrap gap-2 justify-center">
                 {[
                   { icon: Sparkles, label: 'AI Workouts' },
-                  { icon: Video, label: 'AI Form Check' },
+                  { icon: Video, label: 'AI Form Check (Beta)' },
                   { icon: Users, label: 'Group Training' },
                   { icon: Target, label: 'Goal Tracking' },
                   { icon: HelpCircle, label: 'Exercise Info' },
@@ -583,7 +584,7 @@ export default function LoginPage() {
                 START TRAINING TODAY
               </h2>
               <p className="text-iron-400 mb-6">
-                Free to use. 50 credits to start — earn more as you train.
+                Free to use. Earn credits by training and completing goals.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button

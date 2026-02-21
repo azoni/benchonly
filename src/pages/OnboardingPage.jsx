@@ -8,12 +8,14 @@ import {
   Target,
   Zap,
   User,
+  Users,
   Ruler,
   Scale,
   Calendar,
   Loader2,
   Sparkles,
   Check,
+  Brain,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
@@ -392,48 +394,25 @@ export default function OnboardingPage() {
             <div>
               <h2 className="text-3xl font-display text-iron-100">You're All Set</h2>
               <p className="text-iron-400 mt-3 max-w-xs mx-auto">
-                You've got <span className="text-flame-400 font-semibold">50 free credits</span> to 
-                generate AI workouts and chat with your training assistant.
+                You've got <span className="text-flame-400 font-semibold">50 free credits</span> to start,
+                and you can earn more by completing tasks and training consistently.
               </p>
             </div>
 
             <div className="max-w-xs mx-auto space-y-2 text-left">
-              <div className="flex items-center gap-3 bg-iron-800/50 rounded-lg p-3">
-                <div className="w-6 h-6 rounded-full bg-flame-500/20 flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-3 h-3 text-flame-400" />
+              {[
+                { icon: Sparkles, color: 'flame', label: 'AI-generated workouts tailored to your history' },
+                { icon: Target, color: 'cyan', label: 'Goal tracking with automatic progress updates' },
+                { icon: Users, color: 'blue', label: 'Group training with friends and teammates' },
+                { icon: Brain, color: 'purple', label: 'AI coach that knows your full training data' },
+              ].map(({ icon: Icon, color, label }, i) => (
+                <div key={i} className="flex items-center gap-3 bg-iron-800/50 rounded-lg p-3">
+                  <div className={`w-6 h-6 rounded-full bg-${color}-500/20 flex items-center justify-center flex-shrink-0`}>
+                    <Icon className={`w-3 h-3 text-${color}-400`} />
+                  </div>
+                  <p className="text-sm text-iron-300">{label}</p>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm text-iron-300">AI Chat</p>
-                </div>
-                <span className="text-xs text-iron-500">1 credit / msg</span>
-              </div>
-              <div className="flex items-center gap-3 bg-iron-800/50 rounded-lg p-3">
-                <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                  <Dumbbell className="w-3 h-3 text-blue-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-iron-300">Workout Generation</p>
-                </div>
-                <span className="text-xs text-iron-500">5 credits</span>
-              </div>
-              <div className="flex items-center gap-3 bg-iron-800/50 rounded-lg p-3">
-                <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
-                  <Target className="w-3 h-3 text-cyan-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-iron-300">Group Workout</p>
-                </div>
-                <span className="text-xs text-iron-500">5 credits / athlete</span>
-              </div>
-              <div className="flex items-center gap-3 bg-iron-800/50 rounded-lg p-3">
-                <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                  <Calendar className="w-3 h-3 text-amber-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-iron-300">Training Program</p>
-                </div>
-                <span className="text-xs text-iron-500">10 credits</span>
-              </div>
+              ))}
             </div>
           </div>
         )

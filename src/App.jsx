@@ -33,6 +33,7 @@ const ProgramsPage = lazy(() => import('./pages/ProgramsPage'))
 const ProgramDetailPage = lazy(() => import('./pages/ProgramDetailPage'))
 const DocsPage = lazy(() => import('./pages/DocsPage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
+const CoachesPage = lazy(() => import('./pages/CoachesPage'))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
 const TrainerPage = lazy(() => import('./pages/TrainerPage'))
 const FormCheckPage = lazy(() => import('./pages/FormCheckPage'))
@@ -152,6 +153,7 @@ export default function App() {
 
       <Route path="/docs" element={<Suspense fallback={<PageLoader />}><DocsPage /></Suspense>} />
       <Route path="/privacy" element={<Suspense fallback={<PageLoader />}><PrivacyPage /></Suspense>} />
+      <Route path="/coaches" element={<Suspense fallback={<PageLoader />}><CoachesPage /></Suspense>} />
       
       <Route 
         path="/onboarding" 
