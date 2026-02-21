@@ -25,6 +25,8 @@ import {
   Clock,
   Eye,
   EyeOff,
+  Maximize2,
+  X,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { creditService } from '../services/firestore'
@@ -399,6 +401,7 @@ export default function FormCheckPage() {
   const [poseData, setPoseData] = useState([])
   const [poseLandmarks, setPoseLandmarks] = useState([])
   const [showOverlay, setShowOverlay] = useState(true)
+  const [fullscreenFrame, setFullscreenFrame] = useState(false)
   const [extractPhase, setExtractPhase] = useState('')
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -1313,7 +1316,7 @@ export default function FormCheckPage() {
                 {poseLandmarks.some(l => l !== null) && (
                   <button
                     onClick={() => setShowOverlay(v => !v)}
-                    className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm hover:bg-black/80 transition-colors"
+                    className="absolute top-3 right-12 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm hover:bg-black/80 transition-colors"
                     title={showOverlay ? 'Hide skeleton overlay' : 'Show skeleton overlay'}
                   >
                     {showOverlay
@@ -1321,6 +1324,15 @@ export default function FormCheckPage() {
                       : <EyeOff className="w-4 h-4 text-white/40" />}
                   </button>
                 )}
+
+                {/* Fullscreen expand */}
+                <button
+                  onClick={() => setFullscreenFrame(true)}
+                  className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm hover:bg-black/80 transition-colors"
+                  title="Fullscreen"
+                >
+                  <Maximize2 className="w-4 h-4 text-white/80" />
+                </button>
               </div>
 
               {/* Navigation bar */}
@@ -1369,6 +1381,102 @@ export default function FormCheckPage() {
               )}
             </motion.div>
           )}
+
+          {/* Fullscreen frame modal */}
+          <AnimatePresence>
+            {fullscreenFrame && frames.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 bg-black flex flex-col"
+                onTouchStart={(e) => { e.currentTarget.dataset.touchX = e.touches[0].clientX }}
+                onTouchEnd={(e) => {
+                  const dx = e.changedTouches[0].clientX - Number(e.currentTarget.dataset.touchX || 0)
+                  if (dx > 50 && activeFrame > 0) setActiveFrame(activeFrame - 1)
+                  if (dx < -50 && activeFrame < frames.length - 1) setActiveFrame(activeFrame + 1)
+                }}
+              >
+                {/* Top bar */}
+                <div className="flex items-center justify-between px-4 py-3 flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    {(() => { const cfa2 = analysis.frames?.[activeFrame]; const sc = Number(cfa2?.formScore) || 0; return sc > 0
+                      ? <span className={`text-sm font-bold px-2.5 py-1 rounded-lg ${scoreBg(sc)} ${scoreColor(sc)}`}>{sc}/10</span>
+                      : <span className="text-sm font-medium px-2.5 py-1 rounded-lg bg-iron-800 text-iron-400">Not scored</span>
+                    })()}
+                    {(() => { const cfa2 = analysis.frames?.[activeFrame]; return cfa2?.phase && <PhasePill phase={cfa2.phase} /> })()}
+                    <span className="text-xs text-iron-500 font-mono ml-1">{activeFrame + 1}/{frames.length}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {poseLandmarks.some(l => l !== null) && (
+                      <button onClick={() => setShowOverlay(v => !v)} className="p-2 rounded-lg bg-iron-800 hover:bg-iron-700 transition-colors">
+                        {showOverlay ? <Eye className="w-4 h-4 text-white/80" /> : <EyeOff className="w-4 h-4 text-white/40" />}
+                      </button>
+                    )}
+                    <button onClick={() => setFullscreenFrame(false)} className="p-2 rounded-lg bg-iron-800 hover:bg-iron-700 transition-colors">
+                      <X className="w-4 h-4 text-white/80" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Frame — fills remaining space */}
+                <div className="flex-1 min-h-0">
+                  <AnnotatedFrame
+                    dataUrl={frames[activeFrame]?.dataUrl}
+                    joints={poseLandmarks[activeFrame] || null}
+                    metrics={poseData[activeFrame] || null}
+                    exercise={analysis.exercise}
+                    show={showOverlay}
+                  />
+                </div>
+
+                {/* Assessment text */}
+                {(() => {
+                  const cfa2 = analysis.frames?.[activeFrame]
+                  if (!cfa2) return null
+                  return (
+                    <div className="flex-shrink-0 px-4 pt-3 pb-4 max-h-40 overflow-y-auto">
+                      <p className="text-sm text-iron-200 leading-relaxed">{cfa2.assessment}</p>
+                      {cfa2.cues?.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {cfa2.cues.map((cue, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <ArrowRight className="w-3 h-3 text-flame-400 mt-0.5 flex-shrink-0" />
+                              <p className="text-xs text-iron-400 leading-relaxed">{cue}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Frame nav dots */}
+                <div className="flex-shrink-0 flex items-center gap-2 px-4 pb-6">
+                  <button onClick={() => setActiveFrame(Math.max(0, activeFrame - 1))}
+                    disabled={activeFrame === 0}
+                    className="w-10 h-10 rounded-xl bg-iron-800 flex items-center justify-center disabled:opacity-30">
+                    <ChevronLeft className="w-5 h-5 text-iron-200" />
+                  </button>
+                  <div className="flex-1 flex items-center gap-1">
+                    {frames.map((_, i) => {
+                      const fa = analysis.frames?.[i]
+                      const sc = Number(fa?.formScore) || 0
+                      return (
+                        <button key={i} onClick={() => setActiveFrame(i)}
+                          className={`flex-1 min-w-[12px] rounded-full transition-all ${i === activeFrame ? `h-3 ${sc > 0 ? scoreBgSolid(sc) : 'bg-iron-400'} ring-1 ring-white/20` : `h-2 ${sc > 0 ? scoreBgFaint(sc) : 'bg-iron-700/50'}`}`} />
+                      )
+                    })}
+                  </div>
+                  <button onClick={() => setActiveFrame(Math.min(frames.length - 1, activeFrame + 1))}
+                    disabled={activeFrame === frames.length - 1}
+                    className="w-10 h-10 rounded-xl bg-iron-800 flex items-center justify-center disabled:opacity-30">
+                    <ChevronRight className="w-5 h-5 text-iron-200" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Focus Drill */}
           {analysis.focusDrill && (
