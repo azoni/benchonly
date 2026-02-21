@@ -1071,9 +1071,9 @@ export default function WorkoutDetailPage() {
           </div>
         )}
 
-        {/* Workout Summary Card */}
-        {!isEditing && !isCardio && workout.exercises?.length > 0 && (
-          <WorkoutSummaryCard exercises={workout.exercises} isCompleted={!isScheduled} />
+        {/* Workout Summary Card (only for completed workouts — scheduled ones show Today's Targets instead) */}
+        {!isEditing && !isCardio && !isScheduled && workout.exercises?.length > 0 && (
+          <WorkoutSummaryCard exercises={workout.exercises} isCompleted={true} />
         )}
 
         {/* Exercises - Detailed View */}
