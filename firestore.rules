@@ -231,6 +231,14 @@ service cloud.firestore {
       allow delete: if isAppAdmin() || (isAuthenticated() && resource.data.trainerId == request.auth.uid);
     }
 
+    // --- SOCIAL THREADS ---
+
+    match /socialThreads/{threadId} {
+      allow read: if isAppAdmin();
+      allow create: if false;
+      allow update, delete: if isAppAdmin();
+    }
+
     // --- FORM CHECK ---
 
     match /formCheckJobs/{jobId} {
