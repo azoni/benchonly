@@ -22,6 +22,7 @@ import {
   X as XIcon,
   Search,
   Users,
+  ChevronDown,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { userService, workoutService, goalService, groupWorkoutService } from '../services/firestore'
@@ -74,6 +75,8 @@ export default function ProfilePage() {
   const [workouts, setWorkouts] = useState([])
   const [goals, setGoals] = useState([])
   
+  const [goalsExpanded, setGoalsExpanded] = useState(false)
+
   // Friend state
   const [friendStatus, setFriendStatus] = useState(null) // { status, requestId?, friendshipId? }
   const [friendActionLoading, setFriendActionLoading] = useState(false)
@@ -852,6 +855,65 @@ export default function ProfilePage() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Goals */}
+      {goals.length > 0 && (
+        <div className="card-steel mb-6 overflow-hidden">
+          <button
+            onClick={() => setGoalsExpanded(!goalsExpanded)}
+            className="w-full flex items-center justify-between p-4 hover:bg-iron-800/30 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-flame-500" />
+              <h2 className="font-display text-lg text-iron-100">Goals</h2>
+              <span className="text-xs text-iron-500 ml-1">{goals.length}</span>
+            </div>
+            <ChevronDown className={`w-5 h-5 text-iron-400 transition-transform duration-200 ${goalsExpanded ? 'rotate-180' : ''}`} />
+          </button>
+          {goalsExpanded && (
+            <div className="px-4 pb-4 space-y-3">
+              {goals.map(goal => {
+                const progress = goal.targetValue && goal.currentValue
+                  ? Math.min(100, Math.round((goal.currentValue / goal.targetValue) * 100))
+                  : 0
+                const unit = goal.metricType === 'weight' ? 'lbs' : goal.metricType === 'time' ? 's' : 'reps'
+                return (
+                  <div key={goal.id} className="bg-iron-800/30 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-iron-200">{goal.lift}</span>
+                      <span className="text-xs text-iron-500">
+                        {goal.currentValue || 0}{unit} → {goal.targetValue}{unit}
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-iron-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-flame-500 transition-all duration-500"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[10px] text-iron-500">{progress}%</span>
+                      {goal.targetDate && (
+                        <span className="text-[10px] text-iron-500">
+                          by {format(new Date(goal.targetDate), 'MMM d, yyyy')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              {isOwnProfile && (
+                <Link
+                  to="/goals"
+                  className="block text-center text-xs text-flame-400 hover:text-flame-300 transition-colors pt-1"
+                >
+                  Manage goals →
+                </Link>
+              )}
+            </div>
+          )}
         </div>
       )}
 
