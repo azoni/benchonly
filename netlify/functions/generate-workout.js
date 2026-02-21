@@ -26,7 +26,8 @@ export async function handler(event) {
   let creditCost = 5;
 
   try {
-    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId, duration, exerciseCount, maxExercise, includeWarmup, includeStretches } = JSON.parse(event.body);
+    const { prompt, workoutFocus, intensity, context, model, settings, draftMode: draftModeInput, targetUserId, duration, exerciseCount, maxExercise, includeWarmup, includeStretches, workoutCategory } = JSON.parse(event.body);
+    const category = workoutCategory || 'strength';
     // Use targetUserId only if caller is admin (for impersonation)
     const userId = (auth.isAdmin && targetUserId) ? targetUserId : auth.uid;
     // Enforce admin-only premium model
@@ -53,7 +54,7 @@ export async function handler(event) {
       painThresholdCount: 2,
     };
 
-    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings, duration, exerciseCount, maxExercise, includeWarmup, includeStretches);
+    const contextStr = buildContext(context, workoutFocus, intensity, adminSettings, duration, exerciseCount, maxExercise, includeWarmup, includeStretches, category);
 
     const systemPrompt = `You are an expert strength coach. Create a personalized workout.
 
@@ -270,6 +271,12 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects in the "sets" array.
 IMPORTANT: For warm-up and cool-down/stretch exercises, each set MUST include a "setNote" field describing the specific movement for that set (e.g. "Arm circles 20x", "Chest doorway stretch 30s/side"). Never leave warm-up/stretch sets without a setNote.
 IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), "cues" (2-3 form cues), and "substitutions" (2-3 alternatives). These fields are REQUIRED — do not skip them for any exercise.`;
 
+    // Category-specific system prompt additions
+    if (category && category !== 'strength') {
+      systemPrompt += `\n\n=== WORKOUT CATEGORY: ${category.toUpperCase()} ===\n`;
+      systemPrompt += getCategoryPromptAdditions(category);
+    }
+
     const userPrompt = `Create a workout:\n\n${contextStr}\n\n${prompt ? `USER REQUEST: ${prompt}` : ''}`;
 
     const startTime = Date.now();
@@ -281,7 +288,7 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
       ],
       response_format: { type: 'json_object' },
       temperature: 0.7,
-      max_tokens: 4500,
+      max_tokens: category !== 'strength' ? 5000 : 4500,
     });
 
     const responseTime = Date.now() - startTime;
@@ -299,8 +306,8 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
     }
 
     // Post-processing: enforce correct exercise types for known exercises
-    const TIME_EXERCISES = /^(dead hang|plank|side plank|wall sit|l-sit|farmer.?s walk|suitcase carr|warm.?up|cool.?down|stretch)/i;
-    const BW_EXERCISES = /^(pull.?up|chin.?up|push.?up|dip|deficit push|diamond push|close.?grip push|burpee|mountain climber|glute bridge|dead bug|nordic curl|pistol squat|dragon flag|ab wheel|hanging leg raise)/i;
+    const TIME_EXERCISES = /^(dead hang|plank|side plank|wall sit|l-sit|farmer.?s walk|suitcase carr|warm.?up|cool.?down|stretch|hip flexor|pigeon|thoracic|cat.?cow|world.?s greatest|90.?90|frog|lizard|foam roll|lacrosse ball|banded.*distraction|couch stretch|pancake|thread the needle|sprint|agility ladder|assault bike|rowing machine|bike sprint)/i;
+    const BW_EXERCISES = /^(pull.?up|chin.?up|push.?up|dip|deficit push|diamond push|close.?grip push|burpee|mountain climber|glute bridge|dead bug|nordic curl|pistol squat|dragon flag|ab wheel|hanging leg raise|box jump|broad jump|tuck jump|depth jump|bounding|muscle.?up|handstand|l.?sit|human flag|planche|front lever|archer|korean dip|ring dip|double.?under|toes.?to.?bar|wall walk)/i;
     if (workout.exercises && Array.isArray(workout.exercises)) {
       workout.exercises.forEach(ex => {
         const name = (ex.name || '').trim();
@@ -445,6 +452,7 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
       userId,
       generatedByAI: true,
       aiModel: selectedModel,
+      workoutCategory: category,
       generationPrompt: userPrompt,
     };
 
@@ -467,7 +475,7 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
         estimatedCost: cost,
         responseTimeMs: responseTime,
         draftMode,
-        userMessage: `Generate ${workoutFocus || 'auto'} workout (${intensity || 'moderate'})`,
+        userMessage: `Generate ${category !== 'strength' ? category + ' ' : ''}${workoutFocus || 'auto'} workout (${intensity || 'moderate'})`,
         assistantResponse: `${workout.name || 'Workout'}: ${(workout.exercises || []).map(e => e.name).join(', ')}`.slice(0, 500),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -517,11 +525,18 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
   }
 }
 
-function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null, maxExercise = null, includeWarmup = false, includeStretches = false) {
+function buildContext(ctx, focus, intensity, settings = {}, duration = null, exerciseCount = null, maxExercise = null, includeWarmup = false, includeStretches = false, category = 'strength') {
   const painThresholdMin = settings.painThresholdMin || 3;
   const painThresholdCount = settings.painThresholdCount || 2;
-  
+
   let s = '';
+
+  // Workout category
+  if (category && category !== 'strength') {
+    s += `WORKOUT CATEGORY: ${category.toUpperCase()}\n`;
+    s += getCategoryContextInstructions(category);
+    s += '\n';
+  }
 
   // Warm-up preference
   s += `INCLUDE_WARMUP: ${includeWarmup ? 'true' : 'false'}\n`;
@@ -717,4 +732,94 @@ function buildContext(ctx, focus, intensity, settings = {}, duration = null, exe
   }
 
   return s;
+}
+
+function getCategoryContextInstructions(category) {
+  const instructions = {
+    hiit: `This is a HIGH-INTENSITY INTERVAL TRAINING (HIIT) workout.
+- Design as timed work/rest intervals (e.g., 40s work / 20s rest, or 30/30, or Tabata 20/10)
+- 6-10 different movements, 2-4 rounds
+- Use "time" type for interval exercises with prescribedTime for the work interval
+- Each set MUST have a "setNote" describing the specific movement and rest period
+- Focus on compound movements that elevate heart rate
+- Use light to moderate loads only (30-50% of 1RM) — focus on speed not weight
+- Include the interval scheme in the workout "notes" field
+- HIIT exercises: Battle Ropes, Kettlebell Swings, Burpees, Mountain Climbers, Box Jumps, Jump Rope, Thrusters, Wall Balls, Med Ball Slams, Assault Bike, Rowing, Sled Pushes, Bike Sprints, DB Snatches\n`,
+
+    wod: `This is a WORKOUT OF THE DAY (WOD) — CrossFit-style workout.
+Pick ONE format:
+- AMRAP (As Many Rounds As Possible): Set a time cap (e.g., 15 min). List 3-5 movements with reps.
+- EMOM (Every Minute On the Minute): Set total minutes (e.g., 16 min). List 2-4 movements alternating.
+- For Time: List movements and reps. User completes ASAP. Include a time cap.
+Rules:
+- Name the workout creatively (e.g., "Iron Storm", "The Furnace")
+- Mix barbell (Clean, Snatch, Thrusters, Deadlifts), gymnastics (Pull-ups, HSPUs, Toes-to-Bar, Ring Dips, Box Jumps), and monostructural (Running, Rowing, Biking, Double-Unders)
+- Rep schemes: 21-15-9, 5 rounds of X, ascending/descending ladders
+- Use moderate weights (60-70% for barbell movements)
+- Document the WOD format and instructions in the workout "notes" field
+- Set exercise type: "weight" for barbell, "bodyweight" for gymnastics, "time" for cardio\n`,
+
+    mobility: `This is a MOBILITY & FLEXIBILITY workout.
+- ALL exercises must be type "time" with prescribedTime (30-90 seconds per position)
+- Include 8-12 different stretches/mobility drills
+- Each set MUST have a "setNote" describing the exact position or movement
+- Sequence: dynamic mobility drills → static stretches → relaxation
+- Exercises: Hip Flexor Stretch, Pigeon Pose, 90/90 Hip Switch, Thoracic Spine Rotations, Cat-Cow, World's Greatest Stretch, Banded Shoulder Distraction, Couch Stretch, Pancake Stretch, Frog Stretch, Lizard Pose, Thread the Needle, Foam Rolling, Lacrosse Ball Work
+- Do NOT prescribe weights or reps — only time
+- Include breathing cues and progression tips in notes
+- Match stretches to the focus area if specified\n`,
+
+    calisthenics: `This is a CALISTHENICS / BODYWEIGHT PROGRESSIONS workout.
+- All exercises must be type "bodyweight" (reps) or "time" (holds/isometrics)
+- Skill progressions: Push-up Variations (diamond, archer, pseudo-planche, deficit), Pull-up Variations (wide, archer, typewriter, muscle-up negatives), Dip Variations (ring dips, Korean dips), Pistol Squat Progressions, L-Sit Progressions, Handstand Work (wall walks, holds, HSPUs), Muscle-Up Progressions, Front Lever, Planche, Nordic Curls, Dragon Flags
+- Structure: skill work first (low fatigue) → strength sets → endurance/burnout finishers
+- Do NOT prescribe external weights unless user trains weighted calisthenics
+- Scale progressions to user level based on their data\n`,
+
+    dynamic: `This is a DYNAMIC / EXPLOSIVE / PLYOMETRIC workout.
+- Focus on power, speed, and explosiveness
+- Keep reps LOW (3-6 for plyometrics, 5-8 for med ball) — quality over volume
+- Rest periods LONG (90-180 seconds) to maintain power output
+- Exercises: Box Jumps, Depth Jumps, Broad Jumps, Tuck Jumps, Bounding, Med Ball Slams, Med Ball Chest Pass, Med Ball Rotational Throws, Plyo Push-ups, Kettlebell Swings (explosive), Power Cleans, Hang Cleans, Push Press, Jump Squats, Sprint Intervals, Agility Ladder Drills, Battle Rope Slams
+- Use "bodyweight" for jumps, "weight" for loaded movements, "time" for sprints
+- Warm-up is CRITICAL — always include dynamic prep even if INCLUDE_WARMUP is false
+- If user has joint pain history (knees/ankles), use lower-impact alternatives\n`,
+  };
+  return instructions[category] || '';
+}
+
+function getCategoryPromptAdditions(category) {
+  const additions = {
+    hiit: `For this HIIT workout, OVERRIDE the standard exercise database with HIIT-appropriate exercises.
+Structure as timed intervals. Each exercise should specify work time via prescribedTime.
+Include the interval scheme in the workout "notes" field (e.g., "40s work / 20s rest, 3 rounds").
+Set type to "time" for interval exercises or "bodyweight" for bodyweight HIIT moves.
+Do NOT use heavy weights. Intensity comes from speed and minimal rest, not load.`,
+
+    wod: `For this WOD, OVERRIDE normal workout structure. Generate a single CrossFit-style WOD.
+Choose AMRAP, EMOM, or For Time format. Document the format clearly in "notes".
+The exercises array should list each movement as a separate exercise with prescribed reps or time.
+For AMRAP: each exercise gets 1 set with the rep target per round.
+For EMOM: each exercise gets sets equal to the number of rounds.
+For For Time: each exercise gets 1 set with total reps.
+Name the workout creatively.`,
+
+    mobility: `For this Mobility workout, OVERRIDE the standard exercise database entirely.
+Use ONLY stretches, foam rolling, and mobility drills. ALL exercises must be type "time".
+Do not include any weighted exercises. Do not include reps-based sets.
+Each set must have a descriptive setNote (e.g., "Left side — hold 45s, breathe deeply").
+Include bilateral movements as separate sets (left/right) within the same exercise.`,
+
+    calisthenics: `For this Calisthenics workout, use ONLY bodyweight exercises and progressions.
+All exercises must be type "bodyweight" or "time" (for holds/isometrics).
+Do NOT prescribe any external weights.
+Structure: 1-2 skill exercises first, then 3-4 strength exercises, then 1-2 endurance finishers.`,
+
+    dynamic: `For this Dynamic/Plyometric workout, focus on EXPLOSIVE movements.
+Keep reps LOW (3-6 for plyometrics) and rest periods LONG (90-180s).
+Include a mandatory dynamic warm-up section regardless of INCLUDE_WARMUP setting.
+If user has joint pain history, substitute lower-impact alternatives.
+Use "bodyweight" for jumps, "weight" for loaded movements, "time" for sprints.`,
+  };
+  return additions[category] || '';
 }

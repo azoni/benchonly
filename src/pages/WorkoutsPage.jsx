@@ -884,6 +884,12 @@ Rules:
                           Cardio
                         </span>
                       )}
+                      {workout.workoutCategory && workout.workoutCategory !== 'strength' && (() => {
+                        const catColors = { hiit: 'bg-red-500/20 text-red-400', wod: 'bg-yellow-500/20 text-yellow-400', mobility: 'bg-green-500/20 text-green-400', calisthenics: 'bg-cyan-500/20 text-cyan-400', dynamic: 'bg-purple-500/20 text-purple-400' };
+                        const catLabels = { hiit: 'HIIT', wod: 'WOD', mobility: 'Mobility', calisthenics: 'Calisthenics', dynamic: 'Dynamic' };
+                        const c = catColors[workout.workoutCategory];
+                        return c ? <span className={`px-2 py-0.5 text-xs font-medium rounded ${c}`}>{catLabels[workout.workoutCategory]}</span> : null;
+                      })()}
                     </div>
                     
                     <div className="flex items-center gap-4 mt-1 text-sm text-iron-500">

@@ -27,6 +27,7 @@ import {
   X,
   HelpCircle,
   FileText,
+  Flame,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
@@ -107,6 +108,7 @@ export default function GenerateWorkoutPage() {
     parts.push('\nGenerate this workout following the program prescription above. Use my actual performance data to calculate working weights.')
     return parts.join('\n')
   });
+  const [workoutCategory, setWorkoutCategory] = useState('strength');
   const [workoutFocus, setWorkoutFocus] = useState(programContext ? 'bench' : 'auto');
   const [intensity, setIntensity] = useState(
     programContext?.dayType === 'deload' ? 'recovery' :
@@ -410,7 +412,7 @@ export default function GenerateWorkoutPage() {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
-          prompt, workoutFocus, intensity,
+          prompt, workoutFocus, intensity, workoutCategory,
           model, includeWarmup, includeStretches,
           duration: duration !== 'auto' ? parseInt(duration) : null,
           exerciseCount: exerciseCount !== 'auto' ? parseInt(exerciseCount) : null,
@@ -654,6 +656,26 @@ export default function GenerateWorkoutPage() {
     return `${set.prescribedWeight ? `${set.prescribedWeight} lbs × ` : ''}${set.prescribedReps || '?'} reps`;
   };
   
+  const workoutCategories = [
+    { value: 'strength', label: 'Strength', desc: 'Standard weight training', icon: Dumbbell, color: 'flame' },
+    { value: 'hiit', label: 'HIIT', desc: 'Timed work/rest intervals', icon: Timer, color: 'red' },
+    { value: 'wod', label: 'WOD', desc: 'AMRAP / EMOM / For Time', icon: Zap, color: 'yellow' },
+    { value: 'mobility', label: 'Mobility', desc: 'Flexibility & movement flows', icon: Activity, color: 'green' },
+    { value: 'calisthenics', label: 'Calisthenics', desc: 'Bodyweight progressions', icon: TrendingUp, color: 'cyan' },
+    { value: 'dynamic', label: 'Dynamic', desc: 'Explosive & plyometric', icon: Flame, color: 'purple' },
+  ];
+
+  const categoryOptions = {
+    strength:     { showFocus: true,  showIntensity: true,  showDuration: true,  showExerciseCount: true,  showWarmup: true  },
+    hiit:         { showFocus: true,  showIntensity: false, showDuration: true,  showExerciseCount: true,  showWarmup: true  },
+    wod:          { showFocus: false, showIntensity: false, showDuration: true,  showExerciseCount: false, showWarmup: false },
+    mobility:     { showFocus: true,  showIntensity: false, showDuration: true,  showExerciseCount: true,  showWarmup: false },
+    calisthenics: { showFocus: true,  showIntensity: true,  showDuration: true,  showExerciseCount: true,  showWarmup: true  },
+    dynamic:      { showFocus: true,  showIntensity: true,  showDuration: true,  showExerciseCount: true,  showWarmup: true  },
+  };
+
+  const opts = categoryOptions[workoutCategory] || categoryOptions.strength;
+
   const focusOptions = [
     { value: 'auto', label: 'Auto' },
     { value: 'push', label: 'Push' },
@@ -858,7 +880,7 @@ export default function GenerateWorkoutPage() {
                   </div>
                   <div>
                     <h3 className="text-sm font-medium text-iron-200">AI is generating your workout...</h3>
-                    <p className="text-xs text-iron-500">{workoutFocus !== 'auto' ? workoutFocus : 'Auto'} · {intensity} intensity{duration !== 'auto' ? ` · ${duration}min` : ''}{exerciseCount !== 'auto' ? ` · ${exerciseCount} exercises` : ''}{prompt ? ` · "${prompt.slice(0, 40)}${prompt.length > 40 ? '...' : ''}"` : ''}</p>
+                    <p className="text-xs text-iron-500">{workoutCategory !== 'strength' ? `${workoutCategory.toUpperCase()} · ` : ''}{workoutFocus !== 'auto' ? workoutFocus : 'Auto'} · {intensity} intensity{duration !== 'auto' ? ` · ${duration}min` : ''}{exerciseCount !== 'auto' ? ` · ${exerciseCount} exercises` : ''}{prompt ? ` · "${prompt.slice(0, 40)}${prompt.length > 40 ? '...' : ''}"` : ''}</p>
                   </div>
                   <Loader2 className="w-5 h-5 text-flame-400 animate-spin ml-auto" />
                 </div>
@@ -907,15 +929,80 @@ export default function GenerateWorkoutPage() {
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="e.g., 'Heavy bench day with tricep accessories'"
+                  placeholder={
+                    workoutCategory === 'hiit' ? "e.g., 'Upper body HIIT, 30/15 intervals'" :
+                    workoutCategory === 'wod' ? "e.g., 'AMRAP with pull-ups and thrusters'" :
+                    workoutCategory === 'mobility' ? "e.g., 'Hip and thoracic spine focus'" :
+                    workoutCategory === 'calisthenics' ? "e.g., 'Push progression day with handstand work'" :
+                    workoutCategory === 'dynamic' ? "e.g., 'Lower body plyometrics and sprint work'" :
+                    "e.g., 'Heavy bench day with tricep accessories'"
+                  }
                   className="input-field w-full min-h-[60px] resize-none text-sm"
                 />
               </div>
-              
+
+              {/* Workout Category */}
+              <div className="mb-4">
+                <label className="block text-sm text-iron-400 mb-2">Workout Type</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {workoutCategories.map(cat => {
+                    const Icon = cat.icon;
+                    const isSelected = workoutCategory === cat.value;
+                    const colorMap = {
+                      flame:  { border: 'border-flame-500',  bg: 'bg-flame-500/10',  text: 'text-flame-400',  iconBg: 'bg-flame-500/20' },
+                      red:    { border: 'border-red-500',    bg: 'bg-red-500/10',    text: 'text-red-400',    iconBg: 'bg-red-500/20' },
+                      yellow: { border: 'border-yellow-500', bg: 'bg-yellow-500/10', text: 'text-yellow-400', iconBg: 'bg-yellow-500/20' },
+                      green:  { border: 'border-green-500',  bg: 'bg-green-500/10',  text: 'text-green-400',  iconBg: 'bg-green-500/20' },
+                      cyan:   { border: 'border-cyan-500',   bg: 'bg-cyan-500/10',   text: 'text-cyan-400',   iconBg: 'bg-cyan-500/20' },
+                      purple: { border: 'border-purple-500', bg: 'bg-purple-500/10', text: 'text-purple-400', iconBg: 'bg-purple-500/20' },
+                    };
+                    const c = colorMap[cat.color];
+                    return (
+                      <button
+                        key={cat.value}
+                        onClick={() => {
+                          setWorkoutCategory(cat.value);
+                          if (cat.value !== 'strength' && workoutFocus === '1rm-test') {
+                            setWorkoutFocus('auto');
+                            setMaxExercise('');
+                          }
+                          if (cat.value === 'wod') {
+                            setWorkoutFocus('auto');
+                            setIncludeWarmup(false);
+                            setIncludeStretches(false);
+                          }
+                          if (cat.value === 'mobility') {
+                            setIntensity('light');
+                            setIncludeWarmup(false);
+                            setIncludeStretches(false);
+                          }
+                        }}
+                        className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all text-left
+                          ${isSelected
+                            ? `${c.border} ${c.bg} ${c.text}`
+                            : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                          }`}
+                      >
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
+                          ${isSelected ? c.iconBg : 'bg-iron-800'}`}>
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium">{cat.label}</div>
+                          <div className="text-[10px] text-iron-500 leading-tight">{cat.desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Style (Focus) — hidden for WOD and 1RM test on non-strength */}
+              {opts.showFocus && (
               <div className="mb-3">
                 <label className="block text-sm text-iron-400 mb-1.5">Style</label>
                 <div className="flex flex-wrap gap-2">
-                  {focusOptions.map(opt => (
+                  {focusOptions.filter(opt => workoutCategory !== 'strength' ? opt.value !== '1rm-test' : true).map(opt => (
                     <button
                       key={opt.value}
                       onClick={() => {
@@ -937,9 +1024,10 @@ export default function GenerateWorkoutPage() {
                   <p className="text-[11px] text-iron-600 mt-2">Auto selects exercises from your logged workouts and adjusts weights based on recent performance. The more you log, the more variety you'll get.</p>
                 )}
               </div>
+              )}
 
               {/* 1RM Test — exercise picker */}
-              {workoutFocus === '1rm-test' && (
+              {workoutCategory === 'strength' && workoutFocus === '1rm-test' && (
                 <div className="mb-4 p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-xl">
                   <label className="block text-sm text-yellow-400 mb-2">Which lift are you testing?</label>
                   <input
@@ -965,8 +1053,8 @@ export default function GenerateWorkoutPage() {
                 </div>
               )}
 
-              {/* Intensity — hidden for 1RM test */}
-              {workoutFocus !== '1rm-test' && (
+              {/* Intensity — hidden for 1RM test and some categories */}
+              {opts.showIntensity && workoutFocus !== '1rm-test' && (
               <div className="mb-3">
                 <label className="text-sm text-iron-400 mb-1.5 block">Intensity</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
@@ -988,9 +1076,10 @@ export default function GenerateWorkoutPage() {
               </div>
               )}
 
-              {/* Duration & Exercises — hidden for 1RM test */}
-              {workoutFocus !== '1rm-test' && (
-              <div className="grid grid-cols-2 gap-3 mb-3">
+              {/* Duration & Exercises — hidden for 1RM test, conditionally per category */}
+              {workoutFocus !== '1rm-test' && (opts.showDuration || opts.showExerciseCount) && (
+              <div className={`grid ${opts.showDuration && opts.showExerciseCount ? 'grid-cols-2' : 'grid-cols-1'} gap-3 mb-3`}>
+                {opts.showDuration && (
                 <div>
                   <label className="block text-sm text-iron-400 mb-1.5">Duration</label>
                   <div className="flex flex-wrap gap-1.5">
@@ -1016,6 +1105,8 @@ export default function GenerateWorkoutPage() {
                     ))}
                   </div>
                 </div>
+                )}
+                {opts.showExerciseCount && (
                 <div>
                   <label className="block text-sm text-iron-400 mb-1.5">Exercises</label>
                   <div className="flex flex-wrap gap-1.5">
@@ -1041,11 +1132,12 @@ export default function GenerateWorkoutPage() {
                     ))}
                   </div>
                 </div>
+                )}
               </div>
               )}
               
-              {/* Warm-up & Stretches — hidden for 1RM test */}
-              {workoutFocus !== '1rm-test' && (
+              {/* Warm-up & Stretches — hidden for 1RM test and some categories */}
+              {opts.showWarmup && workoutFocus !== '1rm-test' && (
               <div className="flex gap-2 mb-3">
                 <button
                   onClick={() => setIncludeWarmup(!includeWarmup)}

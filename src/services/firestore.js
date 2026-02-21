@@ -200,6 +200,7 @@ export const workoutService = {
           exerciseSummary,
           totalSets,
           ...(workoutData.eventId ? { eventId: workoutData.eventId } : {}),
+          ...(workoutData.workoutCategory && workoutData.workoutCategory !== 'strength' ? { workoutCategory: workoutData.workoutCategory } : {}),
         });
       } catch (e) {
         console.error('Feed error:', e);
@@ -262,6 +263,7 @@ export const workoutService = {
         exerciseSummary,
         totalSets,
         ...(workoutData?.eventId ? { eventId: workoutData.eventId } : {}),
+        ...(workoutData?.workoutCategory && workoutData.workoutCategory !== 'strength' ? { workoutCategory: workoutData.workoutCategory } : {}),
       });
     } catch (e) {
       console.error('Feed error:', e);
@@ -335,6 +337,7 @@ export const workoutService = {
           exerciseSummary,
           totalSets,
           ...(workoutData?.eventId ? { eventId: workoutData.eventId } : {}),
+          ...(workoutData?.workoutCategory && workoutData.workoutCategory !== 'strength' ? { workoutCategory: workoutData.workoutCategory } : {}),
         });
       }
     } catch (e) {

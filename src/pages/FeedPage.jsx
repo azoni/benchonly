@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
-import { 
-  Activity, 
-  Dumbbell, 
-  Target, 
-  Flame, 
-  MessageCircle, 
+import {
+  Activity,
+  Dumbbell,
+  Target,
+  Flame,
+  MessageCircle,
   Search,
   ChevronDown,
   ChevronRight,
@@ -21,6 +21,9 @@ import {
   Clock,
   Heart,
   Copy,
+  Timer,
+  Zap,
+  TrendingUp,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { feedService, notificationService } from '../services/feedService'
@@ -238,6 +241,17 @@ export default function FeedPage() {
     }
   }
 
+  const getCategoryIcon = (cat) => {
+    switch (cat) {
+      case 'hiit': return <Timer className="w-5 h-5 text-red-400" />
+      case 'wod': return <Zap className="w-5 h-5 text-yellow-400" />
+      case 'mobility': return <Activity className="w-5 h-5 text-green-400" />
+      case 'calisthenics': return <TrendingUp className="w-5 h-5 text-cyan-400" />
+      case 'dynamic': return <Flame className="w-5 h-5 text-purple-400" />
+      default: return null
+    }
+  }
+
   const getActivityIcon = (type, item) => {
     // Event workouts get a special heart icon
     if (item?.data?.eventId) {
@@ -247,6 +261,10 @@ export default function FeedPage() {
     const isGroupWorkout = type === 'group_workout' || item?.groupId || item?.data?.groupId
     if (isGroupWorkout) {
       return <Users className="w-5 h-5 text-cyan-400" />
+    }
+    // Category-specific icons for non-strength workouts
+    if (type === 'workout' && item?.data?.workoutCategory && item.data.workoutCategory !== 'strength') {
+      return getCategoryIcon(item.data.workoutCategory) || <Dumbbell className="w-5 h-5 text-green-400" />
     }
     switch (type) {
       case 'workout':
@@ -272,9 +290,16 @@ export default function FeedPage() {
       return <><strong>{userName}</strong> completed their workout in <span className="text-cyan-400">{item.data?.groupName || 'a group'}</span></>
     }
 
+    const catLabels = { hiit: 'HIIT', wod: 'WOD', mobility: 'Mobility', calisthenics: 'Calisthenics', dynamic: 'Dynamic' }
+    const catColors = { hiit: 'text-red-400', wod: 'text-yellow-400', mobility: 'text-green-400', calisthenics: 'text-cyan-400', dynamic: 'text-purple-400' }
     switch (item.type) {
-      case 'workout':
-        return <><strong>{userName}</strong> completed <span className="text-flame-400">{item.data?.name || 'a workout'}</span></>
+      case 'workout': {
+        const cat = item.data?.workoutCategory
+        const catLabel = catLabels[cat]
+        return catLabel
+          ? <><strong>{userName}</strong> completed a <span className={catColors[cat]}>{catLabel}</span> workout: <span className="text-flame-400">{item.data?.name || 'Workout'}</span></>
+          : <><strong>{userName}</strong> completed <span className="text-flame-400">{item.data?.name || 'a workout'}</span></>
+      }
       case 'cardio':
         return <><strong>{userName}</strong> logged <span className="text-orange-400">{item.data?.duration}min of {item.data?.name || 'cardio'}</span></>
       case 'goal_completed':
@@ -501,7 +526,14 @@ export default function FeedPage() {
                         <div key={i} className="flex items-center justify-between py-1.5 px-3 bg-iron-800/40 rounded-lg">
                           <span className="text-xs text-iron-300">{ex.name}</span>
                           <span className="text-xs text-iron-500">
-                            {ex.sets}×{ex.topWeight ? `${ex.topReps}@${ex.topWeight}lbs` : ex.topReps ? `${ex.topReps} reps` : ''}
+                            {ex.exerciseType === 'time' || ex.topTime
+                              ? `${ex.sets}×${ex.topTime || '—'}s`
+                              : ex.topWeight
+                                ? `${ex.sets}×${ex.topReps}@${ex.topWeight}lbs`
+                                : ex.topReps
+                                  ? `${ex.sets}×${ex.topReps} reps`
+                                  : `${ex.sets} sets`
+                            }
                           </span>
                         </div>
                       ))}

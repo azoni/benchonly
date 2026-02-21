@@ -730,10 +730,23 @@ export default function WorkoutDetailPage() {
 
         {/* Workout Title */}
         <div className="mb-6">
-          <h1 className="text-3xl font-display text-iron-50 mb-3">
-            {workout.name || 'Untitled Workout'}
-          </h1>
-          
+          <div className="flex items-center gap-2 mb-3">
+            <h1 className="text-3xl font-display text-iron-50">
+              {workout.name || 'Untitled Workout'}
+            </h1>
+            {workout.workoutCategory && workout.workoutCategory !== 'strength' && (() => {
+              const catMeta = {
+                hiit: { label: 'HIIT', color: 'bg-red-500/15 text-red-400 border-red-500/30' },
+                wod: { label: 'WOD', color: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
+                mobility: { label: 'Mobility', color: 'bg-green-500/15 text-green-400 border-green-500/30' },
+                calisthenics: { label: 'Calisthenics', color: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30' },
+                dynamic: { label: 'Dynamic', color: 'bg-purple-500/15 text-purple-400 border-purple-500/30' },
+              };
+              const m = catMeta[workout.workoutCategory];
+              return m ? <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${m.color}`}>{m.label}</span> : null;
+            })()}
+          </div>
+
           <div className="flex flex-wrap gap-4 text-sm">
             <div className="flex items-center gap-2 text-iron-400">
               <Calendar className="w-4 h-4 text-flame-400" />
@@ -819,6 +832,17 @@ export default function WorkoutDetailPage() {
           </div>
         )}
 
+        {/* WOD Format Card — prominent display for WOD workouts */}
+        {!isEditing && workout.workoutCategory === 'wod' && workout.notes && (
+          <div className="mb-4 p-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="w-4 h-4 text-yellow-400" />
+              <span className="text-sm font-semibold text-yellow-400">WOD Format</span>
+            </div>
+            <p className="text-iron-200 leading-relaxed whitespace-pre-line">{workout.notes}</p>
+          </div>
+        )}
+
         {/* Workout Notes */}
         {isEditing ? (
           <div className="card-steel p-4 mb-3">
@@ -831,7 +855,7 @@ export default function WorkoutDetailPage() {
               placeholder="Workout notes..."
             />
           </div>
-        ) : workout.notes && (
+        ) : workout.notes && workout.workoutCategory !== 'wod' && (
           <div className="card-steel p-4 mb-3">
             <p className="text-iron-300">{workout.notes}</p>
           </div>

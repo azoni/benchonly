@@ -127,13 +127,34 @@ export function groupExercisesForDisplay(exercises) {
  */
 export function buildExerciseSummary(exercises) {
   if (!exercises || !exercises.length) return { exerciseSummary: [], totalSets: 0 }
-  
+
   let totalSets = 0
   const exerciseSummary = exercises.map(ex => {
     const sets = ex.sets || []
     totalSets += sets.length
-    
-    // Find the heaviest set (by actual or prescribed weight)
+
+    // Determine exercise type
+    const isTime = ex.type === 'time' || sets.some(s => s.prescribedTime || s.actualTime)
+    const isBW = ex.type === 'bodyweight'
+
+    if (isTime) {
+      // Time-based: find the longest hold/interval
+      let topTime = 0
+      sets.forEach(s => {
+        const t = parseInt(s.actualTime || s.prescribedTime) || 0
+        if (t > topTime) topTime = t
+      })
+      return {
+        name: ex.name || 'Exercise',
+        sets: sets.length,
+        topWeight: null,
+        topReps: null,
+        topTime: topTime || null,
+        exerciseType: 'time',
+      }
+    }
+
+    // Weight or bodyweight: find the heaviest set
     let topWeight = 0
     let topReps = 0
     sets.forEach(s => {
@@ -143,14 +164,22 @@ export function buildExerciseSummary(exercises) {
         topReps = parseInt(s.actualReps || s.prescribedReps) || 0
       }
     })
-    
+    // If no weight found, grab top reps for bodyweight
+    if (!topWeight) {
+      sets.forEach(s => {
+        const r = parseInt(s.actualReps || s.prescribedReps) || 0
+        if (r > topReps) topReps = r
+      })
+    }
+
     return {
       name: ex.name || 'Exercise',
       sets: sets.length,
       topWeight: topWeight || null,
       topReps: topReps || null,
+      exerciseType: isBW ? 'bodyweight' : 'weight',
     }
   })
-  
+
   return { exerciseSummary, totalSets }
 }
