@@ -18,6 +18,17 @@ const LM = {
 
 let _landmarker = null
 let _loadPromise = null
+// VIDEO mode requires timestamps to be strictly monotonically increasing across
+// all detectForVideo calls on the same instance — even across separate videos.
+let _lastTimestampMs = 0
+
+// Returns the next valid timestamp to pass to detectForVideo.
+// Uses the actual video time in ms but never goes backward.
+export function nextVideoTimestamp(videoTimeSeconds) {
+  const tsMs = Math.round(videoTimeSeconds * 1000)
+  _lastTimestampMs = Math.max(_lastTimestampMs + 1, tsMs)
+  return _lastTimestampMs
+}
 
 export async function getLandmarker() {
   if (_landmarker) return _landmarker
@@ -143,16 +154,12 @@ export async function estimatePoses(frames, onProgress) {
   }
 
   const results = []
-  let lastTimestampMs = -1
   for (let i = 0; i < frames.length; i++) {
     onProgress?.(`Mapping movement... (${i + 1}/${frames.length})`)
     try {
       const img = new Image()
       await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = frames[i].dataUrl })
-      // VIDEO mode requires strictly monotonically increasing timestamps in ms
-      const tsMs = Math.max(lastTimestampMs + 1, Math.round(frames[i].timestamp * 1000))
-      lastTimestampMs = tsMs
-      const raw = landmarker.detectForVideo(img, tsMs)
+      const raw = landmarker.detectForVideo(img, nextVideoTimestamp(frames[i].timestamp))
       const lm = raw.landmarks?.[0]
       results.push(lm
         ? extractMetrics(lm, frames[i].timestamp)

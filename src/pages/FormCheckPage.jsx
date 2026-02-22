@@ -34,7 +34,7 @@ import { collection, query, where, orderBy, limit, getDocs, doc, onSnapshot, set
 import { db } from '../services/firebase'
 import usePageTitle from '../utils/usePageTitle'
 import { apiUrl } from '../utils/platform'
-import { getLandmarker, extractMetrics } from '../utils/poseEstimation'
+import { getLandmarker, extractMetrics, nextVideoTimestamp } from '../utils/poseEstimation'
 
 const FRAME_PRESETS = {
   quick:    { frames: 5,  label: 'Quick',    desc: '5 frames',  credits: 10 },
@@ -664,7 +664,6 @@ export default function FormCheckPage() {
       const SCAN_TARGETS = Math.min(60, Math.max(maxFrames * 4, Math.ceil(duration * 5)))
       const scanInterval = duration / SCAN_TARGETS
       const scanResults = []
-      let lastTimestampMs = -1
 
       for (let i = 0; i < SCAN_TARGETS; i++) {
         const time = i * scanInterval
@@ -681,9 +680,7 @@ export default function FormCheckPage() {
             const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
             const img = new Image()
             await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl })
-            const tsMs = Math.max(lastTimestampMs + 1, Math.round(time * 1000))
-            lastTimestampMs = tsMs
-            const raw = landmarker.detectForVideo(img, tsMs)
+            const raw = landmarker.detectForVideo(img, nextVideoTimestamp(time))
             const lm = raw.landmarks?.[0]
             if (lm) pose = extractMetrics(lm, time)
           } catch { /* pose stays not detected */ }
