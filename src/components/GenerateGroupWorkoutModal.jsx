@@ -14,6 +14,10 @@ import {
   ChevronUp,
   Zap,
   MessageSquare,
+  Timer,
+  Activity,
+  TrendingUp,
+  Flame,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { collection, query, where, getDocs, limit, doc, onSnapshot } from 'firebase/firestore';
@@ -61,6 +65,7 @@ export default function GenerateGroupWorkoutModal({
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [model, setModel] = useState('standard');
+  const [workoutCategory, setWorkoutCategory] = useState('strength');
   const [workoutFocus, setWorkoutFocus] = useState('auto');
   const [intensity, setIntensity] = useState('moderate');
   const [duration, setDuration] = useState('auto');
@@ -334,7 +339,7 @@ export default function GenerateGroupWorkoutModal({
         headers: authHeaders,
         body: JSON.stringify({
           groupId: group.id, athletes: athleteData,
-          prompt, workoutDate, model, workoutFocus, intensity,
+          prompt, workoutDate, model, workoutCategory, workoutFocus, intensity,
           duration: duration !== 'auto' ? parseInt(duration) : null,
           exerciseCount: exerciseCount !== 'auto' ? parseInt(exerciseCount) : null,
           maxExercise: workoutFocus === '1rm-test' ? maxExercise : null,
@@ -451,6 +456,7 @@ export default function GenerateGroupWorkoutModal({
   const handleClose = () => {
     setPrompt('');
     setModel('standard');
+    setWorkoutCategory('strength');
     setIncludeWarmup(true);
     setIncludeStretches(false);
     setResult(null);
@@ -670,7 +676,68 @@ export default function GenerateGroupWorkoutModal({
                       />
                     </div>
 
-                    {/* Style */}
+                    {/* Workout Type */}
+                    <div>
+                      <label className="block text-sm text-iron-400 mb-2">Workout Type</label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { value: 'strength', label: 'Strength', desc: 'Weight training', icon: Dumbbell, color: 'flame' },
+                          { value: 'hiit', label: 'HIIT', desc: 'Timed intervals', icon: Timer, color: 'red' },
+                          { value: 'wod', label: 'WOD', desc: 'AMRAP / EMOM', icon: Zap, color: 'yellow' },
+                          { value: 'mobility', label: 'Mobility', desc: 'Flexibility', icon: Activity, color: 'green' },
+                          { value: 'calisthenics', label: 'Calisthenics', desc: 'Bodyweight', icon: TrendingUp, color: 'cyan' },
+                          { value: 'dynamic', label: 'Dynamic', desc: 'Explosive', icon: Flame, color: 'purple' },
+                        ].map(cat => {
+                          const Icon = cat.icon;
+                          const isSelected = workoutCategory === cat.value;
+                          const colorMap = {
+                            flame:  { border: 'border-flame-500',  bg: 'bg-flame-500/10',  text: 'text-flame-400' },
+                            red:    { border: 'border-red-500',    bg: 'bg-red-500/10',    text: 'text-red-400' },
+                            yellow: { border: 'border-yellow-500', bg: 'bg-yellow-500/10', text: 'text-yellow-400' },
+                            green:  { border: 'border-green-500',  bg: 'bg-green-500/10',  text: 'text-green-400' },
+                            cyan:   { border: 'border-cyan-500',   bg: 'bg-cyan-500/10',   text: 'text-cyan-400' },
+                            purple: { border: 'border-purple-500', bg: 'bg-purple-500/10', text: 'text-purple-400' },
+                          };
+                          const c = colorMap[cat.color];
+                          return (
+                            <button
+                              key={cat.value}
+                              onClick={() => {
+                                setWorkoutCategory(cat.value);
+                                if (cat.value !== 'strength' && workoutFocus === '1rm-test') {
+                                  setWorkoutFocus('auto');
+                                  setMaxExercise('');
+                                }
+                                if (cat.value === 'wod') {
+                                  setWorkoutFocus('auto');
+                                  setIncludeWarmup(false);
+                                  setIncludeStretches(false);
+                                }
+                                if (cat.value === 'mobility') {
+                                  setIntensity('light');
+                                  setIncludeWarmup(false);
+                                  setIncludeStretches(false);
+                                }
+                              }}
+                              className={`flex items-center gap-2 p-2 rounded-lg border transition-all text-left
+                                ${isSelected
+                                  ? `${c.border} ${c.bg} ${c.text}`
+                                  : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                                }`}
+                            >
+                              <Icon className="w-4 h-4 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <div className="text-xs font-medium">{cat.label}</div>
+                                <div className="text-[9px] text-iron-500 leading-tight">{cat.desc}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Style — hidden for WOD */}
+                    {workoutCategory !== 'wod' && (
                     <div>
                       <label className="block text-sm text-iron-400 mb-2">Style</label>
                       <div className="flex flex-wrap gap-1.5">
@@ -683,7 +750,7 @@ export default function GenerateGroupWorkoutModal({
                           { value: 'full', label: 'Full Body' },
                           { value: 'bench', label: 'Bench Focus' },
                           { value: 'no-equipment', label: 'Bodyweight' },
-                          { value: '1rm-test', label: 'Test 1RM' },
+                          ...(workoutCategory === 'strength' ? [{ value: '1rm-test', label: 'Test 1RM' }] : []),
                         ].map(opt => (
                           <button
                             key={opt.value}
@@ -703,6 +770,7 @@ export default function GenerateGroupWorkoutModal({
                         ))}
                       </div>
                     </div>
+                    )}
 
                     {/* 1RM exercise picker */}
                     {workoutFocus === '1rm-test' && (
@@ -719,8 +787,8 @@ export default function GenerateGroupWorkoutModal({
                       </div>
                     )}
 
-                    {/* Intensity — hidden for 1RM */}
-                    {workoutFocus !== '1rm-test' && (
+                    {/* Intensity — hidden for 1RM, WOD, Mobility, HIIT */}
+                    {workoutFocus !== '1rm-test' && workoutCategory !== 'wod' && workoutCategory !== 'mobility' && workoutCategory !== 'hiit' && (
                       <div>
                         <label className="block text-sm text-iron-400 mb-2">Intensity</label>
                         <div className="grid grid-cols-4 gap-1.5">
@@ -748,7 +816,7 @@ export default function GenerateGroupWorkoutModal({
                     )}
 
                     {/* Duration & Exercises — hidden for 1RM */}
-                    {workoutFocus !== '1rm-test' && (
+                    {workoutFocus !== '1rm-test' && workoutCategory !== 'wod' && (
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm text-iron-400 mb-2">Duration</label>
@@ -844,7 +912,7 @@ export default function GenerateGroupWorkoutModal({
                     </div>
 
                     {/* Warm-up & Stretches toggles */}
-                    {workoutFocus !== '1rm-test' && (
+                    {workoutFocus !== '1rm-test' && workoutCategory !== 'wod' && workoutCategory !== 'mobility' && (
                     <div className="flex gap-3">
                       <button
                         onClick={() => setIncludeWarmup(!includeWarmup)}

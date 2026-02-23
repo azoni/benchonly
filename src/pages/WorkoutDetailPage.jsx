@@ -112,6 +112,12 @@ export default function WorkoutDetailPage() {
   const [editNotes, setEditNotes] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
+  // WOD-specific logging state
+  const [wodRounds, setWodRounds] = useState('')
+  const [wodExtraReps, setWodExtraReps] = useState('')
+  const [wodTime, setWodTime] = useState('')
+  const [wodDnf, setWodDnf] = useState(false)
+
   useEffect(() => {
     async function fetchWorkout() {
       if (!id || !user) return
@@ -133,6 +139,13 @@ export default function WorkoutDetailPage() {
             userNotes: ex.userNotes || '',
             sets: ex.sets?.map(set => ({ ...set })) || []
           })))
+        }
+        // Initialize WOD result state from existing data
+        if (data?.wodResult) {
+          setWodRounds(data.wodResult.rounds?.toString() || '')
+          setWodExtraReps(data.wodResult.extraReps?.toString() || '')
+          setWodTime(data.wodResult.completionTime || '')
+          setWodDnf(data.wodResult.dnf || false)
         }
       } catch (error) {
         console.error('Error fetching workout:', error)
@@ -552,9 +565,21 @@ export default function WorkoutDetailPage() {
       
       if (!isGuest) {
         const payload = buildSavePayload(filledExercises)
+        // Include WOD results if this is a WOD workout
+        if (isWodSimpleLog) {
+          payload.wodResult = wodFormat === 'amrap'
+            ? { format: 'amrap', rounds: parseInt(wodRounds) || 0, extraReps: parseInt(wodExtraReps) || 0 }
+            : { format: 'fortime', completionTime: wodTime || '', dnf: wodDnf }
+        }
         await workoutService.complete(id, payload)
       }
+      const wodResultData = isWodSimpleLog
+        ? (wodFormat === 'amrap'
+          ? { format: 'amrap', rounds: parseInt(wodRounds) || 0, extraReps: parseInt(wodExtraReps) || 0 }
+          : { format: 'fortime', completionTime: wodTime || '', dnf: wodDnf })
+        : undefined
       setWorkout(prev => ({ ...prev, exercises: filledExercises, notes: workoutNotes, userNotes: workoutUserNotes, status: 'completed',
+        ...(wodResultData && { wodResult: wodResultData }),
         ...(workout?.coachingNotes && { coachingNotes: workout.coachingNotes }),
         ...(workout?.personalNotes && { personalNotes: workout.personalNotes }),
         ...(workout?.description && { description: workout.description }),
@@ -611,11 +636,23 @@ export default function WorkoutDetailPage() {
   }
 
   const isScheduled = workout.status === 'scheduled'
-  const hasPartialData = isScheduled && (workout.userNotes || workout.exercises?.some(ex => 
+  const hasPartialData = isScheduled && (workout.userNotes || workout.exercises?.some(ex =>
     ex.userNotes || ex.rpe || ex.painLevel > 0 || ex.sets?.some(s => s.actualWeight || s.actualReps || s.actualTime || s.rpe)
   ))
   const isCardio = workout.workoutType === 'cardio'
   const backLabel = location.state?.fromLabel || 'Back'
+
+  // WOD detection
+  const isWod = workout.workoutCategory === 'wod'
+  const wodFormat = (() => {
+    if (!isWod) return null
+    const notes = (workout.notes || '').toLowerCase()
+    if (notes.includes('amrap')) return 'amrap'
+    if (notes.includes('for time')) return 'fortime'
+    if (notes.includes('emom')) return 'emom'
+    return 'amrap' // default for WODs
+  })()
+  const isWodSimpleLog = isWod && (wodFormat === 'amrap' || wodFormat === 'fortime')
 
   // Calculate totals for summary
   const totalSets = workout.exercises?.reduce((sum, ex) => sum + (ex.sets?.length || 0), 0) || 0
@@ -840,6 +877,36 @@ export default function WorkoutDetailPage() {
               <span className="text-sm font-semibold text-yellow-400">WOD Format</span>
             </div>
             <p className="text-iron-200 leading-relaxed whitespace-pre-line">{workout.notes}</p>
+          </div>
+        )}
+
+        {/* WOD Result — displayed for completed WODs */}
+        {!isEditing && workout.wodResult && (
+          <div className="mb-4 p-5 bg-gradient-to-br from-flame-500/10 to-yellow-500/5 border border-flame-500/20 rounded-xl text-center">
+            <p className="text-xs text-iron-400 uppercase tracking-wider mb-2">Your Result</p>
+            {workout.wodResult.format === 'amrap' ? (
+              <div>
+                <p className="text-4xl font-display text-flame-400">
+                  {workout.wodResult.rounds || 0}
+                  <span className="text-lg text-iron-400 ml-1">rounds</span>
+                  {workout.wodResult.extraReps > 0 && (
+                    <span className="text-2xl text-iron-300 ml-2">
+                      + {workout.wodResult.extraReps} <span className="text-lg text-iron-400">reps</span>
+                    </span>
+                  )}
+                </p>
+              </div>
+            ) : workout.wodResult.format === 'fortime' ? (
+              <div>
+                {workout.wodResult.dnf ? (
+                  <p className="text-2xl font-display text-red-400">DNF</p>
+                ) : (
+                  <p className="text-4xl font-display text-flame-400">
+                    {workout.wodResult.completionTime || '—'}
+                  </p>
+                )}
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -1613,7 +1680,89 @@ export default function WorkoutDetailPage() {
         />
       </div>
 
+      {/* WOD Result Logging */}
+      {isWodSimpleLog && (
+        <div className="card-steel p-5 mb-4 border border-yellow-500/20 bg-yellow-500/5">
+          <div className="flex items-center gap-2 mb-4">
+            <Zap className="w-5 h-5 text-yellow-400" />
+            <h3 className="font-semibold text-iron-100">
+              {wodFormat === 'amrap' ? 'AMRAP Result' : 'For Time Result'}
+            </h3>
+          </div>
+
+          {wodFormat === 'amrap' ? (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-iron-400 mb-1.5">Rounds Completed</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={wodRounds}
+                  onChange={(e) => setWodRounds(e.target.value)}
+                  placeholder="0"
+                  min="0"
+                  className="input-field w-full text-3xl py-3 px-4 text-center font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-iron-400 mb-1.5">Extra Reps (partial round)</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={wodExtraReps}
+                  onChange={(e) => setWodExtraReps(e.target.value)}
+                  placeholder="0"
+                  min="0"
+                  className="input-field w-full text-xl py-2.5 px-4 text-center font-semibold"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-iron-400 mb-1.5">Completion Time (mm:ss)</label>
+                <input
+                  type="text"
+                  value={wodTime}
+                  onChange={(e) => setWodTime(e.target.value)}
+                  placeholder="12:30"
+                  disabled={wodDnf}
+                  className="input-field w-full text-3xl py-3 px-4 text-center font-bold disabled:opacity-40"
+                />
+              </div>
+              <button
+                onClick={() => setWodDnf(!wodDnf)}
+                className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  wodDnf ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-iron-800 text-iron-500 hover:bg-iron-700'
+                }`}
+              >
+                {wodDnf ? 'DNF (Did Not Finish)' : 'Mark as DNF'}
+              </button>
+            </div>
+          )}
+
+          {/* Movements reference */}
+          {workout.exercises?.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-iron-800/50">
+              <p className="text-xs text-iron-500 uppercase tracking-wider mb-2">Movements per round</p>
+              <div className="space-y-1">
+                {workout.exercises.map((ex, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <span className="text-iron-300">{ex.name}</span>
+                    <span className="text-iron-500">
+                      {ex.sets?.[0]?.prescribedReps ? `${ex.sets[0].prescribedReps} reps` :
+                       ex.sets?.[0]?.prescribedTime ? `${ex.sets[0].prescribedTime}s` : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Exercises */}
+      {!isWodSimpleLog && (
       <div className="space-y-4">
         {groupExercisesForDisplay(exercises).map((group, groupIndex) => {
           // ── Superset Log Card ──
@@ -2117,6 +2266,7 @@ export default function WorkoutDetailPage() {
           </div>
         )})}
       </div>
+      )}
 
       {/* Action Buttons */}
       <div className={`fixed bottom-0 right-0 p-4 bg-iron-950/95 backdrop-blur-sm border-t border-iron-800 left-0 ${sidebarOpen ? 'lg:left-64' : 'lg:left-20'} transition-[left] duration-300`}>

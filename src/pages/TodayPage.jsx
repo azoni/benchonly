@@ -78,7 +78,6 @@ export default function TodayPage() {
   const [calcOpen, setCalcOpen] = useState(false)
   const [calcWeight, setCalcWeight] = useState('')
   const [calcReps, setCalcReps] = useState('')
-  const [calcFormula, setCalcFormula] = useState('epley')
 
   // News & Updates state
   const [newsOpen, setNewsOpen] = useState(false)
@@ -182,18 +181,11 @@ export default function TodayPage() {
     },
   ]
 
-  const FORMULAS = {
-    epley: { name: 'Epley', calc: (w, r) => w * (1 + r / 30) },
-    brzycki: { name: 'Brzycki', calc: (w, r) => w * (36 / (37 - r)) },
-    lombardi: { name: 'Lombardi', calc: (w, r) => w * Math.pow(r, 0.1) },
-    oconner: { name: "O'Conner", calc: (w, r) => w * (1 + r / 40) },
-  }
-
   const calcOneRM = () => {
     const w = parseFloat(calcWeight), r = parseInt(calcReps)
     if (!w || !r || r < 1 || r > 30) return null
     if (r === 1) return w
-    return FORMULAS[calcFormula].calc(w, r)
+    return w * (1 + r / 30) // Epley formula
   }
   const oneRM = calcOneRM()
   const percentChart = useMemo(() => oneRM ? [
@@ -1128,22 +1120,6 @@ export default function TodayPage() {
                   className="input-field w-full text-base py-2.5"
                 />
               </div>
-            </div>
-
-            <div className="flex gap-1.5">
-              {Object.entries(FORMULAS).map(([key, { name }]) => (
-                <button
-                  key={key}
-                  onClick={() => setCalcFormula(key)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    calcFormula === key
-                      ? 'bg-flame-500 text-white'
-                      : 'bg-iron-800 text-iron-500 hover:bg-iron-700'
-                  }`}
-                >
-                  {name}
-                </button>
-              ))}
             </div>
 
             {oneRM && (
