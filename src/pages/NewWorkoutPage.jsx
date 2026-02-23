@@ -93,7 +93,10 @@ export default function NewWorkoutPage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!!editId);
   const [rpeModalOpen, setRpeModalOpen] = useState(false);
-  const [workoutType, setWorkoutType] = useState('strength'); // 'strength' or 'cardio'
+  const [workoutType, setWorkoutType] = useState('strength'); // 'strength', 'cardio', or 'wod'
+  const [wodFormat, setWodFormat] = useState('amrap'); // 'amrap', 'fortime', 'emom'
+  const [wodTimeCap, setWodTimeCap] = useState('');
+  const [wodMovements, setWodMovements] = useState([{ name: '', reps: '' }]);
   const [activeAutocomplete, setActiveAutocomplete] = useState(null); // exercise.id or null
   const autocompleteRef = useRef(null);
   const [nextSupersetGroup, setNextSupersetGroup] = useState(1);
@@ -381,6 +384,63 @@ export default function NewWorkoutPage() {
     return <CardioForm onBack={() => setWorkoutType('strength')} />;
   }
 
+  const handleSaveWod = async () => {
+    if (!workout.name.trim()) {
+      alert('Please enter a workout name');
+      return;
+    }
+    const validMovements = wodMovements.filter(m => m.name.trim());
+    if (validMovements.length === 0) {
+      alert('Add at least one movement');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Build WOD notes describing the format
+      const formatLabel = wodFormat === 'amrap' ? 'AMRAP' : wodFormat === 'fortime' ? 'For Time' : 'EMOM';
+      const timeStr = wodTimeCap ? ` ${wodTimeCap} min` : '';
+      const movementLines = validMovements.map(m => `${m.reps ? m.reps + ' ' : ''}${m.name}`).join('\n');
+      const notes = `${formatLabel}${timeStr}\n${movementLines}`;
+
+      // Build exercises array — each movement as a separate exercise with 1 set
+      const exercises = validMovements.map((m, i) => ({
+        id: Date.now() + i,
+        name: m.name,
+        type: 'bodyweight',
+        sets: [{
+          id: Date.now() + i + 1000,
+          prescribedReps: m.reps || '',
+          prescribedWeight: '',
+        }],
+      }));
+
+      const workoutData = {
+        name: workout.name,
+        date: parseLocalDate(workout.date),
+        notes,
+        exercises,
+        workoutCategory: 'wod',
+      };
+
+      if (trainerRequestId) {
+        workoutData.trainerRequestId = trainerRequestId;
+        workoutData.trainerId = user?.uid;
+      }
+
+      const saved = await workoutService.create(targetUserId, workoutData);
+      if (trainerRequestId && saved?.id) {
+        await trainerRequestService.linkWorkout(trainerRequestId, saved.id).catch(console.error);
+      }
+      navigate(trainerRequestId ? '/trainer' : isAdminCreating ? '/admin' : '/workouts');
+    } catch (error) {
+      console.error('Error saving WOD:', error);
+      alert('Failed to save WOD');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!workout.name.trim()) {
       alert('Please enter a workout name');
@@ -537,6 +597,17 @@ export default function NewWorkoutPage() {
           Strength
         </button>
         <button
+          onClick={() => setWorkoutType('wod')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition-colors ${
+            workoutType === 'wod'
+              ? 'bg-yellow-500 text-black'
+              : 'text-iron-400 hover:text-iron-200 hover:bg-iron-800'
+          }`}
+        >
+          <Zap className="w-5 h-5" />
+          WOD
+        </button>
+        <button
           onClick={() => setWorkoutType('cardio')}
           className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition-colors ${
             workoutType === 'cardio'
@@ -550,6 +621,150 @@ export default function NewWorkoutPage() {
       </div>
       )}
 
+      {/* ═══════ WOD FORM ═══════ */}
+      {workoutType === 'wod' && (
+        <>
+          {/* WOD Info */}
+          <div className="card-steel rounded-xl p-5 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-iron-300 mb-2">WOD Name</label>
+                <input
+                  type="text"
+                  value={workout.name}
+                  onChange={(e) => setWorkout((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., Cindy, Fran, custom WOD"
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-iron-300 mb-2">Date</label>
+                <input
+                  type="date"
+                  value={workout.date}
+                  onChange={(e) => setWorkout((prev) => ({ ...prev, date: e.target.value }))}
+                  className="input-field"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* WOD Format */}
+          <div className="card-steel rounded-xl p-5 mb-6">
+            <label className="block text-sm font-medium text-iron-300 mb-3">Format</label>
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {[
+                { value: 'amrap', label: 'AMRAP', desc: 'As Many Rounds As Possible' },
+                { value: 'fortime', label: 'For Time', desc: 'Complete as fast as you can' },
+                { value: 'emom', label: 'EMOM', desc: 'Every Minute On the Minute' },
+              ].map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setWodFormat(f.value)}
+                  className={`p-3 rounded-lg border text-center transition-colors ${
+                    wodFormat === f.value
+                      ? 'border-yellow-500 bg-yellow-500/10 text-yellow-400'
+                      : 'border-iron-700 text-iron-400 hover:border-iron-600'
+                  }`}
+                >
+                  <div className="text-sm font-semibold">{f.label}</div>
+                  <div className="text-[10px] text-iron-500 mt-0.5">{f.desc}</div>
+                </button>
+              ))}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-iron-300 mb-2">
+                {wodFormat === 'amrap' ? 'Time Cap (minutes)' : wodFormat === 'emom' ? 'Total Minutes' : 'Time Cap (minutes, optional)'}
+              </label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={wodTimeCap}
+                onChange={(e) => setWodTimeCap(e.target.value)}
+                placeholder={wodFormat === 'amrap' ? '20' : wodFormat === 'emom' ? '10' : '15'}
+                className="input-field w-full"
+              />
+            </div>
+          </div>
+
+          {/* WOD Movements */}
+          <div className="card-steel rounded-xl p-5 mb-6">
+            <label className="block text-sm font-medium text-iron-300 mb-3">Movements</label>
+            <div className="space-y-2">
+              {wodMovements.map((m, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={m.reps}
+                    onChange={(e) => {
+                      const updated = [...wodMovements];
+                      updated[i] = { ...updated[i], reps: e.target.value };
+                      setWodMovements(updated);
+                    }}
+                    placeholder="10"
+                    className="input-field w-20 text-center"
+                  />
+                  <input
+                    type="text"
+                    value={m.name}
+                    onChange={(e) => {
+                      const updated = [...wodMovements];
+                      updated[i] = { ...updated[i], name: e.target.value };
+                      setWodMovements(updated);
+                    }}
+                    placeholder="e.g., Pull-ups"
+                    className="input-field flex-1"
+                  />
+                  {wodMovements.length > 1 && (
+                    <button
+                      onClick={() => setWodMovements(wodMovements.filter((_, j) => j !== i))}
+                      className="p-2 text-iron-600 hover:text-red-400 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setWodMovements([...wodMovements, { name: '', reps: '' }])}
+              className="mt-3 w-full py-2.5 border border-dashed border-iron-700 rounded-lg text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600 flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Movement
+            </button>
+          </div>
+
+          {/* Save WOD Button */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => navigate(-1)}
+              className="btn-secondary py-3 px-6"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveWod}
+              disabled={saving}
+              className="btn-primary flex-1 py-3 flex items-center justify-center gap-2"
+            >
+              {saving ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Save className="w-5 h-5" />
+                  Save WOD
+                </>
+              )}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ═══════ STRENGTH FORM ═══════ */}
+      {workoutType === 'strength' && (
+      <>
       {/* Workout Info */}
       <div className="card-steel rounded-xl p-5 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1455,6 +1670,8 @@ export default function NewWorkoutPage() {
           </button>
         </div>
       </div>
+      </>
+      )}
 
       {/* RPE Info Modal */}
       <AnimatePresence>
