@@ -52,6 +52,7 @@
 
 [functions."social-cron"]
   schedule = "0 */2 * * *"
+  timeout = 26
 
 # Headers for security and caching
 [[headers]]
