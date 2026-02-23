@@ -653,13 +653,13 @@ export default function FormCheckPage() {
         console.warn('[extract] MediaPipe unavailable, will skip pose scan:', e.message)
       }
 
-      // ─── Pass 1: Pose scan at 320px ───
-      // Seeks through the clip at regular intervals, runs MediaPipe VIDEO mode on each frame.
-      // No pixel diff — we let pose data decide which frames are interesting.
-      const SCAN_WIDTH = 320
-      const scanScale = Math.min(1, SCAN_WIDTH / video.videoWidth)
-      canvas.width = Math.round(video.videoWidth * scanScale)
-      canvas.height = Math.round(video.videoHeight * scanScale)
+      // ─── Single scan pass at full resolution ───
+      // Seeks through the clip at regular intervals, runs MediaPipe VIDEO mode on each
+      // frame, and stores the dataUrl immediately — no second pass needed.
+      // selectKeyFrames then picks the best N from the stored results.
+      const finalScale = Math.min(1, FRAME_WIDTH / video.videoWidth)
+      canvas.width = Math.round(video.videoWidth * finalScale)
+      canvas.height = Math.round(video.videoHeight * finalScale)
 
       const SCAN_TARGETS = Math.min(60, Math.max(maxFrames * 4, Math.ceil(duration * 5)))
       const scanInterval = duration / SCAN_TARGETS
@@ -668,16 +668,18 @@ export default function FormCheckPage() {
       for (let i = 0; i < SCAN_TARGETS; i++) {
         const time = i * scanInterval
         setExtractPhase(`Scanning movement... (${i + 1}/${SCAN_TARGETS})`)
-        setExtractProgress(Math.round(((i + 1) / SCAN_TARGETS) * 60))
+        setExtractProgress(Math.round(((i + 1) / SCAN_TARGETS) * 90))
 
         await seekTo(time)
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
         if (!isRealFrame()) continue
 
+        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
+        const base64 = dataUrl.split(',')[1]
+
         let pose = { poseDetected: false, timestamp: time }
         if (landmarker) {
           try {
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
             const img = new Image()
             await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl })
             const raw = landmarker.detectForVideo(img, nextVideoTimestamp(time))
@@ -686,7 +688,7 @@ export default function FormCheckPage() {
           } catch { /* pose stays not detected */ }
         }
 
-        scanResults.push({ timestamp: time, pose })
+        scanResults.push({ dataUrl, base64, timestamp: time, pose })
       }
 
       if (scanResults.length === 0) {
@@ -697,32 +699,7 @@ export default function FormCheckPage() {
       // ─── Select key frames using pose timeline ───
       setExtractPhase('Selecting key frames...')
       const selectedMoments = selectKeyFrames(scanResults, maxFrames, exercise)
-
-      // ─── Pass 2: Re-extract selected timestamps at full quality ───
-      const finalScale = Math.min(1, FRAME_WIDTH / video.videoWidth)
-      canvas.width = Math.round(video.videoWidth * finalScale)
-      canvas.height = Math.round(video.videoHeight * finalScale)
-
-      const extractedFrames = []
-      for (let i = 0; i < selectedMoments.length; i++) {
-        const { timestamp: time, pose } = selectedMoments[i]
-        setExtractPhase(`Capturing frame ${i + 1}/${selectedMoments.length}...`)
-        setExtractProgress(60 + Math.round(((i + 1) / selectedMoments.length) * 38))
-
-        // Up to 5 attempts with escalating waits for slow decoders
-        for (let attempt = 0; attempt < 5; attempt++) {
-          await seekTo(time + (attempt > 0 ? 0.02 * attempt : 0))
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-          if (isRealFrame()) break
-          await new Promise(r => setTimeout(r, 100 * (attempt + 1)))
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-          if (isRealFrame()) break
-        }
-
-        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
-        const base64 = dataUrl.split(',')[1]
-        extractedFrames.push({ dataUrl, base64, timestamp: time, index: i + 1, pose })
-      }
+      const extractedFrames = selectedMoments.map((f, i) => ({ ...f, index: i + 1 }))
 
       // Split: raw joints stay client-side for overlay, metrics go to server
       const poseMetrics = extractedFrames.map(f => { const { joints: _, ...m } = (f.pose || {}); return m })
