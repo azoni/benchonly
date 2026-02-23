@@ -52,7 +52,6 @@
 
 [functions."social-cron"]
   schedule = "0 */2 * * *"
-  type = "background"
 
 # Headers for security and caching
 [[headers]]

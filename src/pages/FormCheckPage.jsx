@@ -41,8 +41,8 @@ const FRAME_PRESETS = {
   standard: { frames: 10, label: 'Standard', desc: '10 frames', credits: 15 },
   detailed: { frames: 20, label: 'Detailed', desc: '20 frames', credits: 25 },
 }
-const FRAME_WIDTH = 480
-const JPEG_QUALITY = 0.5
+const FRAME_WIDTH = 640
+const JPEG_QUALITY = 0.82
 const FORM_CHECK_PREMIUM_COST = 50
 
 const ANALYZING_TIPS = [

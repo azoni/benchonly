@@ -1,8 +1,8 @@
 import OpenAI from 'openai';
-import { verifyAuth, UNAUTHORIZED, getCorsHeaders, optionsResponse, admin } from './utils/auth.js';
+import { admin } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
-import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
-import { buildSystemPrompt, buildUserMessage, buildGeminiParts, formatPoseContext } from './utils/formCheckPrompt.js';
+import { refundCredits } from './utils/credits.js';
+import { buildSystemPrompt, buildUserMessage, buildGeminiParts, formatPoseContext, computeOverallScore } from './utils/formCheckPrompt.js';
 import { callGemini } from './utils/gemini.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
@@ -24,7 +24,7 @@ function coerceAnalysis(analysis) {
   return analysis;
 }
 
-export async function handler(event, context) {
+export async function handler(event) {
   console.log('[form-check-bg] Handler invoked');
 
   if (event.httpMethod !== 'POST') return { statusCode: 405 };
@@ -136,6 +136,9 @@ export async function handler(event, context) {
     try {
       const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
       analysis = coerceAnalysis(JSON.parse(cleaned));
+      if (analysis) {
+        analysis.overallScore = computeOverallScore(analysis, poseData, exercise);
+      }
     } catch (parseErr) {
       console.error('[form-check-bg] JSON parse error:', parseErr.message);
       analysis = null;

@@ -2,8 +2,10 @@
 // Extracts 33 body keypoints per frame for biomechanical analysis
 
 const WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm'
+// Full model: significantly more accurate 3D joint positions vs lite.
+// Lite is optimized for real-time 30fps; full is the right choice for offline frame analysis.
 const MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
+  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task'
 
 // MediaPipe landmark indices
 const LM = {
@@ -48,8 +50,8 @@ export async function getLandmarker() {
           baseOptions: { ...baseOptions, delegate: 'GPU' },
           runningMode: 'VIDEO',
           numPoses: 1,
-          minPoseDetectionConfidence: 0.5,
-          minPosePresenceConfidence: 0.5,
+          minPoseDetectionConfidence: 0.65,
+          minPosePresenceConfidence: 0.65,
         })
       } catch {
         console.warn('[pose] GPU delegate failed, retrying with CPU')
@@ -57,8 +59,8 @@ export async function getLandmarker() {
           baseOptions: { ...baseOptions, delegate: 'CPU' },
           runningMode: 'VIDEO',
           numPoses: 1,
-          minPoseDetectionConfidence: 0.5,
-          minPosePresenceConfidence: 0.5,
+          minPoseDetectionConfidence: 0.65,
+          minPosePresenceConfidence: 0.65,
         })
       }
 
@@ -72,8 +74,17 @@ export async function getLandmarker() {
   return _loadPromise
 }
 
+// Minimum per-joint visibility to trust in angle calculations.
+// Below this threshold the landmark is unreliable (occluded, out of frame, etc.)
+// and the angle is discarded rather than reported as a confident measurement.
+const MIN_JOINT_VIS = 0.45
+
 function calcAngle3D(a, b, c) {
-  // Returns angle at joint b using x, y, z — more accurate than 2D when depth is available
+  // Returns angle at joint b using x, y, z — more accurate than 2D when depth is available.
+  // Returns null if any of the three joints has low visibility (occlusion / out-of-frame).
+  if ((a.visibility ?? 1) < MIN_JOINT_VIS) return null
+  if ((b.visibility ?? 1) < MIN_JOINT_VIS) return null
+  if ((c.visibility ?? 1) < MIN_JOINT_VIS) return null
   const v1 = { x: a.x - b.x, y: a.y - b.y, z: (a.z ?? 0) - (b.z ?? 0) }
   const v2 = { x: c.x - b.x, y: c.y - b.y, z: (c.z ?? 0) - (b.z ?? 0) }
   const dot = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z

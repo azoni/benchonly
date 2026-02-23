@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { verifyAuth, UNAUTHORIZED, getCorsHeaders, optionsResponse, admin } from './utils/auth.js';
 import { logActivity, logError } from './utils/logger.js';
 import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js';
-import { buildSystemPrompt, buildUserMessage, buildGeminiParts, formatPoseContext } from './utils/formCheckPrompt.js';
+import { buildSystemPrompt, buildUserMessage, buildGeminiParts, formatPoseContext, computeOverallScore } from './utils/formCheckPrompt.js';
 import { callGemini } from './utils/gemini.js';
 
 const db = admin.apps.length ? admin.firestore() : null;
@@ -196,6 +196,9 @@ export async function handler(event) {
     try {
       const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
       analysis = coerceAnalysis(JSON.parse(cleaned));
+      if (analysis) {
+        analysis.overallScore = computeOverallScore(analysis, inlinePoseData, exercise);
+      }
     } catch (parseErr) {
       console.error('Failed to parse form analysis JSON:', parseErr.message);
       analysis = null;
