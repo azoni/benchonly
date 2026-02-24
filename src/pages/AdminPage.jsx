@@ -85,7 +85,7 @@ export default function AdminPage() {
   const [creditAmount, setCreditAmount] = useState('')
   const [creditLoading, setCreditLoading] = useState(false)
   const [activityLoading, setActivityLoading] = useState(false)
-  const [hideAdminActivity, setHideAdminActivity] = useState(false)
+  const [hideAdminActivity, setHideAdminActivity] = useState(true)
   const [usageData, setUsageData] = useState([])
   const [usageLoading, setUsageLoading] = useState(false)
   const [usageFilter, setUsageFilter] = useState('')

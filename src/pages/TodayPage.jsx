@@ -24,6 +24,8 @@ import {
   Heart,
   Send,
   Loader2,
+  Shield,
+  BarChart3,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -35,9 +37,10 @@ import {
   programService,
 } from '../services/firestore'
 import { feedService } from '../services/feedService'
+import { analyticsService } from '../services/analyticsService'
 import { notificationService } from '../services/feedService'
 import { friendService } from '../services/friendService'
-import { format, startOfWeek, endOfWeek, subDays, addDays, isToday, startOfDay } from 'date-fns'
+import { format, startOfWeek, endOfWeek, subDays, addDays, isToday, startOfDay, formatDistanceToNow } from 'date-fns'
 import { toDateString } from '../utils/dateUtils'
 import { formatDuration } from '../utils/workoutUtils'
 import OnboardingChecklist from '../components/OnboardingChecklist'
@@ -87,6 +90,11 @@ export default function TodayPage() {
   const [feedbackCategory, setFeedbackCategory] = useState('general')
   const [feedbackSending, setFeedbackSending] = useState(false)
   const [feedbackSent, setFeedbackSent] = useState(false)
+
+  // Admin activity panel state
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false)
+  const [adminActivity, setAdminActivity] = useState(null)
+  const [adminActivityLoading, setAdminActivityLoading] = useState(false)
 
   const APP_UPDATES = [
     {
@@ -459,6 +467,47 @@ export default function TodayPage() {
     }
     checkEvent()
   }, [user])
+
+  // Load admin activity when panel is opened
+  useEffect(() => {
+    if (!adminPanelOpen || !isRealAdmin || adminActivity) return
+    const load = async () => {
+      setAdminActivityLoading(true)
+      try {
+        const data = await analyticsService.getActivitySummary(7)
+        // Filter out admin activity to show real user stats
+        const events = data.allEvents.filter(e => !e.adminUid)
+        const uniqueUsers = new Set(events.map(e => e.userId))
+        const actionCounts = {}
+        events.forEach(e => { actionCounts[e.action] = (actionCounts[e.action] || 0) + 1 })
+        const dailyActive = {}
+        events.forEach(e => {
+          const d = e.timestamp?.toDate?.()
+          if (d) {
+            const k = d.toISOString().split('T')[0]
+            if (!dailyActive[k]) dailyActive[k] = new Set()
+            dailyActive[k].add(e.userId)
+          }
+        })
+        const dailyActiveCounts = Object.entries(dailyActive)
+          .map(([date, users]) => ({ date, count: users.size }))
+          .sort((a, b) => a.date.localeCompare(b.date))
+        setAdminActivity({
+          totalEvents: events.length,
+          uniqueUsers: uniqueUsers.size,
+          actionCounts,
+          dailyActiveCounts,
+          recentEvents: events.slice(0, 10),
+          workoutsCreated: actionCounts.workout_created || 0,
+        })
+      } catch (e) {
+        console.error('Admin activity load error:', e)
+      } finally {
+        setAdminActivityLoading(false)
+      }
+    }
+    load()
+  }, [adminPanelOpen, isRealAdmin])
 
   const hasTodayWorkout = todayWorkouts.length > 0 || todayGroupWorkouts.length > 0 || todaySchedules.length > 0 || todayProgramDay
   const allCompleted = todayWorkouts.length > 0 && todayWorkouts.every(w => w.status === 'completed' || w.status !== 'scheduled')
@@ -1227,6 +1276,118 @@ export default function TodayPage() {
         </motion.div>
       ) : null
       })()}
+
+      {/* Admin Activity Panel */}
+      {isRealAdmin && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.38 }}
+          className="mt-6"
+        >
+          <button
+            onClick={() => setAdminPanelOpen(!adminPanelOpen)}
+            aria-expanded={adminPanelOpen}
+            className="card-steel p-4 w-full flex items-center gap-3 hover:bg-iron-800/50 transition-colors"
+          >
+            <Shield className="w-5 h-5 text-flame-400" />
+            <div className="flex-1 text-left">
+              <p className="text-sm font-medium text-iron-200">Admin Dashboard</p>
+              <p className="text-xs text-iron-500">User activity & stats (7 days)</p>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-iron-500 transition-transform ${adminPanelOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {adminPanelOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="card-steel mt-1 p-4 space-y-4"
+            >
+              {adminActivityLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 text-flame-400 animate-spin" />
+                  <span className="ml-2 text-sm text-iron-500">Loading activity...</span>
+                </div>
+              ) : adminActivity ? (
+                <>
+                  {/* Quick Stats */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-iron-800/50 rounded-xl p-3 text-center">
+                      <p className="text-xl font-display text-flame-400">{adminActivity.uniqueUsers}</p>
+                      <p className="text-[10px] text-iron-500 uppercase tracking-wide">Users</p>
+                    </div>
+                    <div className="bg-iron-800/50 rounded-xl p-3 text-center">
+                      <p className="text-xl font-display text-iron-100">{adminActivity.totalEvents}</p>
+                      <p className="text-[10px] text-iron-500 uppercase tracking-wide">Events</p>
+                    </div>
+                    <div className="bg-iron-800/50 rounded-xl p-3 text-center">
+                      <p className="text-xl font-display text-green-400">{adminActivity.workoutsCreated}</p>
+                      <p className="text-[10px] text-iron-500 uppercase tracking-wide">Workouts</p>
+                    </div>
+                  </div>
+
+                  {/* Daily Active Users Mini Chart */}
+                  {adminActivity.dailyActiveCounts?.length > 0 && (
+                    <div>
+                      <p className="text-xs text-iron-500 mb-2">Daily Active Users</p>
+                      <div className="flex items-end gap-1.5 h-16">
+                        {adminActivity.dailyActiveCounts.map(day => {
+                          const max = Math.max(...adminActivity.dailyActiveCounts.map(d => d.count), 1)
+                          return (
+                            <div key={day.date} className="flex-1 flex flex-col items-center gap-0.5">
+                              <span className="text-[9px] text-iron-500">{day.count}</span>
+                              <div
+                                className="w-full bg-flame-500/80 rounded-t"
+                                style={{ height: `${Math.max(4, (day.count / max) * 40)}px` }}
+                              />
+                              <span className="text-[9px] text-iron-600">{format(new Date(day.date + 'T12:00:00'), 'EEE')}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recent Events */}
+                  {adminActivity.recentEvents?.length > 0 && (
+                    <div>
+                      <p className="text-xs text-iron-500 mb-2">Recent Events</p>
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {adminActivity.recentEvents.map(event => (
+                          <div key={event.id} className="flex items-center gap-2 py-1.5 border-b border-iron-800/50 last:border-0">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-iron-300 truncate">
+                                <span className="text-flame-400">{event.action.replace(/_/g, ' ')}</span>
+                                {event.metadata?.page && <span className="text-iron-600"> {event.metadata.page}</span>}
+                              </p>
+                              <p className="text-[10px] text-iron-600">
+                                {event.timestamp?.toDate && formatDistanceToNow(event.timestamp.toDate(), { addSuffix: true })}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Link to full admin page */}
+                  <Link
+                    to="/admin"
+                    className="flex items-center justify-center gap-2 w-full py-2 text-xs text-flame-400 hover:text-flame-300 transition-colors border border-iron-800 rounded-lg hover:border-iron-700"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    Full Admin Dashboard
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </>
+              ) : (
+                <p className="text-sm text-iron-500 text-center py-4">No activity data</p>
+              )}
+            </motion.div>
+          )}
+        </motion.div>
+      )}
 
       {/* Feedback & Bugs */}
       {!isGuest && (
