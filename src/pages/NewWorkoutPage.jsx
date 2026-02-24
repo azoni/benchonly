@@ -17,11 +17,13 @@ import {
   Search,
   Zap,
   BookOpen,
+  Pin,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { workoutService, trainerRequestService } from '../services/firestore';
 import CardioForm from '../components/CardioForm';
 import WodLibraryModal from '../components/WodLibraryModal';
+import { WOD_LIBRARY } from '../data/wodLibrary';
 import { getTodayString, parseLocalDate, toDateString } from '../utils/dateUtils';
 import { normalizeRepRange, groupExercisesForDisplay } from '../utils/workoutUtils';
 import { useUIStore } from '../store';
@@ -400,6 +402,10 @@ export default function NewWorkoutPage() {
     setWodLibraryOpen(false);
   };
 
+  const clearBenchmarkLink = () => {
+    if (benchmarkWodId) { setBenchmarkWodId(null); setBenchmarkVariant(null); }
+  };
+
   const handleSaveWod = async () => {
     if (!workout.name.trim()) {
       alert('Please enter a workout name');
@@ -658,10 +664,30 @@ export default function NewWorkoutPage() {
                 <input
                   type="text"
                   value={workout.name}
-                  onChange={(e) => setWorkout((prev) => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => {
+                    setWorkout((prev) => ({ ...prev, name: e.target.value }));
+                    if (benchmarkWodId) { setBenchmarkWodId(null); setBenchmarkVariant(null); }
+                  }}
                   placeholder="e.g., Cindy, Fran, custom WOD"
                   className="input-field"
                 />
+                {benchmarkWodId && (() => {
+                  const wod = WOD_LIBRARY.find(w => w.id === benchmarkWodId);
+                  const variantLabel = wod?.variants[benchmarkVariant]?.label || benchmarkVariant;
+                  return (
+                    <div className="flex items-center gap-2 mt-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-xs">
+                      <Pin className="w-3 h-3 text-yellow-400 flex-shrink-0" />
+                      <span className="text-yellow-300 min-w-0">Logging as <strong>{wod?.name}</strong> · {variantLabel}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setBenchmarkWodId(null); setBenchmarkVariant(null); }}
+                        className="ml-auto text-iron-500 hover:text-iron-300 flex-shrink-0"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
               <div>
                 <label className="block text-sm font-medium text-iron-300 mb-2">Date</label>
@@ -686,7 +712,7 @@ export default function NewWorkoutPage() {
               ].map(f => (
                 <button
                   key={f.value}
-                  onClick={() => setWodFormat(f.value)}
+                  onClick={() => { setWodFormat(f.value); clearBenchmarkLink(); }}
                   className={`p-3 rounded-lg border text-center transition-colors ${
                     wodFormat === f.value
                       ? 'border-yellow-500 bg-yellow-500/10 text-yellow-400'
@@ -707,7 +733,7 @@ export default function NewWorkoutPage() {
                 type="number"
                 inputMode="numeric"
                 value={wodTimeCap}
-                onChange={(e) => setWodTimeCap(e.target.value)}
+                onChange={(e) => { setWodTimeCap(e.target.value); clearBenchmarkLink(); }}
                 placeholder={wodFormat === 'amrap' ? '20' : wodFormat === 'emom' ? '10' : '15'}
                 className="input-field w-full"
               />
@@ -727,6 +753,7 @@ export default function NewWorkoutPage() {
                       const updated = [...wodMovements];
                       updated[i] = { ...updated[i], reps: e.target.value };
                       setWodMovements(updated);
+                      clearBenchmarkLink();
                     }}
                     placeholder="10"
                     className="input-field w-20 text-center"
@@ -738,13 +765,14 @@ export default function NewWorkoutPage() {
                       const updated = [...wodMovements];
                       updated[i] = { ...updated[i], name: e.target.value };
                       setWodMovements(updated);
+                      clearBenchmarkLink();
                     }}
                     placeholder="e.g., Pull-ups"
                     className="input-field flex-1"
                   />
                   {wodMovements.length > 1 && (
                     <button
-                      onClick={() => setWodMovements(wodMovements.filter((_, j) => j !== i))}
+                      onClick={() => { setWodMovements(wodMovements.filter((_, j) => j !== i)); clearBenchmarkLink(); }}
                       className="p-2 text-iron-600 hover:text-red-400 transition-colors"
                     >
                       <X className="w-4 h-4" />
@@ -754,7 +782,7 @@ export default function NewWorkoutPage() {
               ))}
             </div>
             <button
-              onClick={() => setWodMovements([...wodMovements, { name: '', reps: '' }])}
+              onClick={() => { setWodMovements([...wodMovements, { name: '', reps: '' }]); clearBenchmarkLink(); }}
               className="mt-3 w-full py-2.5 border border-dashed border-iron-700 rounded-lg text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600 flex items-center justify-center gap-1.5 transition-colors"
             >
               <Plus className="w-4 h-4" />

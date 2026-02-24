@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { workoutService, goalService, healthService, userService, scheduleService, recurringActivityService, creditService, CREDIT_COSTS } from '../services/firestore';
-import { collection, query, where, limit, getDocs, doc, getDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, limit, getDocs, doc, getDoc, orderBy, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { ouraService } from '../services/ouraService';
 
@@ -91,6 +91,7 @@ export default function AIChatPanel() {
   useEffect(() => {
     if (chatOpen) {
       inputRef.current?.focus();
+      loadChatHistory();
       if (!context && !contextLoading) {
         loadUserContext();
       }
@@ -100,6 +101,16 @@ export default function AIChatPanel() {
     }
   }, [chatOpen]);
 
+  // Auto-save conversation history after each complete AI response
+  useEffect(() => {
+    if (!loading && messages.length > 1 && user) {
+      const last = messages[messages.length - 1];
+      if (last?.role === 'assistant' && !last?.streaming) {
+        saveChatHistory(messages);
+      }
+    }
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load admin-configured rate limit settings
   const loadAiSettings = async () => {
     try {
@@ -108,6 +119,31 @@ export default function AIChatPanel() {
         setAiSettings(snap.data());
       }
     } catch { /* defaults will be used */ }
+  };
+
+  const loadChatHistory = async () => {
+    if (!user || messages.length > 0) return;
+    try {
+      const snap = await getDoc(doc(db, 'chatHistory', user.uid));
+      if (snap.exists()) {
+        const msgs = (snap.data().messages || []).filter(m => m.role && m.content);
+        if (msgs.length > 0) {
+          setMessages(msgs);
+          setGreetingFetched(true);
+        }
+      }
+    } catch { /* ignore, fresh greeting will show */ }
+  };
+
+  const saveChatHistory = async (msgs) => {
+    if (!user) return;
+    try {
+      const toSave = msgs
+        .filter(m => m.role && m.content && !m.streaming)
+        .slice(-20)
+        .map(m => ({ role: m.role, content: m.content }));
+      await setDoc(doc(db, 'chatHistory', user.uid), { messages: toSave, updatedAt: new Date() });
+    } catch { /* ignore */ }
   };
 
   // Fetch greeting once context is ready
@@ -124,6 +160,10 @@ export default function AIChatPanel() {
       setGreetingFetched(false);
       setMessages([]);
       setQuickActions([]);
+      // Clear saved history so new personality gets a fresh greeting
+      if (user) {
+        setDoc(doc(db, 'chatHistory', user.uid), { messages: [], updatedAt: new Date() }).catch(() => {});
+      }
     }
     lastPersonalityRef.current = currentPersonality;
   }, [userProfile?.chatPersonality]);
@@ -175,6 +215,7 @@ export default function AIChatPanel() {
       const maxLifts = {};
       const painHistory = {};
       const rpeData = {};
+      const liftTimeline = {}; // { exerciseName: [{daysSince, e1rm}] } for trend analysis
       const now = new Date();
 
       strengthWorkouts.slice(0, 25).forEach(w => {
@@ -182,6 +223,7 @@ export default function AIChatPanel() {
         const daysSince = workoutDate && !isNaN(workoutDate.getTime()) ? Math.floor((now - workoutDate) / (1000 * 60 * 60 * 24)) : null;
         (w.exercises || []).forEach(ex => {
           if (!ex.name) return;
+          let workoutBestE1rm = 0;
           (ex.sets || []).forEach(s => {
             const weight = parseFloat(s.actualWeight) || parseFloat(s.prescribedWeight) || 0;
             const reps = parseInt(s.actualReps) || parseInt(s.prescribedReps) || 0;
@@ -192,6 +234,7 @@ export default function AIChatPanel() {
 
             if (weight > 0 && reps > 0 && reps <= 12) {
               const e1rm = Math.round(weight * (1 + reps / 30));
+              workoutBestE1rm = Math.max(workoutBestE1rm, e1rm);
               if (!maxLifts[ex.name] || e1rm > maxLifts[ex.name].e1rm) {
                 maxLifts[ex.name] = { weight, reps, e1rm };
               }
@@ -213,12 +256,45 @@ export default function AIChatPanel() {
               rpeData[ex.name].count++;
             }
           });
+          // Track best e1rm per workout for progressive overload trend
+          if (workoutBestE1rm > 0 && daysSince !== null) {
+            if (!liftTimeline[ex.name]) liftTimeline[ex.name] = [];
+            liftTimeline[ex.name].push({ daysSince, e1rm: workoutBestE1rm });
+          }
         });
       });
 
       const rpeAverages = {};
       Object.entries(rpeData).forEach(([name, d]) => {
         rpeAverages[name] = Math.round(d.total / d.count * 10) / 10;
+      });
+
+      // Add urgency labels to pain history based on recency
+      Object.values(painHistory).forEach(p => {
+        const d = p.lastDaysAgo;
+        if (d === null || d === undefined) p.urgency = 'historical';
+        else if (d <= 7) p.urgency = 'high';
+        else if (d <= 30) p.urgency = 'moderate';
+        else if (d <= 90) p.urgency = 'low';
+        else p.urgency = 'historical';
+      });
+
+      // Compute progressive overload trend for each tracked lift
+      Object.keys(maxLifts).forEach(name => {
+        const timeline = liftTimeline[name] || [];
+        if (timeline.length < 2) return;
+        const recent = timeline.filter(e => e.daysSince <= 21);
+        const prior = timeline.filter(e => e.daysSince >= 42 && e.daysSince <= 84);
+        if (recent.length === 0 || prior.length === 0) return;
+        const recentBest = Math.max(...recent.map(e => e.e1rm));
+        const priorBest = Math.max(...prior.map(e => e.e1rm));
+        const delta = recentBest - priorBest;
+        maxLifts[name].trend = {
+          direction: delta > 5 ? 'progressing' : delta < -5 ? 'declining' : 'stalled',
+          recentE1rm: recentBest,
+          priorE1rm: priorBest,
+          deltaLbs: delta,
+        };
       });
 
       // Health summary
