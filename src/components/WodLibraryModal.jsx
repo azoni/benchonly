@@ -1,8 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
-import { X, Search, ChevronLeft, Clock, Repeat2, Trophy, History, Users } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { X, Search, ChevronLeft, Clock, Repeat2, Trophy, History, Users, Plus, Loader2 } from 'lucide-react'
 import { collection, getDocs, limit, query } from 'firebase/firestore'
 import { db } from '../services/firebase'
 import { WOD_LIBRARY, ALL_FOCUS_TAGS, FORMAT_LABELS, FORMAT_COLORS } from '../data/wodLibrary'
+import { useAuth } from '../context/AuthContext'
+import { workoutService } from '../services/firestore'
 
 const VARIANT_KEYS = ['rxMen', 'rxWomen', 'scaledMen', 'scaledWomen']
 
@@ -53,12 +56,17 @@ async function fetchCommunityStats(wodId) {
 }
 
 export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStats = {} }) {
+  const navigate = useNavigate()
+  const { user } = useAuth()
   const [search, setSearch] = useState('')
   const [focusFilter, setFocusFilter] = useState(null)
   const [selectedWod, setSelectedWod] = useState(null)
   const [selectedVariant, setSelectedVariant] = useState('rxMen')
   const [communityStats, setCommunityStats] = useState([])
   const [communityLoading, setCommunityLoading] = useState(false)
+  const [communityVariantFilter, setCommunityVariantFilter] = useState(null)
+  const [addingSaving, setAddingSaving] = useState(false)
+  const [addedWorkoutId, setAddedWorkoutId] = useState(null)
 
   const filtered = useMemo(() => {
     let list = WOD_LIBRARY
@@ -100,6 +108,8 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
   function openWod(wod) {
     setSelectedWod(wod)
     setSelectedVariant('rxMen')
+    setCommunityVariantFilter(null)
+    setAddedWorkoutId(null)
   }
 
   function handleUseWod() {
@@ -107,11 +117,44 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
     onSelect(selectedWod, selectedVariant)
   }
 
+  async function handleAddToWorkouts() {
+    if (!selectedWod || !user) return
+    setAddingSaving(true)
+    try {
+      const variant = selectedWod.variants[selectedVariant]
+      const formatLabel = selectedWod.format === 'amrap' ? 'AMRAP' : selectedWod.format === 'fortime' ? 'For Time' : 'EMOM'
+      const timeStr = selectedWod.timeCap ? ` ${selectedWod.timeCap} min` : ''
+      const notes = `${formatLabel}${timeStr}\n${variant.movements.map(m => `${m.reps ? m.reps + ' ' : ''}${m.name}`).join('\n')}`
+      const exercises = variant.movements.map((m, i) => ({
+        id: Date.now() + i,
+        name: m.name,
+        type: 'bodyweight',
+        sets: [{ id: Date.now() + i + 1000, prescribedReps: m.reps || '', prescribedWeight: '' }],
+      }))
+      const saved = await workoutService.create(user.uid, {
+        name: selectedWod.name,
+        date: new Date(),
+        notes,
+        exercises,
+        workoutCategory: 'wod',
+        benchmarkWodId: selectedWod.id,
+        benchmarkVariant: selectedVariant,
+      })
+      setAddedWorkoutId(saved.id)
+    } catch (e) {
+      console.error('[WodLibraryModal] Add to workouts failed:', e)
+    } finally {
+      setAddingSaving(false)
+    }
+  }
+
   function handleClose() {
     setSearch('')
     setFocusFilter(null)
     setSelectedWod(null)
     setCommunityStats([])
+    setCommunityVariantFilter(null)
+    setAddedWorkoutId(null)
     onClose()
   }
 
@@ -147,12 +190,28 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
           )}
         </div>
         {selectedWod && (
-          <button
-            onClick={handleUseWod}
-            className="btn-primary px-4 py-2 text-sm"
-          >
-            Use This WOD
-          </button>
+          <div className="flex items-center gap-2">
+            {addedWorkoutId ? (
+              <button
+                onClick={() => { handleClose(); navigate(`/workouts/${addedWorkoutId}`) }}
+                className="px-3 py-2 text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg"
+              >
+                Added — View
+              </button>
+            ) : (
+              <button
+                onClick={handleAddToWorkouts}
+                disabled={addingSaving || !user}
+                className="px-3 py-2 text-xs font-medium bg-iron-700 text-iron-200 border border-iron-600 rounded-lg hover:bg-iron-600 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+              >
+                {addingSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                Add
+              </button>
+            )}
+            <button onClick={handleUseWod} className="btn-primary px-4 py-2 text-sm">
+              Use This WOD
+            </button>
+          </div>
         )}
       </div>
 
@@ -250,6 +309,36 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
                 )}
               </div>
 
+              {/* Variant filter — only show tabs that have data */}
+              {communityStats.length > 0 && (() => {
+                const VTABS = [
+                  { key: null, label: 'All' },
+                  { key: 'rxMen', label: 'Rx ♂' },
+                  { key: 'rxWomen', label: 'Rx ♀' },
+                  { key: 'scaledMen', label: 'Sc ♂' },
+                  { key: 'scaledWomen', label: 'Sc ♀' },
+                ]
+                const activeTabs = VTABS.filter(v => v.key === null || communityStats.some(e => e.pr?.variant === v.key))
+                if (activeTabs.length <= 2) return null // only "All" + one variant — no need for tabs
+                return (
+                  <div className="flex gap-1.5 mb-3 flex-wrap">
+                    {activeTabs.map(v => (
+                      <button
+                        key={v.key || 'all'}
+                        onClick={() => setCommunityVariantFilter(v.key)}
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                          communityVariantFilter === v.key
+                            ? 'bg-iron-600 text-iron-100'
+                            : 'bg-iron-800 text-iron-500 hover:text-iron-300'
+                        }`}
+                      >
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
+
               {communityLoading ? (
                 <div className="flex items-center justify-center py-6">
                   <div className="w-5 h-5 border-2 border-iron-700 border-t-iron-400 rounded-full animate-spin" />
@@ -260,41 +349,53 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
                   <p className="text-sm text-iron-500">No results yet</p>
                   <p className="text-xs text-iron-700 mt-1">Be the first to log {selectedWod.name}!</p>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {communityStats.map((entry, idx) => {
-                    const result = formatResult(entry.pr, selectedWod.format)
-                    const isRx = entry.pr?.rxOrScaled === 'rx'
-                    const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null
-                    return (
-                      <div key={entry.uid} className={`flex items-center gap-3 py-1.5 ${idx < communityStats.length - 1 ? 'border-b border-iron-800/50' : ''}`}>
-                        <div className="w-6 text-center flex-shrink-0">
-                          {medal
-                            ? <span className="text-sm">{medal}</span>
-                            : <span className="text-xs text-iron-600 font-medium">{idx + 1}</span>
-                          }
-                        </div>
-                        {entry.photoURL ? (
-                          <img src={entry.photoURL} alt="" className="w-7 h-7 rounded-full flex-shrink-0" />
-                        ) : (
-                          <div className="w-7 h-7 rounded-full bg-iron-800 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs text-iron-400 font-medium">{entry.displayName?.[0] || '?'}</span>
+              ) : (() => {
+                const visible = communityVariantFilter
+                  ? communityStats.filter(e => e.pr?.variant === communityVariantFilter)
+                  : communityStats
+                if (visible.length === 0) return (
+                  <p className="text-xs text-iron-600 text-center py-3">No results for this variant yet</p>
+                )
+                return (
+                  <div className="space-y-2">
+                    {visible.map((entry, idx) => {
+                      const result = formatResult(entry.pr, selectedWod.format)
+                      const variantKey = entry.pr?.variant
+                      const variantLabel = variantKey
+                        ? ({ rxMen: 'Rx ♂', rxWomen: 'Rx ♀', scaledMen: 'Sc ♂', scaledWomen: 'Sc ♀' }[variantKey] || (entry.pr?.rxOrScaled === 'rx' ? 'Rx' : 'Sc'))
+                        : (entry.pr?.rxOrScaled === 'rx' ? 'Rx' : 'Sc')
+                      const isRx = entry.pr?.rxOrScaled === 'rx'
+                      const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null
+                      return (
+                        <div key={entry.uid} className={`flex items-center gap-3 py-1.5 ${idx < visible.length - 1 ? 'border-b border-iron-800/50' : ''}`}>
+                          <div className="w-6 text-center flex-shrink-0">
+                            {medal
+                              ? <span className="text-sm">{medal}</span>
+                              : <span className="text-xs text-iron-600 font-medium">{idx + 1}</span>
+                            }
                           </div>
-                        )}
-                        <span className="text-sm text-iron-200 font-medium flex-1 truncate">{entry.displayName}</span>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${isRx ? 'bg-flame-500/20 text-flame-400' : 'bg-iron-800 text-iron-500'}`}>
-                            {isRx ? 'Rx' : 'Sc'}
-                          </span>
-                          <span className={`text-sm font-bold ${idx === 0 ? 'text-yellow-400' : 'text-iron-200'}`}>
-                            {result || '—'}
-                          </span>
+                          {entry.photoURL ? (
+                            <img src={entry.photoURL} alt="" className="w-7 h-7 rounded-full flex-shrink-0" />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-iron-800 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs text-iron-400 font-medium">{entry.displayName?.[0] || '?'}</span>
+                            </div>
+                          )}
+                          <span className="text-sm text-iron-200 font-medium flex-1 truncate">{entry.displayName}</span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isRx ? 'bg-flame-500/20 text-flame-400' : 'bg-iron-800 text-iron-500'}`}>
+                              {variantLabel}
+                            </span>
+                            <span className={`text-sm font-bold ${idx === 0 ? 'text-yellow-400' : 'text-iron-200'}`}>
+                              {result || '—'}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+                      )
+                    })}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Variant selector */}
@@ -340,13 +441,29 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
               </div>
             )}
 
-            {/* Use WOD button (bottom) */}
-            <button
-              onClick={handleUseWod}
-              className="btn-primary w-full py-3"
-            >
-              Use This WOD
-            </button>
+            {/* Action buttons (bottom) */}
+            <div className="flex gap-3">
+              {addedWorkoutId ? (
+                <button
+                  onClick={() => { handleClose(); navigate(`/workouts/${addedWorkoutId}`) }}
+                  className="flex-1 py-3 rounded-xl bg-green-500/20 text-green-400 border border-green-500/30 font-medium text-sm"
+                >
+                  Added — View Workout
+                </button>
+              ) : (
+                <button
+                  onClick={handleAddToWorkouts}
+                  disabled={addingSaving || !user}
+                  className="flex-1 py-3 rounded-xl bg-iron-800 text-iron-200 border border-iron-700 font-medium text-sm hover:bg-iron-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {addingSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Add to My Workouts
+                </button>
+              )}
+              <button onClick={handleUseWod} className="btn-primary flex-1 py-3">
+                Use This WOD
+              </button>
+            </div>
           </div>
         </div>
       ) : (

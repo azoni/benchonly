@@ -185,6 +185,43 @@ export default function WorkoutDetailPage() {
         return
       }
       await workoutService.delete(id)
+
+      // Clean up WOD stats on profile if this was a completed benchmark WOD
+      if (workout?.benchmarkWodId && workout?.wodResult && userProfile?.wodStats) {
+        try {
+          const wodId = workout.benchmarkWodId
+          const prevStats = userProfile.wodStats[wodId]
+          if (prevStats?.history?.length > 0) {
+            const workoutDate = workout.date instanceof Date
+              ? workout.date.toISOString().split('T')[0]
+              : (workout.date?.toDate?.()?.toISOString().split('T')[0] || '')
+            const history = [...prevStats.history]
+            const idx = history.findIndex(h => h.date === workoutDate)
+            if (idx !== -1) history.splice(idx, 1)
+            const newWodStats = { ...userProfile.wodStats }
+            if (history.length === 0) {
+              delete newWodStats[wodId]
+            } else {
+              const format = prevStats.pr?.format || workout.wodResult?.format
+              let pr = history[0]
+              if (format === 'amrap') {
+                const best = history.filter(h => h.rounds != null).sort((a, b) =>
+                  (b.rounds * 1000 + (b.extraReps || 0)) - (a.rounds * 1000 + (a.extraReps || 0))
+                )[0]
+                if (best) pr = best
+              } else {
+                const best = history.filter(h => h.time && !h.dnf).sort((a, b) => a.time.localeCompare(b.time))[0]
+                if (best) pr = best
+              }
+              newWodStats[wodId] = { pr, history }
+            }
+            await updateProfile({ wodStats: newWodStats })
+          }
+        } catch (e) {
+          console.error('[WorkoutDetail] WOD stats cleanup failed:', e)
+        }
+      }
+
       navigate('/workouts')
     } catch (error) {
       console.error('Error deleting workout:', error)

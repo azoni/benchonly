@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -402,9 +402,19 @@ export default function NewWorkoutPage() {
     setWodLibraryOpen(false);
   };
 
-  const clearBenchmarkLink = () => {
-    if (benchmarkWodId) { setBenchmarkWodId(null); setBenchmarkVariant(null); }
-  };
+  // Computed: is the current form still faithful to the selected benchmark WOD?
+  const isBenchmarkValid = useMemo(() => {
+    if (!benchmarkWodId || !benchmarkVariant) return false;
+    const wod = WOD_LIBRARY.find(w => w.id === benchmarkWodId);
+    if (!wod) return false;
+    const variant = wod.variants[benchmarkVariant];
+    if (!variant) return false;
+    if (workout.name.trim() !== wod.name) return false;
+    if (wodFormat !== wod.format) return false;
+    if (wodTimeCap !== (wod.timeCap?.toString() || '')) return false;
+    if (wodMovements.length !== variant.movements.length) return false;
+    return wodMovements.every((m, i) => m.name.trim() === variant.movements[i].name && m.reps === variant.movements[i].reps);
+  }, [benchmarkWodId, benchmarkVariant, workout.name, wodFormat, wodTimeCap, wodMovements]);
 
   const handleSaveWod = async () => {
     if (!workout.name.trim()) {
@@ -443,7 +453,7 @@ export default function NewWorkoutPage() {
         notes,
         exercises,
         workoutCategory: 'wod',
-        ...(benchmarkWodId && { benchmarkWodId, benchmarkVariant }),
+        ...(benchmarkWodId && isBenchmarkValid && { benchmarkWodId, benchmarkVariant }),
       };
 
       if (trainerRequestId) {
@@ -664,14 +674,11 @@ export default function NewWorkoutPage() {
                 <input
                   type="text"
                   value={workout.name}
-                  onChange={(e) => {
-                    setWorkout((prev) => ({ ...prev, name: e.target.value }));
-                    if (benchmarkWodId) { setBenchmarkWodId(null); setBenchmarkVariant(null); }
-                  }}
+                  onChange={(e) => setWorkout((prev) => ({ ...prev, name: e.target.value }))}
                   placeholder="e.g., Cindy, Fran, custom WOD"
                   className="input-field"
                 />
-                {benchmarkWodId && (() => {
+                {benchmarkWodId && isBenchmarkValid && (() => {
                   const wod = WOD_LIBRARY.find(w => w.id === benchmarkWodId);
                   const variantLabel = wod?.variants[benchmarkVariant]?.label || benchmarkVariant;
                   return (
@@ -712,7 +719,7 @@ export default function NewWorkoutPage() {
               ].map(f => (
                 <button
                   key={f.value}
-                  onClick={() => { setWodFormat(f.value); clearBenchmarkLink(); }}
+                  onClick={() => setWodFormat(f.value)}
                   className={`p-3 rounded-lg border text-center transition-colors ${
                     wodFormat === f.value
                       ? 'border-yellow-500 bg-yellow-500/10 text-yellow-400'
@@ -733,7 +740,7 @@ export default function NewWorkoutPage() {
                 type="number"
                 inputMode="numeric"
                 value={wodTimeCap}
-                onChange={(e) => { setWodTimeCap(e.target.value); clearBenchmarkLink(); }}
+                onChange={(e) => setWodTimeCap(e.target.value)}
                 placeholder={wodFormat === 'amrap' ? '20' : wodFormat === 'emom' ? '10' : '15'}
                 className="input-field w-full"
               />
@@ -753,7 +760,6 @@ export default function NewWorkoutPage() {
                       const updated = [...wodMovements];
                       updated[i] = { ...updated[i], reps: e.target.value };
                       setWodMovements(updated);
-                      clearBenchmarkLink();
                     }}
                     placeholder="10"
                     className="input-field w-20 text-center"
@@ -765,14 +771,13 @@ export default function NewWorkoutPage() {
                       const updated = [...wodMovements];
                       updated[i] = { ...updated[i], name: e.target.value };
                       setWodMovements(updated);
-                      clearBenchmarkLink();
                     }}
                     placeholder="e.g., Pull-ups"
                     className="input-field flex-1"
                   />
                   {wodMovements.length > 1 && (
                     <button
-                      onClick={() => { setWodMovements(wodMovements.filter((_, j) => j !== i)); clearBenchmarkLink(); }}
+                      onClick={() => setWodMovements(wodMovements.filter((_, j) => j !== i))}
                       className="p-2 text-iron-600 hover:text-red-400 transition-colors"
                     >
                       <X className="w-4 h-4" />
@@ -782,7 +787,7 @@ export default function NewWorkoutPage() {
               ))}
             </div>
             <button
-              onClick={() => { setWodMovements([...wodMovements, { name: '', reps: '' }]); clearBenchmarkLink(); }}
+              onClick={() => setWodMovements([...wodMovements, { name: '', reps: '' }])}
               className="mt-3 w-full py-2.5 border border-dashed border-iron-700 rounded-lg text-sm text-flame-400 hover:text-flame-300 hover:border-iron-600 flex items-center justify-center gap-1.5 transition-colors"
             >
               <Plus className="w-4 h-4" />
