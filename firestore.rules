@@ -259,6 +259,12 @@ service cloud.firestore {
       allow read: if request.auth != null && resource.data.coachId == request.auth.uid;
     }
 
+    // --- WORKOUT GENERATION JOBS ---
+
+    match /workoutJobs/{jobId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
     // --- SHARED WORKOUTS ---
 
     match /sharedWorkouts/{docId} {
