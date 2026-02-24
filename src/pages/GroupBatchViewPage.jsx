@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ArrowLeft, Users, Dumbbell, MessageSquare, HelpCircle, Activity, Zap, ChevronDown, ChevronUp } from 'lucide-react'
@@ -9,6 +9,7 @@ import usePageTitle from '../utils/usePageTitle'
 import WorkoutSummaryCard from '../components/WorkoutSummaryCard'
 import { groupExercisesForDisplay } from '../utils/workoutUtils'
 import ExerciseInfoModal from '../components/ExerciseInfoModal'
+import { useUIStore } from '../store'
 
 const getExerciseType = (exercise) => {
   if (exercise.type) return exercise.type
@@ -70,6 +71,36 @@ export default function GroupBatchViewPage() {
   const [loading, setLoading] = useState(true)
   const [infoExercise, setInfoExercise] = useState(null)
   const [notesExpanded, setNotesExpanded] = useState(false)
+
+  // Fixed header bar: position + height measurement
+  const { sidebarOpen } = useUIStore()
+  const barRef = useRef(null)
+  const [barHeight, setBarHeight] = useState(0)
+  const [barStyle, setBarStyle] = useState({ top: 0, left: 0, right: 0 })
+
+  useEffect(() => {
+    function calcStyle() {
+      const isLg = window.matchMedia('(min-width: 1024px)').matches
+      setBarStyle({
+        top: isLg ? 0 : 'calc(env(safe-area-inset-top, 0px) + 3.5rem)',
+        left: isLg ? (sidebarOpen ? '16rem' : '5rem') : 0,
+        right: 0,
+      })
+    }
+    calcStyle()
+    const mq = window.matchMedia('(min-width: 1024px)')
+    mq.addEventListener('change', calcStyle)
+    return () => mq.removeEventListener('change', calcStyle)
+  }, [sidebarOpen])
+
+  useEffect(() => {
+    if (!barRef.current) return
+    const ro = new ResizeObserver(() => {
+      if (barRef.current) setBarHeight(barRef.current.offsetHeight)
+    })
+    ro.observe(barRef.current)
+    return () => ro.disconnect()
+  }, [])
 
   const decodedKey = decodeURIComponent(batchKey)
 
@@ -136,63 +167,76 @@ export default function GroupBatchViewPage() {
   const isCompleted = activeWorkout?.status === 'completed'
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 pb-32">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={() => navigate(`/groups/${groupId}`, { state: { activeTab: 'workouts' } })}
-          className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-iron-50 truncate">{workoutName}</h1>
-          <div className="flex items-center gap-2 text-sm text-iron-500">
-            <span>{workoutDate}</span>
-            <span>·</span>
-            <span className={completedCount === batchWorkouts.length ? 'text-green-400' : ''}>
-              {completedCount}/{batchWorkouts.length} done
-            </span>
+    <>
+      {/* Fixed header bar — back button + title + member tabs.
+          Uses position:fixed so it's immune to any ancestor overflow/flex/transition rules. */}
+      <div
+        ref={barRef}
+        className="fixed z-20 bg-iron-950 border-b border-iron-800"
+        style={barStyle}
+      >
+        <div className="max-w-2xl mx-auto px-4">
+          {/* Back button + title row */}
+          <div className="flex items-center gap-3 pt-3 pb-2">
+            <button
+              onClick={() => navigate(`/groups/${groupId}`, { state: { activeTab: 'workouts' } })}
+              className="p-2 -ml-2 text-iron-400 hover:text-iron-200 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl font-bold text-iron-50 truncate">{workoutName}</h1>
+              <div className="flex items-center gap-2 text-sm text-iron-500">
+                <span>{workoutDate}</span>
+                <span>·</span>
+                <span className={completedCount === batchWorkouts.length ? 'text-green-400' : ''}>
+                  {completedCount}/{batchWorkouts.length} done
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Member tabs row */}
+          <div className="flex gap-2 overflow-x-auto pb-3 scrollbar-hide">
+            {batchWorkouts.map((workout, idx) => {
+              const member = members.find(m => m.uid === workout.assignedTo)
+              const isActive = idx === activeTab
+              const done = workout.status === 'completed'
+              return (
+                <button
+                  key={workout.id}
+                  onClick={() => setActiveTab(idx)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl whitespace-nowrap transition-all flex-shrink-0 ${
+                    isActive
+                      ? 'bg-flame-500 text-white shadow-lg shadow-flame-500/20'
+                      : 'bg-iron-800/50 text-iron-400 hover:bg-iron-800 hover:text-iron-200'
+                  }`}
+                >
+                  {member?.photoURL ? (
+                    <img src={member.photoURL} alt="" className="w-6 h-6 rounded-full" />
+                  ) : (
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      isActive ? 'bg-white/20' : 'bg-iron-700'
+                    }`}>
+                      {member?.displayName?.[0] || '?'}
+                    </div>
+                  )}
+                  <span className="text-sm font-medium">{member?.displayName?.split(' ')[0] || 'Unknown'}</span>
+                  {done && (
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-green-300' : 'bg-green-500'}`} />
+                  )}
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>
 
-      {/* Member Tabs — sticky below the fixed mobile header (h-14 + safe-area-inset) */}
-      <div className="sticky top-[calc(env(safe-area-inset-top,0px)+3.5rem)] lg:top-0 z-10 bg-iron-950 -mx-4 px-4 pt-2 pb-4 mb-2">
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          {batchWorkouts.map((workout, idx) => {
-            const member = members.find(m => m.uid === workout.assignedTo)
-            const isActive = idx === activeTab
-            const done = workout.status === 'completed'
+      {/* Spacer: same height as the fixed bar so content starts below it */}
+      <div style={{ height: barHeight }} />
 
-            return (
-              <button
-                key={workout.id}
-                onClick={() => setActiveTab(idx)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl whitespace-nowrap transition-all flex-shrink-0 ${
-                  isActive
-                    ? 'bg-flame-500 text-white shadow-lg shadow-flame-500/20'
-                    : 'bg-iron-800/50 text-iron-400 hover:bg-iron-800 hover:text-iron-200'
-                }`}
-              >
-                {member?.photoURL ? (
-                  <img src={member.photoURL} alt="" className="w-6 h-6 rounded-full" />
-                ) : (
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    isActive ? 'bg-white/20' : 'bg-iron-700'
-                  }`}>
-                    {member?.displayName?.[0] || '?'}
-                  </div>
-                )}
-                <span className="text-sm font-medium">{member?.displayName?.split(' ')[0] || 'Unknown'}</span>
-                {done && (
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-green-300' : 'bg-green-500'}`} />
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      {/* Scrollable content */}
+      <div className="max-w-2xl mx-auto px-4 pt-4 pb-32">
 
       {/* Active Member's Workout */}
       {activeWorkout && (
@@ -490,6 +534,7 @@ export default function GroupBatchViewPage() {
           onClose={() => setInfoExercise(null)}
         />
       )}
-    </div>
+      </div>
+    </>
   )
 }
