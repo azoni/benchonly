@@ -62,6 +62,29 @@ export const feedService = {
     }
   },
 
+  // Upsert a workout feed item — updates existing if one already exists for this workoutId,
+  // otherwise creates a new one. Preserves createdAt, reactions, and comment counts on update.
+  async upsertWorkoutFeedItem(userId, type, data, visibility = null) {
+    if (data.workoutId) {
+      try {
+        const q = query(
+          collection(db, 'feed'),
+          where('userId', '==', userId),
+          where('data.workoutId', '==', data.workoutId),
+          limit(1)
+        )
+        const snap = await getDocs(q)
+        if (!snap.empty) {
+          await updateDoc(doc(db, 'feed', snap.docs[0].id), { data })
+          return { id: snap.docs[0].id }
+        }
+      } catch (e) {
+        console.error('Feed upsert lookup error:', e)
+      }
+    }
+    return this.createFeedItem(userId, type, data, visibility)
+  },
+
   // Get feed items (with pagination)
   async getFeed(limitCount = 20, lastDoc = null, userId = null) {
     try {

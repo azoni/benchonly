@@ -256,7 +256,7 @@ export const workoutService = {
     // Create feed item
     try {
       const { exerciseSummary, totalSets } = safeBuildSummary(exercisesWithActuals);
-      await feedService.createFeedItem(userId, FEED_TYPES.WORKOUT, {
+      await feedService.upsertWorkoutFeedItem(userId, FEED_TYPES.WORKOUT, {
         workoutId,
         name: workoutName,
         exerciseCount: exercisesWithActuals?.length || 0,
@@ -330,7 +330,7 @@ export const workoutService = {
     try {
       if (userId) {
         const { exerciseSummary, totalSets } = safeBuildSummary(payload.exercises);
-        await feedService.createFeedItem(userId, FEED_TYPES.WORKOUT, {
+        await feedService.upsertWorkoutFeedItem(userId, FEED_TYPES.WORKOUT, {
           workoutId,
           name: workoutData?.name || 'Workout',
           exerciseCount: payload.exercises?.length || 0,
