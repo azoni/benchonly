@@ -471,7 +471,7 @@ export default function Layout() {
         ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}
         ${isGuest ? 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem+2.5rem)] lg:pt-16' : 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem)] lg:pt-0'}`}
       >
-        <div className="min-h-screen p-4 lg:p-6 overflow-x-hidden">
+        <div className="min-h-screen p-4 lg:p-6 overflow-x-clip">
           {/* Impersonation Banner */}
           {impersonating && (
             <div className="mb-4 -mt-1 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3 flex-wrap">
