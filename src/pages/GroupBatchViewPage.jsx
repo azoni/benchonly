@@ -157,8 +157,8 @@ export default function GroupBatchViewPage() {
         </div>
       </div>
 
-      {/* Member Tabs — sticky so they stay visible while scrolling */}
-      <div className="sticky top-0 z-10 bg-iron-950 -mx-4 px-4 pt-2 pb-4 mb-2">
+      {/* Member Tabs — sticky below the fixed mobile header (h-14 + safe-area-inset) */}
+      <div className="sticky top-[calc(env(safe-area-inset-top,0px)+3.5rem)] lg:top-0 z-10 bg-iron-950 -mx-4 px-4 pt-2 pb-4 mb-2">
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {batchWorkouts.map((workout, idx) => {
             const member = members.find(m => m.uid === workout.assignedTo)

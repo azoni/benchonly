@@ -120,12 +120,12 @@ export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = 
     <div className="card-steel p-4 mb-6">
       <div className="flex items-center gap-2 mb-3">
         <ListChecks className="w-5 h-5 text-flame-400" />
-        <h3 className="font-semibold text-iron-100 text-sm">Workout Summary</h3>
+        <h3 className="font-semibold text-iron-100 text-base">Workout Summary</h3>
       </div>
 
       {wodHeader && (
         <div className="mb-3 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-          <span className="text-xs font-semibold text-yellow-400">{wodHeader}</span>
+          <span className="text-sm font-semibold text-yellow-400">{wodHeader}</span>
         </div>
       )}
 
@@ -141,39 +141,39 @@ export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = 
             const typeB = getExerciseType(exerciseB)
 
             return (
-              <div key={`ss-${group.supersetGroup}`} className="py-1.5 border-b border-iron-800/50 last:border-0">
+              <div key={`ss-${group.supersetGroup}`} className="py-2 border-b border-iron-800/50 last:border-0">
                 <div className="flex items-center gap-1.5 mb-1">
-                  <Zap className="w-3 h-3 text-purple-400 flex-shrink-0" />
-                  <span className="text-[10px] text-purple-400 font-semibold uppercase">Superset</span>
+                  <Zap className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                  <span className="text-xs text-purple-400 font-semibold uppercase">Superset</span>
                 </div>
 
                 {detailed ? (
                   <>
-                    <p className="text-sm font-semibold text-iron-200 mb-1">{exerciseA.name}</p>
+                    <p className="text-base font-semibold text-iron-200 mb-1">{exerciseA.name}</p>
                     {(exerciseA.sets || []).map((set, si) => {
                       const d = getSetDetail(set, typeA, isCompleted)
                       return (
-                        <div key={si} className="flex items-center justify-between pl-2 py-0.5">
-                          <span className="text-xs text-iron-500">Set {si + 1}</span>
+                        <div key={si} className="flex items-center justify-between pl-2 py-1">
+                          <span className="text-sm text-iron-500">Set {si + 1}</span>
                           <div className="text-right">
                             {d.hasActual
-                              ? <span className="text-xs font-semibold text-flame-400">{d.actual}</span>
-                              : <span className="text-xs text-iron-300">{d.prescribed || '—'}</span>
+                              ? <span className="text-sm font-semibold text-flame-400">{d.actual}</span>
+                              : <span className="text-sm text-iron-300">{d.prescribed || '—'}</span>
                             }
                           </div>
                         </div>
                       )
                     })}
-                    <p className="text-sm font-semibold text-iron-200 mt-2 mb-1">{exerciseB.name}</p>
+                    <p className="text-base font-semibold text-iron-200 mt-2.5 mb-1">{exerciseB.name}</p>
                     {(exerciseB.sets || []).map((set, si) => {
                       const d = getSetDetail(set, typeB, isCompleted)
                       return (
-                        <div key={si} className="flex items-center justify-between pl-2 py-0.5">
-                          <span className="text-xs text-iron-500">Set {si + 1}</span>
+                        <div key={si} className="flex items-center justify-between pl-2 py-1">
+                          <span className="text-sm text-iron-500">Set {si + 1}</span>
                           <div className="text-right">
                             {d.hasActual
-                              ? <span className="text-xs font-semibold text-flame-400">{d.actual}</span>
-                              : <span className="text-xs text-iron-300">{d.prescribed || '—'}</span>
+                              ? <span className="text-sm font-semibold text-flame-400">{d.actual}</span>
+                              : <span className="text-sm text-iron-300">{d.prescribed || '—'}</span>
                             }
                           </div>
                         </div>
@@ -183,12 +183,12 @@ export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = 
                 ) : (
                   <>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-iron-200 truncate">{exerciseA.name}</span>
-                      <span className={`text-sm font-semibold flex-shrink-0 ml-3 ${isCompleted && hasActualA ? 'text-flame-400' : 'text-iron-300'}`}>{summaryA}</span>
+                      <span className="text-base font-medium text-iron-200 truncate">{exerciseA.name}</span>
+                      <span className={`text-base font-semibold flex-shrink-0 ml-3 ${isCompleted && hasActualA ? 'text-flame-400' : 'text-iron-300'}`}>{summaryA}</span>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
-                      <span className="text-sm font-medium text-iron-200 truncate">{exerciseB.name}</span>
-                      <span className={`text-sm font-semibold flex-shrink-0 ml-3 ${isCompleted && hasActualB ? 'text-flame-400' : 'text-iron-300'}`}>{summaryB}</span>
+                      <span className="text-base font-medium text-iron-200 truncate">{exerciseB.name}</span>
+                      <span className={`text-base font-semibold flex-shrink-0 ml-3 ${isCompleted && hasActualB ? 'text-flame-400' : 'text-iron-300'}`}>{summaryB}</span>
                     </div>
                   </>
                 )}
@@ -205,26 +205,26 @@ export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = 
 
           if (detailed) {
             return (
-              <div key={i} className="py-2 border-b border-iron-800/50 last:border-0">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-sm font-semibold text-iron-200">{exercise.name}</span>
+              <div key={i} className="py-2.5 border-b border-iron-800/50 last:border-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-base font-semibold text-iron-200">{exercise.name}</span>
                   {type === 'time' && (
-                    <span className="px-1.5 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded flex-shrink-0">Time</span>
+                    <span className="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded flex-shrink-0">Time</span>
                   )}
                   {type === 'bodyweight' && (
-                    <span className="px-1.5 py-0.5 text-[10px] bg-emerald-500/20 text-emerald-400 rounded flex-shrink-0">BW</span>
+                    <span className="px-1.5 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded flex-shrink-0">BW</span>
                   )}
                 </div>
                 {(exercise.sets || []).map((set, si) => {
                   const d = getSetDetail(set, type, isCompleted)
                   return (
-                    <div key={si} className="flex items-center justify-between pl-2 py-0.5">
-                      <span className="text-xs text-iron-500">Set {si + 1}</span>
+                    <div key={si} className="flex items-center justify-between pl-2 py-1">
+                      <span className="text-sm text-iron-500">Set {si + 1}</span>
                       <div className="flex items-center gap-2">
                         {d.hasActual && d.prescribed && d.actual !== d.prescribed && (
-                          <span className="text-xs text-iron-600 line-through">{d.prescribed}</span>
+                          <span className="text-sm text-iron-600 line-through">{d.prescribed}</span>
                         )}
-                        <span className={`text-xs font-semibold ${d.hasActual ? 'text-flame-400' : 'text-iron-300'}`}>
+                        <span className={`text-sm font-semibold ${d.hasActual ? 'text-flame-400' : 'text-iron-300'}`}>
                           {d.hasActual ? d.actual : (d.prescribed || '—')}
                         </span>
                       </div>
@@ -238,15 +238,15 @@ export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = 
           return (
             <div key={i} className="flex items-center justify-between py-1.5 border-b border-iron-800/50 last:border-0">
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                <span className="text-sm font-medium text-iron-200 truncate">{exercise.name}</span>
+                <span className="text-base font-medium text-iron-200 truncate">{exercise.name}</span>
                 {type === 'time' && (
-                  <span className="px-1.5 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded flex-shrink-0">Time</span>
+                  <span className="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded flex-shrink-0">Time</span>
                 )}
                 {type === 'bodyweight' && (
-                  <span className="px-1.5 py-0.5 text-[10px] bg-emerald-500/20 text-emerald-400 rounded flex-shrink-0">BW</span>
+                  <span className="px-1.5 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded flex-shrink-0">BW</span>
                 )}
               </div>
-              <span className={`text-sm font-semibold flex-shrink-0 ml-3 ${
+              <span className={`text-base font-semibold flex-shrink-0 ml-3 ${
                 isCompleted && hasActualData ? 'text-flame-400' : 'text-iron-300'
               }`}>
                 {summary}
