@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ArrowLeft, Users, Dumbbell, MessageSquare, HelpCircle, Activity, Zap, ChevronDown, ChevronUp } from 'lucide-react'
@@ -74,7 +74,6 @@ export default function GroupBatchViewPage() {
 
   // Fixed header bar: position + height measurement
   const { sidebarOpen } = useUIStore()
-  const barRef = useRef(null)
   const [barHeight, setBarHeight] = useState(0)
   const [barStyle, setBarStyle] = useState({ top: 0, left: 0, right: 0 })
 
@@ -93,13 +92,15 @@ export default function GroupBatchViewPage() {
     return () => mq.removeEventListener('change', calcStyle)
   }, [sidebarOpen])
 
-  useEffect(() => {
-    if (!barRef.current) return
-    const ro = new ResizeObserver(() => {
-      if (barRef.current) setBarHeight(barRef.current.offsetHeight)
-    })
-    ro.observe(barRef.current)
-    return () => ro.disconnect()
+  // Callback ref: fires whenever the fixed bar mounts/unmounts, so the
+  // ResizeObserver is guaranteed to run even when the component initially
+  // renders in its loading state (when a useRef + [] effect would miss it).
+  const barRef = useCallback(node => {
+    if (!node) return
+    setBarHeight(node.offsetHeight)
+    const ro = new ResizeObserver(() => setBarHeight(node.offsetHeight))
+    ro.observe(node)
+    // No cleanup needed here — the observer will be GC'd with the node
   }, [])
 
   const decodedKey = decodeURIComponent(batchKey)
