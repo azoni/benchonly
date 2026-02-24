@@ -186,8 +186,8 @@ export default function WorkoutDetailPage() {
       }
       await workoutService.delete(id)
 
-      // Clean up WOD stats on profile if this was a completed benchmark WOD
-      if (workout?.benchmarkWodId && workout?.wodResult && userProfile?.wodStats) {
+      // Clean up WOD stats on profile if this was a benchmark WOD with profile stats
+      if (workout?.benchmarkWodId && userProfile?.wodStats?.[workout.benchmarkWodId]) {
         try {
           const wodId = workout.benchmarkWodId
           const prevStats = userProfile.wodStats[wodId]

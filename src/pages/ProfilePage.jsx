@@ -63,7 +63,7 @@ function FriendButton({ friendStatus, loading, onAction }) {
 export default function ProfilePage() {
   const { userId: handle } = useParams() // Can be username or uid
   usePageTitle('Profile')
-  const { user: currentUser, isRealAdmin } = useAuth()
+  const { user: currentUser, isRealAdmin, updateProfile } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [profile, setProfile] = useState(null)
@@ -904,8 +904,20 @@ export default function ProfilePage() {
                           resultStr = 'DNF'
                         }
                         return (
-                          <div key={wodId} className="card-steel p-3">
-                            <div className="flex items-start justify-between gap-1 mb-1">
+                          <div key={wodId} className="card-steel p-3 relative group">
+                            {isOwnProfile && (
+                              <button
+                                onClick={async () => {
+                                  const newStats = { ...profile.wodStats }
+                                  delete newStats[wodId]
+                                  await updateProfile({ wodStats: newStats })
+                                }}
+                                className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-iron-800 text-iron-600 hover:text-red-400 hover:bg-iron-700 transition-colors items-center justify-center hidden group-hover:flex"
+                              >
+                                <XIcon className="w-3 h-3" />
+                              </button>
+                            )}
+                            <div className="flex items-start justify-between gap-1 mb-1 pr-4">
                               <p className="text-xs font-semibold text-iron-200 truncate">{wod?.name || wodId}</p>
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${isRx ? 'bg-flame-500/20 text-flame-400' : 'bg-iron-700 text-iron-400'}`}>
                                 {isRx ? 'Rx' : 'Scaled'}
