@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react'
-import { X, Search, ChevronLeft, Clock, Repeat2, Trophy, History } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { X, Search, ChevronLeft, Clock, Repeat2, Trophy, History, Users } from 'lucide-react'
+import { collection, getDocs, limit, query } from 'firebase/firestore'
+import { db } from '../services/firebase'
 import { WOD_LIBRARY, ALL_FOCUS_TAGS, FORMAT_LABELS, FORMAT_COLORS } from '../data/wodLibrary'
 
 const VARIANT_KEYS = ['rxMen', 'rxWomen', 'scaledMen', 'scaledWomen']
@@ -9,10 +11,45 @@ function formatResult(result, format) {
   if (format === 'amrap') {
     const parts = []
     if (result.rounds != null) parts.push(`${result.rounds} rds`)
-    if (result.extraReps != null) parts.push(`+${result.extraReps}`)
+    if (result.extraReps) parts.push(`+${result.extraReps}`)
     return parts.join(' ') || null
   }
   return result.time || null
+}
+
+// Score used for sorting (lower = better for fortime, higher = better for amrap)
+function sortScore(pr, format) {
+  if (!pr) return null
+  if (format === 'amrap') {
+    return (pr.rounds || 0) * 1000 + (pr.extraReps || 0)
+  }
+  // For ForTime, convert mm:ss to seconds for sorting
+  if (pr.dnf) return Infinity
+  const t = pr.time || ''
+  const parts = t.split(':').map(Number)
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  return Infinity
+}
+
+async function fetchCommunityStats(wodId) {
+  // Fetch users (small community — filter client-side by wodStats[wodId])
+  const snap = await getDocs(query(collection(db, 'users'), limit(200)))
+  const results = []
+  snap.forEach(doc => {
+    const data = doc.data()
+    const wodStat = data.wodStats?.[wodId]
+    if (wodStat?.pr) {
+      results.push({
+        uid: doc.id,
+        displayName: data.displayName || data.username || 'Member',
+        photoURL: data.photoURL || null,
+        pr: wodStat.pr,
+        attempts: wodStat.history?.length || 1,
+      })
+    }
+  })
+  return results
 }
 
 export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStats = {} }) {
@@ -20,6 +57,8 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
   const [focusFilter, setFocusFilter] = useState(null)
   const [selectedWod, setSelectedWod] = useState(null)
   const [selectedVariant, setSelectedVariant] = useState('rxMen')
+  const [communityStats, setCommunityStats] = useState([])
+  const [communityLoading, setCommunityLoading] = useState(false)
 
   const filtered = useMemo(() => {
     let list = WOD_LIBRARY
@@ -32,6 +71,31 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
     }
     return list
   }, [search, focusFilter])
+
+  // Fetch community stats when a WOD detail is opened
+  useEffect(() => {
+    if (!selectedWod || !db) { setCommunityStats([]); return }
+    setCommunityLoading(true)
+    setCommunityStats([])
+    fetchCommunityStats(selectedWod.id)
+      .then(results => {
+        const format = selectedWod.format
+        const sorted = results.sort((a, b) => {
+          const sa = sortScore(a.pr, format)
+          const sb = sortScore(b.pr, format)
+          if (sa == null && sb == null) return 0
+          if (sa == null) return 1
+          if (sb == null) return -1
+          return format === 'amrap' ? sb - sa : sa - sb
+        })
+        setCommunityStats(sorted)
+      })
+      .catch(err => {
+        console.warn('[WodLibraryModal] Community stats fetch failed:', err.message)
+        setCommunityStats([])
+      })
+      .finally(() => setCommunityLoading(false))
+  }, [selectedWod])
 
   function openWod(wod) {
     setSelectedWod(wod)
@@ -47,12 +111,13 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
     setSearch('')
     setFocusFilter(null)
     setSelectedWod(null)
+    setCommunityStats([])
     onClose()
   }
 
   if (!isOpen) return null
 
-  const stats = selectedWod ? userWodStats[selectedWod.id] : null
+  const myStats = selectedWod ? userWodStats[selectedWod.id] : null
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-iron-950">
@@ -132,31 +197,31 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
             </div>
 
             {/* Your stats */}
-            {stats && (
+            {myStats && (
               <div className="card-steel p-4 mb-5 bg-flame-500/5 border-flame-500/20">
                 <div className="flex items-center gap-2 mb-3">
                   <Trophy className="w-4 h-4 text-flame-400" />
                   <span className="text-xs font-semibold text-flame-400 uppercase tracking-wide">Your Stats</span>
                 </div>
-                {stats.pr && (
+                {myStats.pr && (
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-sm text-iron-300">Personal Record</span>
                     <div className="text-right">
-                      <span className="text-sm font-bold text-flame-400">{formatResult(stats.pr, selectedWod.format)}</span>
-                      {stats.pr.variant && (
-                        <span className="block text-[10px] text-iron-600">{stats.pr.variant}</span>
+                      <span className="text-sm font-bold text-flame-400">{formatResult(myStats.pr, selectedWod.format)}</span>
+                      {myStats.pr.variant && (
+                        <span className="block text-[10px] text-iron-600">{myStats.pr.variant}</span>
                       )}
                     </div>
                   </div>
                 )}
-                {stats.history?.length > 0 && (
+                {myStats.history?.length > 0 && (
                   <>
                     <div className="flex items-center gap-1.5 mb-2">
                       <History className="w-3.5 h-3.5 text-iron-500" />
                       <span className="text-[10px] text-iron-500 uppercase tracking-wide">History</span>
                     </div>
                     <div className="space-y-1.5">
-                      {stats.history.slice(0, 5).map((entry, i) => (
+                      {myStats.history.slice(0, 5).map((entry, i) => (
                         <div key={i} className="flex items-center justify-between text-xs">
                           <span className="text-iron-500">{entry.date}</span>
                           <div className="flex items-center gap-2">
@@ -172,6 +237,65 @@ export default function WodLibraryModal({ isOpen, onClose, onSelect, userWodStat
                 )}
               </div>
             )}
+
+            {/* Community Leaderboard — always shown */}
+            <div className="card-steel p-4 mb-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-iron-500" />
+                  <span className="text-xs font-semibold text-iron-400 uppercase tracking-wide">Community Results</span>
+                </div>
+                {communityStats.length > 0 && (
+                  <span className="text-[10px] text-iron-600">{communityStats.length} logged</span>
+                )}
+              </div>
+
+              {communityLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <div className="w-5 h-5 border-2 border-iron-700 border-t-iron-400 rounded-full animate-spin" />
+                </div>
+              ) : communityStats.length === 0 ? (
+                <div className="py-5 text-center">
+                  <Trophy className="w-8 h-8 text-iron-800 mx-auto mb-2" />
+                  <p className="text-sm text-iron-500">No results yet</p>
+                  <p className="text-xs text-iron-700 mt-1">Be the first to log {selectedWod.name}!</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {communityStats.map((entry, idx) => {
+                    const result = formatResult(entry.pr, selectedWod.format)
+                    const isRx = entry.pr?.rxOrScaled === 'rx'
+                    const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null
+                    return (
+                      <div key={entry.uid} className={`flex items-center gap-3 py-1.5 ${idx < communityStats.length - 1 ? 'border-b border-iron-800/50' : ''}`}>
+                        <div className="w-6 text-center flex-shrink-0">
+                          {medal
+                            ? <span className="text-sm">{medal}</span>
+                            : <span className="text-xs text-iron-600 font-medium">{idx + 1}</span>
+                          }
+                        </div>
+                        {entry.photoURL ? (
+                          <img src={entry.photoURL} alt="" className="w-7 h-7 rounded-full flex-shrink-0" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-iron-800 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs text-iron-400 font-medium">{entry.displayName?.[0] || '?'}</span>
+                          </div>
+                        )}
+                        <span className="text-sm text-iron-200 font-medium flex-1 truncate">{entry.displayName}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${isRx ? 'bg-flame-500/20 text-flame-400' : 'bg-iron-800 text-iron-500'}`}>
+                            {isRx ? 'Rx' : 'Sc'}
+                          </span>
+                          <span className={`text-sm font-bold ${idx === 0 ? 'text-yellow-400' : 'text-iron-200'}`}>
+                            {result || '—'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
 
             {/* Variant selector */}
             <div className="mb-4">
