@@ -5,6 +5,7 @@ import { checkRateLimit, deductCredits, refundCredits } from './utils/credits.js
 
 const db = admin.apps.length ? admin.firestore() : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 24000 });
+const INTERNAL_KEY = process.env.INTERNAL_FUNCTION_KEY || 'form-check-internal';
 
 export async function handler(event) {
   const cors = getCorsHeaders(event);
@@ -278,6 +279,51 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
     }
 
     const userPrompt = `Create a workout:\n\n${contextStr}\n\n${prompt ? `USER REQUEST: ${prompt}` : ''}`;
+    const draftMode = draftModeInput === true;
+
+    // ─── Store job and invoke background function ───
+    const jobId = `gw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const jobRef = db.collection('workoutJobs').doc(jobId);
+    await jobRef.set({
+      userId,
+      status: 'pending',
+      systemPrompt,
+      userPrompt,
+      selectedModel,
+      category,
+      draftMode,
+      contextMaxLifts: context?.maxLifts || {},
+      creditCost,
+      isAdmin: auth.isAdmin || false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const siteUrl = process.env.URL || 'https://benchpressonly.com';
+    let backgroundOk = false;
+    try {
+      const bgResp = await fetch(`${siteUrl}/.netlify/functions/generate-workout-background`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId, _internalKey: INTERNAL_KEY }),
+      });
+      if (bgResp.status === 202) backgroundOk = true;
+      else console.warn('[generate-workout] Background returned', bgResp.status);
+    } catch (bgErr) {
+      console.warn('[generate-workout] Background failed:', bgErr.message);
+    }
+
+    if (backgroundOk) {
+      logActivity({ type: 'workout_queued', title: 'Workout Generation Queued', description: `${category} / ${workoutFocus || 'auto'}`, metadata: { jobId } });
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json', ...cors },
+        body: JSON.stringify({ jobId, background: true }),
+      };
+    }
+
+    // ─── Fallback: inline execution ───
+    console.log('[generate-workout] Processing inline (background unavailable)');
+    await jobRef.update({ status: 'processing' });
 
     const startTime = Date.now();
     const completion = await openai.chat.completions.create({
@@ -298,6 +344,7 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
     try {
       workout = JSON.parse(completion.choices[0].message.content);
     } catch {
+      await jobRef.update({ status: 'error', error: 'AI returned invalid JSON' });
       return {
         statusCode: 500,
         headers: { 'Content-Type': 'application/json', ...cors },
@@ -313,7 +360,6 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
         const name = (ex.name || '').trim();
         if (TIME_EXERCISES.test(name)) {
           ex.type = 'time';
-          // Convert any reps-only sets to time-based
           (ex.sets || []).forEach(s => {
             if (!s.prescribedTime && s.prescribedReps) {
               s.prescribedTime = String(Math.max(30, parseInt(s.prescribedReps) * 3 || 30));
@@ -324,26 +370,23 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
           });
         } else if (BW_EXERCISES.test(name)) {
           ex.type = 'bodyweight';
-          // Remove prescribedWeight (unless it's small added weight like weighted vest)
           (ex.sets || []).forEach(s => {
             const w = parseFloat(s.prescribedWeight || 0);
-            if (w > 100) delete s.prescribedWeight; // clearly wrong — bodyweight doesn't use heavy weight
+            if (w > 100) delete s.prescribedWeight;
           });
         }
       });
     }
 
-    // Post-processing: expand exercises that only have 1 set (AI sometimes gets lazy)
-    // If an exercise has only 1 set, duplicate it to 3 or 4 sets with basic progression
+    // Post-processing: expand exercises that only have 1 set
     if (workout.exercises && Array.isArray(workout.exercises)) {
       workout.exercises = workout.exercises.map(ex => {
         if (ex.sets && ex.sets.length === 1) {
           const template = ex.sets[0];
           const targetSets = ex.type === 'time' ? 3 : 4;
-          ex.sets = Array.from({ length: targetSets }, (_, i) => {
+          ex.sets = Array.from({ length: targetSets }, (_, idx) => {
             const s = { ...template };
-            // First set is a lighter ramp-up for weight exercises
-            if (i === 0 && targetSets >= 3 && s.prescribedWeight) {
+            if (idx === 0 && targetSets >= 3 && s.prescribedWeight) {
               const w = parseFloat(s.prescribedWeight);
               if (w > 0) s.prescribedWeight = String(Math.round((w * 0.85) / 5) * 5);
             }
@@ -354,7 +397,7 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
       });
     }
 
-    // Weight ceiling validation: cap prescribed weights at 90% of e1RM
+    // Weight ceiling validation
     const maxLifts = context?.maxLifts || {};
     if (workout.exercises && Array.isArray(workout.exercises)) {
       workout.exercises.forEach(ex => {
@@ -370,17 +413,13 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
       });
     }
 
-    // Calculate cost based on model
     let cost;
     if (selectedModel === 'gpt-4.1-mini') {
-      // GPT-4.1-mini: $0.40/$1.60 per 1M tokens
       cost = (usage.prompt_tokens / 1e6) * 0.40 + (usage.completion_tokens / 1e6) * 1.60;
     } else {
-      // GPT-4o-mini: $0.15/$0.60 per 1M tokens
       cost = (usage.prompt_tokens / 1e6) * 0.15 + (usage.completion_tokens / 1e6) * 0.60;
     }
 
-    // Post-processing: fill in missing exercise info fields
     if (workout.exercises && Array.isArray(workout.exercises)) {
       workout.exercises.forEach(ex => {
         const name = (ex.name || '').trim();
@@ -398,15 +437,13 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
       });
     }
 
-    // Save to Firestore (skip if draft mode)
-    const draftMode = draftModeInput === true;
     const workoutData = {
       name: workout.name || 'AI Workout',
       description: workout.description || '',
       notes: workout.notes || '',
       estimatedDuration: workout.estimatedDuration || null,
-      exercises: (workout.exercises || []).map((ex, i) => ({
-        id: Date.now() + i,
+      exercises: (workout.exercises || []).map((ex, exIdx) => ({
+        id: Date.now() + exIdx,
         name: ex.name,
         type: ex.type || 'weight',
         howTo: ex.howTo || '',
@@ -414,34 +451,16 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
         substitutions: Array.isArray(ex.substitutions) ? ex.substitutions : [],
         sets: (ex.sets || []).map((s, j) => {
           const base = {
-            id: Date.now() + i * 100 + j,
+            id: Date.now() + exIdx * 100 + j,
             targetRpe: s.targetRpe || null,
             rpe: '',
             painLevel: 0,
             completed: false,
             ...(s.setNote ? { setNote: s.setNote } : {}),
           };
-          if (ex.type === 'time') {
-            return {
-              ...base,
-              prescribedTime: String(s.prescribedTime || ''),
-              actualTime: '',
-            };
-          }
-          if (ex.type === 'bodyweight') {
-            return {
-              ...base,
-              prescribedReps: String(s.prescribedReps || ''),
-              actualReps: '',
-            };
-          }
-          return {
-            ...base,
-            prescribedWeight: String(s.prescribedWeight || ''),
-            prescribedReps: String(s.prescribedReps || ''),
-            actualWeight: '',
-            actualReps: '',
-          };
+          if (ex.type === 'time') return { ...base, prescribedTime: String(s.prescribedTime || ''), actualTime: '' };
+          if (ex.type === 'bodyweight') return { ...base, prescribedReps: String(s.prescribedReps || ''), actualReps: '' };
+          return { ...base, prescribedWeight: String(s.prescribedWeight || ''), prescribedReps: String(s.prescribedReps || ''), actualWeight: '', actualReps: '' };
         }),
         restSeconds: ex.restSeconds || 90,
         notes: ex.notes || '',
@@ -463,54 +482,33 @@ IMPORTANT: EVERY exercise MUST include "howTo" (1-2 sentence form description), 
       workoutId = docRef.id;
     }
 
-    // Log AI usage for tracking
     try {
       await db.collection('tokenUsage').add({
-        userId,
-        feature: 'generate-workout',
-        model: selectedModel,
-        promptTokens: usage.prompt_tokens,
-        completionTokens: usage.completion_tokens,
-        totalTokens: usage.total_tokens,
-        estimatedCost: cost,
-        responseTimeMs: responseTime,
-        draftMode,
-        userMessage: `Generate ${category !== 'strength' ? category + ' ' : ''}${workoutFocus || 'auto'} workout (${intensity || 'moderate'})`,
-        assistantResponse: `${workout.name || 'Workout'}: ${(workout.exercises || []).map(e => e.name).join(', ')}`.slice(0, 500),
+        userId, feature: 'generate-workout', model: selectedModel,
+        promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens, totalTokens: usage.total_tokens,
+        estimatedCost: cost, responseTimeMs: responseTime, draftMode,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      console.error('Failed to log usage:', e);
-    }
+    } catch (e) { console.error('Failed to log usage:', e); }
 
-    // Log to portfolio activity feed (only on actual save)
     if (!draftMode && workoutId) {
       logActivity({
-        type: 'workout_generated',
-        title: `Generated Workout: ${workout.name || 'AI Workout'}`,
+        type: 'workout_generated', title: `Generated Workout: ${workout.name || 'AI Workout'}`,
         description: `${(workout.exercises || []).length} exercises, ${selectedModel}`,
-        model: selectedModel,
-        tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
-        cost,
-        metadata: { workoutId, exerciseCount: (workout.exercises || []).length },
+        model: selectedModel, tokens: { prompt: usage.prompt_tokens, completion: usage.completion_tokens, total: usage.total_tokens },
+        cost, metadata: { workoutId, exerciseCount: (workout.exercises || []).length },
       });
     }
+
+    await jobRef.update({
+      status: 'complete',
+      result: { success: true, workoutId, workout: workoutData, draftMode, usage: { model: selectedModel, tokens: usage.total_tokens, responseMs: responseTime, cost: `$${cost.toFixed(6)}` } },
+    });
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', ...cors },
-      body: JSON.stringify({
-        success: true,
-        workoutId,
-        workout: workoutData,
-        draftMode,
-        usage: {
-          model: selectedModel,
-          tokens: usage.total_tokens,
-          responseMs: responseTime,
-          cost: `$${cost.toFixed(6)}`,
-        },
-      }),
+      body: JSON.stringify({ success: true, workoutId, workout: workoutData, draftMode, usage: { model: selectedModel, tokens: usage.total_tokens, responseMs: responseTime, cost: `$${cost.toFixed(6)}` } }),
     };
   } catch (error) {
     console.error('Error:', error);
@@ -606,31 +604,59 @@ function buildContext(ctx, focus, intensity, settings = {}, duration = null, exe
       const hi = Math.round((d.e1rm * range[1]) / 5) * 5;
       s += `  ${n}: e1RM ${d.e1rm}lb (best: ${d.weight}x${d.reps}) → TARGET: ${lo}-${hi} lbs\n`;
     });
-    s += '  ↑ IMPORTANT: Working set weights MUST fall within these TARGET ranges. NEVER exceed the upper bound. For exercises not listed, infer conservatively from related lifts.\n';
+    s += '  ↑ MANDATORY: Working set weights MUST fall within these TARGET ranges. Do NOT exceed the upper bound for any reason. These are pre-calculated from actual performance data — trust them over your own estimates.\n';
     s += '\n';
   } else {
     s += 'MAX LIFTS: No data - use conservative weights and note it\n\n';
   }
 
+  // Muscle group mapping for pain context
+  const EXERCISE_MUSCLE_GROUP = {
+    'Bench Press': 'chest/triceps', 'Incline Bench Press': 'chest/shoulders', 'Decline Bench Press': 'chest',
+    'DB Bench Press': 'chest/triceps', 'Incline DB Press': 'chest/shoulders', 'Floor Press': 'chest/triceps',
+    'Close-Grip Bench Press': 'triceps', 'Paused Bench Press': 'chest', 'Spoto Press': 'chest',
+    'Overhead Press': 'shoulders/triceps', 'DB Shoulder Press': 'shoulders', 'Push Press': 'shoulders',
+    'Arnold Press': 'shoulders', 'Lateral Raises': 'shoulders', 'Front Raises': 'shoulders',
+    'Barbell Rows': 'back/biceps', 'Dumbbell Rows': 'back/biceps', 'T-Bar Rows': 'back',
+    'Pendlay Rows': 'back', 'Seal Rows': 'back', 'Cable Rows': 'back',
+    'Pull-ups': 'back/biceps', 'Chin-ups': 'back/biceps', 'Lat Pulldowns': 'back',
+    'Squats': 'quads/glutes', 'Front Squats': 'quads', 'Hack Squats': 'quads',
+    'Leg Press': 'quads', 'Bulgarian Split Squats': 'quads/glutes', 'Lunges': 'quads/glutes',
+    'Romanian Deadlifts': 'hamstrings/glutes', 'Conventional Deadlifts': 'hamstrings/glutes/back',
+    'Sumo Deadlifts': 'hamstrings/glutes', 'Trap Bar Deadlifts': 'hamstrings/quads',
+    'Hip Thrusts': 'glutes', 'Barbell Hip Thrusts': 'glutes', 'Good Mornings': 'hamstrings/lower back',
+    'Skull Crushers': 'triceps', 'Tricep Pushdowns': 'triceps', 'Overhead Tricep Extensions': 'triceps',
+    'Barbell Curls': 'biceps', 'DB Curls': 'biceps', 'Hammer Curls': 'biceps',
+  };
+
   // Filter pain to only significant patterns
-  const pain = Object.entries(ctx?.painHistory || {}).filter(([_, d]) => 
+  const pain = Object.entries(ctx?.painHistory || {}).filter(([_, d]) =>
     d.maxPain >= painThresholdMin || d.count >= painThresholdCount
   );
   if (pain.length) {
-    s += 'PAIN HISTORY:\n';
+    s += 'PAIN HISTORY — take these seriously when selecting exercises:\n';
+    const activeMuscleGroups = new Set();
     pain.forEach(([n, d]) => {
-      let status
-      if (d.recentCount > 0) {
-        status = `ACTIVE — last ${d.lastDaysAgo}d ago. AVOID or SUBSTITUTE.`
-      } else if (d.lastDaysAgo !== null && d.lastDaysAgo > 60) {
-        status = `RECOVERING (${d.lastDaysAgo}d ago) — OK to include cautiously at reduced load. Note: "Stop if discomfort."`
-      } else if (d.lastDaysAgo !== null) {
-        status = `FADING (${d.lastDaysAgo}d ago) — include at reduced intensity if needed.`
-      } else {
-        status = `${d.count}x total — AVOID or SUBSTITUTE.`
+      const muscleGroup = EXERCISE_MUSCLE_GROUP[n] || null;
+      if (d.recentCount > 0 && muscleGroup) {
+        muscleGroup.split('/').forEach(g => activeMuscleGroups.add(g.trim()));
       }
-      s += `  ${n}: ${d.maxPain}/10 peak — ${status}\n`;
+      let status;
+      if (d.recentCount > 0) {
+        status = `ACTIVE — last ${d.lastDaysAgo}d ago. AVOID this exercise AND similar movements targeting the same muscles.`;
+      } else if (d.lastDaysAgo !== null && d.lastDaysAgo > 60) {
+        status = `RECOVERING (${d.lastDaysAgo}d ago) — include cautiously at reduced load, note "Stop if discomfort."`;
+      } else if (d.lastDaysAgo !== null) {
+        status = `FADING (${d.lastDaysAgo}d ago) — reduce intensity if included.`;
+      } else {
+        status = `${d.count}x total — AVOID or SUBSTITUTE.`;
+      }
+      const groupHint = muscleGroup ? ` [${muscleGroup}]` : '';
+      s += `  ${n}${groupHint}: ${d.maxPain}/10 peak — ${status}\n`;
     });
+    if (activeMuscleGroups.size > 0) {
+      s += `  ↑ ACTIVE PAIN affects: ${[...activeMuscleGroups].join(', ')} — avoid exercises that heavily load these groups.\n`;
+    }
     s += '\n';
   }
 
@@ -700,6 +726,25 @@ function buildContext(ctx, focus, intensity, settings = {}, duration = null, exe
     if (averages?.sleepScore) {
       s += `  7-Day Avg Sleep: ${averages.sleepScore}/100\n`;
     }
+    s += '\n';
+  }
+
+  // Exercise frequency — helps AI rotate instead of repeating
+  const exerciseFreq = {};
+  (ctx?.recentWorkouts || []).slice(0, 5).forEach(w => {
+    (w.exercises || []).forEach(ex => {
+      if (ex.name && !/(warm.?up|cool.?down|stretch)/i.test(ex.name)) {
+        exerciseFreq[ex.name] = (exerciseFreq[ex.name] || 0) + 1;
+      }
+    });
+  });
+  if (Object.keys(exerciseFreq).length > 0) {
+    const sorted = Object.entries(exerciseFreq).sort((a, b) => b[1] - a[1]);
+    s += 'EXERCISE FREQUENCY (last 5 workouts) — rotate away from overused exercises:\n';
+    sorted.slice(0, 15).forEach(([name, count]) => {
+      const note = count >= 3 ? ' ← AVOID this session (done 3+ times recently)' : count >= 2 ? ' ← prefer an alternative' : '';
+      s += `  ${name}: ${count}x${note}\n`;
+    });
     s += '\n';
   }
 

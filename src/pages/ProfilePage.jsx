@@ -905,11 +905,12 @@ export default function ProfilePage() {
                         }
                         return (
                           <div key={wodId} className="card-steel p-3 relative group">
-                            {isOwnProfile && (
+                            {isOwnProfile && isRealAdmin && (
                               <button
                                 onClick={async () => {
                                   const newStats = { ...profile.wodStats }
                                   delete newStats[wodId]
+                                  setProfile(prev => ({ ...prev, wodStats: newStats }))
                                   await updateProfile({ wodStats: newStats })
                                 }}
                                 className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-iron-800 text-iron-600 hover:text-red-400 hover:bg-iron-700 transition-colors items-center justify-center hidden group-hover:flex"

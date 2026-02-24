@@ -184,7 +184,15 @@ export function AuthProvider({ children }) {
   useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
 
   useEffect(() => {
+    // Safety timeout: if Firebase auth doesn't resolve within 10 seconds on launch,
+    // force loading=false so the app doesn't hang on the splash screen indefinitely.
+    // This can happen on cold starts in Capacitor/WKWebView when Firebase is slow to initialize.
+    const loadingTimeout = setTimeout(() => {
+      setLoading(false);
+    }, 10000);
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      clearTimeout(loadingTimeout);
       try {
         if (firebaseUser) {
           setUser(firebaseUser);
@@ -244,7 +252,10 @@ export function AuthProvider({ children }) {
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      clearTimeout(loadingTimeout);
+    };
   }, []); // Empty deps: register the listener once, use isGuestRef for current guest state
 
   // Handle redirect result on native (catches errors from Google sign-in redirect)

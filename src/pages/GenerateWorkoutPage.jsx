@@ -33,7 +33,7 @@ import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
 import { workoutService, creditService, CREDIT_COSTS, PREMIUM_CREDIT_COST, programService } from '../services/firestore';
 import { ouraService } from '../services/ouraService';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import usePageTitle from '../utils/usePageTitle'
 import { getTodayString } from '../utils/dateUtils'
@@ -52,6 +52,19 @@ const THINKING_MESSAGES = [
   { text: 'Balancing volume with recovery capacity...', icon: 'brain' },
   { text: 'Building optimal set and rep schemes...', icon: 'dumbbell' },
   { text: 'Writing personalized coaching notes...', icon: 'msg' },
+];
+
+const WAITING_MESSAGES = [
+  { text: 'Scanning for muscle group imbalances...', icon: 'alert' },
+  { text: 'Rotating in fresh exercise variations...', icon: 'dumbbell' },
+  { text: 'Mapping progressive overload from your history...', icon: 'calc' },
+  { text: 'Dialing in rest periods for your intensity level...', icon: 'brain' },
+  { text: 'Aligning exercises with your active goals...', icon: 'dumbbell' },
+  { text: 'Verifying weights against your recent performance...', icon: 'calc' },
+  { text: 'Cross-checking substitutions for flagged exercises...', icon: 'alert' },
+  { text: 'Personalizing form cues and exercise notes...', icon: 'msg' },
+  { text: 'Running final consistency checks...', icon: 'brain' },
+  { text: 'Almost there...', icon: 'calc' },
 ];
 
 export default function GenerateWorkoutPage() {
@@ -90,6 +103,7 @@ export default function GenerateWorkoutPage() {
   const [thinkingMessages, setThinkingMessages] = useState([]);
   const thinkingRef = useRef(null);
   const thinkingIntervalRef = useRef(null);
+  const listenerRef = useRef(null);
   
   const [userContext, setUserContext] = useState({
     recentWorkouts: [], goals: [], maxLifts: {}, painHistory: {}, rpeAverages: {}, cardioHistory: [], ouraData: null,
@@ -144,6 +158,7 @@ export default function GenerateWorkoutPage() {
   useEffect(() => {
     return () => {
       if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
+      if (listenerRef.current) listenerRef.current();
     };
   }, []);
   
@@ -162,19 +177,19 @@ export default function GenerateWorkoutPage() {
 
   const startThinkingAnimation = () => {
     setThinkingMessages([]);
-    let index = 0;
+    let index = 1;
+    let waitIndex = 0;
     setThinkingMessages([{ ...THINKING_MESSAGES[0], id: 0 }]);
-    index = 1;
-    
+
     thinkingIntervalRef.current = setInterval(() => {
       if (index < THINKING_MESSAGES.length) {
         setThinkingMessages(prev => [...prev, { ...THINKING_MESSAGES[index], id: index }]);
         index++;
-      } else {
-        setThinkingMessages(prev => [...prev, { 
-          text: 'Finalizing your workout...', icon: 'brain', id: prev.length 
-        }]);
+      } else if (waitIndex < WAITING_MESSAGES.length) {
+        setThinkingMessages(prev => [...prev, { ...WAITING_MESSAGES[waitIndex], id: THINKING_MESSAGES.length + waitIndex }]);
+        waitIndex++;
       }
+      // After all messages exhausted, stop adding — no more spam
     }, 2000);
   };
 
@@ -435,27 +450,82 @@ export default function GenerateWorkoutPage() {
       }
       
       const data = await response.json();
-      setGeneratedWorkout(data.workout);
-      setUsageInfo(data.usage);
-      stopThinkingAnimation();
-      setThinkingMessages(prev => [...prev, { 
-        text: 'Workout ready!', icon: 'check', id: prev.length 
-      }]);
-      addAnalysisStep('Generating workout', 'complete', `Created in ${data.usage?.responseMs}ms`);
-      
+
+      // Inline fallback — result came back directly
+      if (data.success && !data.background) {
+        setGeneratedWorkout(data.workout);
+        setUsageInfo(data.usage);
+        stopThinkingAnimation();
+        setThinkingMessages(prev => [...prev, { text: 'Workout ready!', icon: 'check', id: prev.length }]);
+        addAnalysisStep('Generating workout', 'complete', `Created in ${data.usage?.responseMs}ms`);
+        setLoading(false);
+        return;
+      }
+
+      // Background path — listen to Firestore for completion
+      const jobDocRef = doc(db, 'workoutJobs', data.jobId);
+      let resolved = false;
+
+      const unsubscribe = onSnapshot(jobDocRef, (snap) => {
+        if (resolved) return;
+        const jobData = snap.data();
+        if (!jobData) return;
+
+        if (jobData.status === 'complete' && jobData.result) {
+          resolved = true;
+          unsubscribe();
+          listenerRef.current = null;
+          const result = jobData.result;
+          setGeneratedWorkout(result.workout);
+          setUsageInfo(result.usage);
+          stopThinkingAnimation();
+          setThinkingMessages(prev => [...prev, { text: 'Workout ready!', icon: 'check', id: prev.length }]);
+          addAnalysisStep('Generating workout', 'complete', `Created in ${result.usage?.responseMs}ms`);
+          setLoading(false);
+        } else if (jobData.status === 'error') {
+          resolved = true;
+          unsubscribe();
+          listenerRef.current = null;
+          const errMsg = jobData.error || 'Generation failed';
+          setError(errMsg);
+          if (!isAdmin) updateProfile({ credits });
+          stopThinkingAnimation();
+          setThinkingMessages(prev => [...prev, { text: `Error: ${errMsg}`, icon: 'error', id: prev.length }]);
+          addAnalysisStep('Generating workout', 'error', errMsg);
+          setLoading(false);
+        }
+      }, () => {
+        if (resolved) return;
+        resolved = true;
+        unsubscribe();
+        listenerRef.current = null;
+        setError('Lost connection. Please try again.');
+        if (!isAdmin) updateProfile({ credits });
+        stopThinkingAnimation();
+        setLoading(false);
+      });
+
+      listenerRef.current = unsubscribe;
+
+      // Safety timeout — 90 seconds
+      setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        unsubscribe();
+        listenerRef.current = null;
+        setError('Generation is taking too long. Please try again.');
+        if (!isAdmin) updateProfile({ credits });
+        stopThinkingAnimation();
+        setLoading(false);
+      }, 90000);
+
     } catch (err) {
       console.error('Generation error:', err);
       setError(err.message);
-      // Server refunds on failure — restore local display
-      if (!isAdmin) {
-        updateProfile({ credits });
-      }
+      if (!isAdmin) updateProfile({ credits });
       stopThinkingAnimation();
-      setThinkingMessages(prev => [...prev, { 
-        text: `Error: ${err.message}`, icon: 'error', id: prev.length 
-      }]);
+      setThinkingMessages(prev => [...prev, { text: `Error: ${err.message}`, icon: 'error', id: prev.length }]);
       addAnalysisStep('Generating workout', 'error', err.message);
-    } finally {
       setLoading(false);
     }
   };
