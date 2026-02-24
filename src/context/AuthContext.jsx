@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup,
@@ -178,58 +178,74 @@ export function AuthProvider({ children }) {
   const [impersonatingProfile, setImpersonatingProfile] = useState(null);
   const [actingAsNormalUser, setActingAsNormalUser] = useState(false);
 
+  // Keep a ref to isGuest so the auth listener can read the latest value
+  // without needing to re-register itself every time guest mode changes.
+  const isGuestRef = useRef(isGuest);
+  useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        setIsGuest(false);
-        
-        // Fetch or create user profile
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
-        
-        if (userSnap.exists()) {
-          const profileData = userSnap.data();
-          setUserProfile(profileData);
-          
-          // Ensure existing users have credits field (pre-credit-system users)
-          if (profileData.credits == null) {
-            await updateDoc(doc(db, 'users', firebaseUser.uid), { credits: 50 });
-            profileData.credits = 50;
-            setUserProfile({ ...profileData, credits: 50 });
+      try {
+        if (firebaseUser) {
+          setUser(firebaseUser);
+          setIsGuest(false);
+
+          // Fetch or create user profile
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          const userSnap = await getDoc(userRef);
+
+          if (userSnap.exists()) {
+            const profileData = userSnap.data();
+            setUserProfile(profileData);
+
+            // Ensure existing users have credits field (pre-credit-system users)
+            if (profileData.credits == null) {
+              await updateDoc(doc(db, 'users', firebaseUser.uid), { credits: 50 });
+              profileData.credits = 50;
+              setUserProfile({ ...profileData, credits: 50 });
+            }
+          } else {
+            // Create new user profile — onboarding not complete
+            const newProfile = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              createdAt: serverTimestamp(),
+              lastActive: serverTimestamp(),
+              role: 'member',
+              groups: [],
+              credits: 0, // gets 50 after onboarding
+              onboardingComplete: false,
+              settings: {
+                notifications: true,
+                units: 'lbs',
+                theme: 'dark',
+              },
+            };
+
+            await setDoc(userRef, newProfile);
+            setUserProfile(newProfile);
           }
-        } else {
-          // Create new user profile — onboarding not complete
-          const newProfile = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            createdAt: serverTimestamp(),
-            lastActive: serverTimestamp(),
-            role: 'member',
-            groups: [],
-            credits: 0, // gets 50 after onboarding
-            onboardingComplete: false,
-            settings: {
-              notifications: true,
-              units: 'lbs',
-              theme: 'dark',
-            },
-          };
-          
-          await setDoc(userRef, newProfile);
-          setUserProfile(newProfile);
+        } else if (!isGuestRef.current) {
+          setUser(null);
+          setUserProfile(null);
         }
-      } else if (!isGuest) {
-        setUser(null);
-        setUserProfile(null);
+      } catch (err) {
+        // Profile fetch/create failed (network timeout, Firestore rules, etc.)
+        // Still mark loading done so the app doesn't hang on the loading screen.
+        console.error('[Auth] Profile load error:', err.message);
+        if (firebaseUser) {
+          // At minimum, we have the Firebase auth user — let them in
+          setUser(firebaseUser);
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [isGuest]);
+  }, []); // Empty deps: register the listener once, use isGuestRef for current guest state
 
   // Handle redirect result on native (catches errors from Google sign-in redirect)
   useEffect(() => {

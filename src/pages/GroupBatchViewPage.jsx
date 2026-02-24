@@ -528,12 +528,11 @@ export default function GroupBatchViewPage() {
       )}
 
       {/* Exercise Info Modal */}
-      {infoExercise && (
-        <ExerciseInfoModal
-          exercise={infoExercise}
-          onClose={() => setInfoExercise(null)}
-        />
-      )}
+      <ExerciseInfoModal
+        exercise={infoExercise}
+        isOpen={!!infoExercise}
+        onClose={() => setInfoExercise(null)}
+      />
       </div>
     </>
   )
