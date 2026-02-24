@@ -119,7 +119,7 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-iron-950 flex overflow-x-hidden">
+    <div className="min-h-screen bg-iron-950 flex overflow-x-clip">
       {/* Guest Mode Banner - positioned below mobile header */}
       {isGuest && (
         <div className="fixed left-0 right-0 z-30 bg-gradient-to-r from-flame-600 to-flame-500 text-white py-2.5 px-4
