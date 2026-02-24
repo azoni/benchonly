@@ -77,7 +77,7 @@ export default function WorkoutDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   usePageTitle('Workout')
-  const { user, isGuest, isAppAdmin } = useAuth()
+  const { user, isGuest, isAppAdmin, userProfile, updateProfile } = useAuth()
   const sidebarOpen = useUIStore((s) => s.sidebarOpen)
   const [workout, setWorkout] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -586,6 +586,40 @@ export default function WorkoutDetailPage() {
       }))
       setExercises(filledExercises)
       setIsLogging(false)
+
+      // Update WOD stats on user profile for benchmark WODs
+      if (!isGuest && wodResultData && workout?.benchmarkWodId) {
+        try {
+          const wodId = workout.benchmarkWodId
+          const prevStats = userProfile?.wodStats?.[wodId] || { history: [] }
+          const isRx = workout.benchmarkVariant?.startsWith('rx')
+          const entry = {
+            date: workout.date instanceof Date
+              ? workout.date.toISOString().split('T')[0]
+              : (workout.date?.toDate?.()?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0]),
+            rxOrScaled: isRx ? 'rx' : 'scaled',
+            variant: workout.benchmarkVariant || null,
+            ...(wodResultData.format === 'amrap'
+              ? { rounds: wodResultData.rounds, extraReps: wodResultData.extraReps }
+              : { time: wodResultData.completionTime, dnf: wodResultData.dnf }),
+          }
+          const history = [entry, ...(prevStats.history || [])].slice(0, 20)
+          // Determine PR: for AMRAP, highest rounds+reps; for ForTime, fastest valid time
+          let pr = entry
+          if (wodResultData.format === 'amrap') {
+            const best = history.filter(h => h.rounds != null).sort((a, b) =>
+              (b.rounds * 1000 + (b.extraReps || 0)) - (a.rounds * 1000 + (a.extraReps || 0))
+            )[0]
+            if (best) pr = best
+          } else {
+            const best = history.filter(h => h.time && !h.dnf).sort((a, b) => a.time.localeCompare(b.time))[0]
+            if (best) pr = best
+          }
+          await updateProfile({ wodStats: { ...(userProfile?.wodStats || {}), [wodId]: { pr, history } } })
+        } catch (e) {
+          console.error('[WorkoutDetail] Failed to update WOD stats:', e)
+        }
+      }
     } catch (error) {
       console.error('Error completing:', error)
       alert('Failed to complete')

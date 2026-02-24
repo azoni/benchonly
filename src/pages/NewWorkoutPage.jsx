@@ -16,10 +16,12 @@ import {
   Loader2,
   Search,
   Zap,
+  BookOpen,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { workoutService, trainerRequestService } from '../services/firestore';
 import CardioForm from '../components/CardioForm';
+import WodLibraryModal from '../components/WodLibraryModal';
 import { getTodayString, parseLocalDate, toDateString } from '../utils/dateUtils';
 import { normalizeRepRange, groupExercisesForDisplay } from '../utils/workoutUtils';
 import { useUIStore } from '../store';
@@ -97,6 +99,9 @@ export default function NewWorkoutPage() {
   const [wodFormat, setWodFormat] = useState('amrap'); // 'amrap', 'fortime', 'emom'
   const [wodTimeCap, setWodTimeCap] = useState('');
   const [wodMovements, setWodMovements] = useState([{ name: '', reps: '' }]);
+  const [wodLibraryOpen, setWodLibraryOpen] = useState(false);
+  const [benchmarkWodId, setBenchmarkWodId] = useState(null);
+  const [benchmarkVariant, setBenchmarkVariant] = useState(null);
   const [activeAutocomplete, setActiveAutocomplete] = useState(null); // exercise.id or null
   const autocompleteRef = useRef(null);
   const [nextSupersetGroup, setNextSupersetGroup] = useState(1);
@@ -384,6 +389,17 @@ export default function NewWorkoutPage() {
     return <CardioForm onBack={() => setWorkoutType('strength')} />;
   }
 
+  const handleWodLibrarySelect = (wod, variantKey) => {
+    const variant = wod.variants[variantKey];
+    setWorkout(prev => ({ ...prev, name: wod.name }));
+    setWodFormat(wod.format);
+    setWodTimeCap(wod.timeCap?.toString() || '');
+    setWodMovements(variant.movements.map(m => ({ name: m.name, reps: m.reps })));
+    setBenchmarkWodId(wod.id);
+    setBenchmarkVariant(variantKey);
+    setWodLibraryOpen(false);
+  };
+
   const handleSaveWod = async () => {
     if (!workout.name.trim()) {
       alert('Please enter a workout name');
@@ -421,6 +437,7 @@ export default function NewWorkoutPage() {
         notes,
         exercises,
         workoutCategory: 'wod',
+        ...(benchmarkWodId && { benchmarkWodId, benchmarkVariant }),
       };
 
       if (trainerRequestId) {
@@ -624,6 +641,15 @@ export default function NewWorkoutPage() {
       {/* ═══════ WOD FORM ═══════ */}
       {workoutType === 'wod' && (
         <>
+          {/* WOD Library Browser */}
+          <button
+            onClick={() => setWodLibraryOpen(true)}
+            className="w-full mb-5 flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-yellow-500/50 bg-yellow-500/5 text-yellow-400 hover:bg-yellow-500/10 hover:border-yellow-500 transition-colors text-sm font-medium"
+          >
+            <BookOpen className="w-4 h-4" />
+            Browse Popular WODs
+          </button>
+
           {/* WOD Info */}
           <div className="card-steel rounded-xl p-5 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1723,6 +1749,14 @@ export default function NewWorkoutPage() {
           </>
         )}
       </AnimatePresence>
+
+      {/* WOD Library Modal */}
+      <WodLibraryModal
+        isOpen={wodLibraryOpen}
+        onClose={() => setWodLibraryOpen(false)}
+        onSelect={handleWodLibrarySelect}
+        userWodStats={userProfile?.wodStats || {}}
+      />
     </div>
   );
 }

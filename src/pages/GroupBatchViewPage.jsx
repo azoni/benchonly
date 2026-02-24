@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { format } from 'date-fns'
-import { ArrowLeft, Users, Dumbbell, MessageSquare, HelpCircle, Activity, Zap } from 'lucide-react'
+import { ArrowLeft, Users, Dumbbell, MessageSquare, HelpCircle, Activity, Zap, ChevronDown, ChevronUp } from 'lucide-react'
 import { groupWorkoutService, groupService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
 import { getDisplayDate } from '../utils/dateUtils'
@@ -69,6 +69,7 @@ export default function GroupBatchViewPage() {
   const [activeTab, setActiveTab] = useState(0)
   const [loading, setLoading] = useState(true)
   const [infoExercise, setInfoExercise] = useState(null)
+  const [notesExpanded, setNotesExpanded] = useState(false)
 
   const decodedKey = decodeURIComponent(batchKey)
 
@@ -156,8 +157,8 @@ export default function GroupBatchViewPage() {
         </div>
       </div>
 
-      {/* Member Tabs */}
-      <div className="mb-6 -mx-4 px-4">
+      {/* Member Tabs — sticky so they stay visible while scrolling */}
+      <div className="sticky top-0 z-10 bg-iron-950 -mx-4 px-4 pt-2 pb-4 mb-2">
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {batchWorkouts.map((workout, idx) => {
             const member = members.find(m => m.uid === workout.assignedTo)
@@ -223,11 +224,38 @@ export default function GroupBatchViewPage() {
             </Link>
           </div>
 
-          {/* Coaching Notes */}
+          {/* Summary Card — shown first so everything is visible at a glance */}
+          {activeWorkout.exercises?.length > 0 && (
+            <WorkoutSummaryCard
+              exercises={activeWorkout.exercises}
+              isCompleted={isCompleted}
+              detailed={true}
+              workoutNotes={activeWorkout.notes}
+            />
+          )}
+
+          {/* Coaching Notes — collapsible */}
           {activeWorkout.coachingNotes && (
-            <div className="card-steel p-4 mb-4 bg-flame-500/5 border-flame-500/10">
-              <p className="text-xs text-flame-400 mb-1.5">AI Coaching Notes</p>
-              <p className="text-sm text-iron-400 leading-relaxed">{activeWorkout.coachingNotes}</p>
+            <div className="card-steel mb-4 bg-flame-500/5 border-flame-500/10 overflow-hidden">
+              <button
+                onClick={() => setNotesExpanded(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 text-left"
+              >
+                <p className="text-xs font-semibold text-flame-400">AI Coaching Notes</p>
+                {notesExpanded
+                  ? <ChevronUp className="w-4 h-4 text-flame-400 flex-shrink-0" />
+                  : <ChevronDown className="w-4 h-4 text-flame-400 flex-shrink-0" />
+                }
+              </button>
+              {notesExpanded ? (
+                <div className="px-4 pb-4">
+                  <p className="text-sm text-iron-400 leading-relaxed">{activeWorkout.coachingNotes}</p>
+                </div>
+              ) : (
+                <div className="px-4 pb-3">
+                  <p className="text-sm text-iron-500 leading-relaxed line-clamp-2">{activeWorkout.coachingNotes}</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -236,11 +264,6 @@ export default function GroupBatchViewPage() {
             <div className="card-steel p-4 mb-4">
               <p className="text-iron-300 text-sm">{activeWorkout.notes}</p>
             </div>
-          )}
-
-          {/* Summary Card */}
-          {activeWorkout.exercises?.length > 0 && (
-            <WorkoutSummaryCard exercises={activeWorkout.exercises} isCompleted={isCompleted} />
           )}
 
           {/* Exercise Details */}

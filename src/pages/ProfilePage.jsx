@@ -23,8 +23,10 @@ import {
   Search,
   Users,
   ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { getWodById, FORMAT_LABELS } from '../data/wodLibrary'
 import { userService, workoutService, goalService, groupWorkoutService } from '../services/firestore'
 import { feedService, FEED_TYPES } from '../services/feedService'
 import { friendService, FRIEND_STATUS } from '../services/friendService'
@@ -76,6 +78,7 @@ export default function ProfilePage() {
   const [goals, setGoals] = useState([])
   
   const [goalsExpanded, setGoalsExpanded] = useState(false)
+  const [wodStatsExpanded, setWodStatsExpanded] = useState(false)
 
   // Friend state
   const [friendStatus, setFriendStatus] = useState(null) // { status, requestId?, friendshipId? }
@@ -857,6 +860,72 @@ export default function ProfilePage() {
           })}
         </div>
       )}
+
+      {/* Benchmark WOD Stats */}
+      {(() => {
+        const wodStats = profile?.wodStats
+        if (!wodStats || Object.keys(wodStats).length === 0) return null
+        const entries = Object.entries(wodStats).filter(([, v]) => v?.pr)
+        if (entries.length === 0) return null
+        const visible = wodStatsExpanded ? entries : entries.slice(0, 4)
+        return (
+          <div className="card-steel mb-6 overflow-hidden">
+            <button
+              onClick={() => setWodStatsExpanded(!wodStatsExpanded)}
+              className="w-full flex items-center justify-between p-4 hover:bg-iron-800/30 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-yellow-400" />
+                <h2 className="font-display text-lg text-iron-100">Benchmark WODs</h2>
+                <span className="text-xs text-iron-500 ml-1">{entries.length}</span>
+              </div>
+              {wodStatsExpanded
+                ? <ChevronUp className="w-5 h-5 text-iron-400" />
+                : <ChevronDown className="w-5 h-5 text-iron-400" />
+              }
+            </button>
+            <div className="px-4 pb-4">
+              <div className="grid grid-cols-2 gap-2">
+                {visible.map(([wodId, data]) => {
+                  const wod = getWodById(wodId)
+                  const pr = data.pr
+                  const isRx = pr?.rxOrScaled === 'rx'
+                  const format = wod?.format || 'fortime'
+                  let resultStr = '—'
+                  if (format === 'amrap' && pr?.rounds != null) {
+                    resultStr = `${pr.rounds} rds`
+                    if (pr.extraReps) resultStr += ` +${pr.extraReps}`
+                  } else if (pr?.time && !pr?.dnf) {
+                    resultStr = pr.time
+                  } else if (pr?.dnf) {
+                    resultStr = 'DNF'
+                  }
+                  return (
+                    <div key={wodId} className="card-steel p-3">
+                      <div className="flex items-start justify-between gap-1 mb-1">
+                        <p className="text-xs font-semibold text-iron-200 truncate">{wod?.name || wodId}</p>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${isRx ? 'bg-flame-500/20 text-flame-400' : 'bg-iron-700 text-iron-400'}`}>
+                          {isRx ? 'Rx' : 'Scaled'}
+                        </span>
+                      </div>
+                      <p className="text-lg font-display text-yellow-400">{resultStr}</p>
+                      {wod && <p className="text-[10px] text-iron-600 mt-0.5">{FORMAT_LABELS[wod.format]}</p>}
+                    </div>
+                  )
+                })}
+              </div>
+              {entries.length > 4 && (
+                <button
+                  onClick={() => setWodStatsExpanded(!wodStatsExpanded)}
+                  className="mt-3 w-full text-center text-xs text-iron-500 hover:text-iron-300 transition-colors"
+                >
+                  {wodStatsExpanded ? 'Show less' : `Show all ${entries.length}`}
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Goals */}
       {goals.length > 0 && (

@@ -52,8 +52,69 @@ function getSummaryText(exercise, isCompleted) {
   return '—'
 }
 
-export default function WorkoutSummaryCard({ exercises, isCompleted }) {
+// For detailed mode: format a single set row
+function getSetDetail(set, type, isCompleted) {
+  if (type === 'time') {
+    const prescribed = set.prescribedTime ? `${set.prescribedTime}s` : null
+    const actual = set.actualTime ? `${set.actualTime}s` : null
+    if (isCompleted && actual) {
+      return { actual, prescribed, hasActual: true }
+    }
+    return { actual: null, prescribed, hasActual: false }
+  }
+  if (type === 'bodyweight') {
+    const prescribedReps = set.prescribedReps
+    const actualReps = set.actualReps
+    const weight = isCompleted ? set.actualWeight : set.prescribedWeight
+    const reps = isCompleted && actualReps ? actualReps : prescribedReps
+    const weightStr = weight ? `BW+${weight}` : 'BW'
+    const prescribed = prescribedReps ? `${weightStr} × ${prescribedReps}` : null
+    const actual = isCompleted && actualReps ? `${weightStr} × ${actualReps}` : null
+    return { actual, prescribed, hasActual: !!(isCompleted && actualReps) }
+  }
+  // weight
+  const prescribedWeight = set.prescribedWeight
+  const prescribedReps = set.prescribedReps
+  const actualWeight = set.actualWeight
+  const actualReps = set.actualReps
+  const prescribed = prescribedWeight && prescribedReps ? `${prescribedWeight} × ${prescribedReps}` : prescribedReps ? `× ${prescribedReps}` : null
+  const actual = isCompleted && (actualWeight || actualReps)
+    ? `${actualWeight || prescribedWeight || '—'} × ${actualReps || '—'}`
+    : null
+  return { actual, prescribed, hasActual: !!(isCompleted && (actualWeight || actualReps)) }
+}
+
+// Estimate total volume (lbs × reps) for completed workouts
+function calcVolume(exercises, isCompleted) {
+  if (!isCompleted) return null
+  let totalSets = 0
+  let totalVol = 0
+  for (const ex of exercises) {
+    const type = getExerciseType(ex)
+    if (type !== 'weight') continue
+    for (const s of (ex.sets || [])) {
+      totalSets++
+      const w = parseFloat(s.actualWeight || s.prescribedWeight || 0)
+      const r = parseFloat(s.actualReps || s.prescribedReps || 0)
+      if (w && r) totalVol += w * r
+    }
+  }
+  return { totalSets, totalVol: Math.round(totalVol) }
+}
+
+export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = false, workoutNotes }) {
   if (!exercises || exercises.length === 0) return null
+
+  const vol = detailed ? calcVolume(exercises, isCompleted) : null
+
+  // Parse WOD format from notes (e.g. "AMRAP 20 min\n..." or "For Time\n...")
+  let wodHeader = null
+  if (detailed && workoutNotes) {
+    const firstLine = workoutNotes.split('\n')[0]?.trim()
+    if (firstLine && (firstLine.includes('AMRAP') || firstLine.includes('For Time') || firstLine.includes('EMOM'))) {
+      wodHeader = firstLine
+    }
+  }
 
   return (
     <div className="card-steel p-4 mb-6">
@@ -61,6 +122,13 @@ export default function WorkoutSummaryCard({ exercises, isCompleted }) {
         <ListChecks className="w-5 h-5 text-flame-400" />
         <h3 className="font-semibold text-iron-100 text-sm">Workout Summary</h3>
       </div>
+
+      {wodHeader && (
+        <div className="mb-3 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+          <span className="text-xs font-semibold text-yellow-400">{wodHeader}</span>
+        </div>
+      )}
+
       <div className="space-y-1.5">
         {groupExercisesForDisplay(exercises).map((group, i) => {
           if (group.type === 'superset') {
@@ -69,20 +137,61 @@ export default function WorkoutSummaryCard({ exercises, isCompleted }) {
             const summaryB = getSummaryText(exerciseB, isCompleted)
             const hasActualA = isCompleted && exerciseA.sets?.some(s => s.actualWeight || s.actualReps || s.actualTime)
             const hasActualB = isCompleted && exerciseB.sets?.some(s => s.actualWeight || s.actualReps || s.actualTime)
+            const typeA = getExerciseType(exerciseA)
+            const typeB = getExerciseType(exerciseB)
+
             return (
               <div key={`ss-${group.supersetGroup}`} className="py-1.5 border-b border-iron-800/50 last:border-0">
                 <div className="flex items-center gap-1.5 mb-1">
                   <Zap className="w-3 h-3 text-purple-400 flex-shrink-0" />
                   <span className="text-[10px] text-purple-400 font-semibold uppercase">Superset</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-iron-200 truncate">{exerciseA.name}</span>
-                  <span className={`text-sm font-semibold flex-shrink-0 ml-3 ${isCompleted && hasActualA ? 'text-flame-400' : 'text-iron-300'}`}>{summaryA}</span>
-                </div>
-                <div className="flex items-center justify-between mt-0.5">
-                  <span className="text-sm font-medium text-iron-200 truncate">{exerciseB.name}</span>
-                  <span className={`text-sm font-semibold flex-shrink-0 ml-3 ${isCompleted && hasActualB ? 'text-flame-400' : 'text-iron-300'}`}>{summaryB}</span>
-                </div>
+
+                {detailed ? (
+                  <>
+                    <p className="text-sm font-semibold text-iron-200 mb-1">{exerciseA.name}</p>
+                    {(exerciseA.sets || []).map((set, si) => {
+                      const d = getSetDetail(set, typeA, isCompleted)
+                      return (
+                        <div key={si} className="flex items-center justify-between pl-2 py-0.5">
+                          <span className="text-xs text-iron-500">Set {si + 1}</span>
+                          <div className="text-right">
+                            {d.hasActual
+                              ? <span className="text-xs font-semibold text-flame-400">{d.actual}</span>
+                              : <span className="text-xs text-iron-300">{d.prescribed || '—'}</span>
+                            }
+                          </div>
+                        </div>
+                      )
+                    })}
+                    <p className="text-sm font-semibold text-iron-200 mt-2 mb-1">{exerciseB.name}</p>
+                    {(exerciseB.sets || []).map((set, si) => {
+                      const d = getSetDetail(set, typeB, isCompleted)
+                      return (
+                        <div key={si} className="flex items-center justify-between pl-2 py-0.5">
+                          <span className="text-xs text-iron-500">Set {si + 1}</span>
+                          <div className="text-right">
+                            {d.hasActual
+                              ? <span className="text-xs font-semibold text-flame-400">{d.actual}</span>
+                              : <span className="text-xs text-iron-300">{d.prescribed || '—'}</span>
+                            }
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-iron-200 truncate">{exerciseA.name}</span>
+                      <span className={`text-sm font-semibold flex-shrink-0 ml-3 ${isCompleted && hasActualA ? 'text-flame-400' : 'text-iron-300'}`}>{summaryA}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <span className="text-sm font-medium text-iron-200 truncate">{exerciseB.name}</span>
+                      <span className={`text-sm font-semibold flex-shrink-0 ml-3 ${isCompleted && hasActualB ? 'text-flame-400' : 'text-iron-300'}`}>{summaryB}</span>
+                    </div>
+                  </>
+                )}
               </div>
             )
           }
@@ -93,6 +202,38 @@ export default function WorkoutSummaryCard({ exercises, isCompleted }) {
           const hasActualData = isCompleted && exercise.sets?.some(s =>
             s.actualWeight || s.actualReps || s.actualTime
           )
+
+          if (detailed) {
+            return (
+              <div key={i} className="py-2 border-b border-iron-800/50 last:border-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-sm font-semibold text-iron-200">{exercise.name}</span>
+                  {type === 'time' && (
+                    <span className="px-1.5 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded flex-shrink-0">Time</span>
+                  )}
+                  {type === 'bodyweight' && (
+                    <span className="px-1.5 py-0.5 text-[10px] bg-emerald-500/20 text-emerald-400 rounded flex-shrink-0">BW</span>
+                  )}
+                </div>
+                {(exercise.sets || []).map((set, si) => {
+                  const d = getSetDetail(set, type, isCompleted)
+                  return (
+                    <div key={si} className="flex items-center justify-between pl-2 py-0.5">
+                      <span className="text-xs text-iron-500">Set {si + 1}</span>
+                      <div className="flex items-center gap-2">
+                        {d.hasActual && d.prescribed && d.actual !== d.prescribed && (
+                          <span className="text-xs text-iron-600 line-through">{d.prescribed}</span>
+                        )}
+                        <span className={`text-xs font-semibold ${d.hasActual ? 'text-flame-400' : 'text-iron-300'}`}>
+                          {d.hasActual ? d.actual : (d.prescribed || '—')}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          }
 
           return (
             <div key={i} className="flex items-center justify-between py-1.5 border-b border-iron-800/50 last:border-0">
@@ -114,6 +255,13 @@ export default function WorkoutSummaryCard({ exercises, isCompleted }) {
           )
         })}
       </div>
+
+      {vol && (vol.totalVol > 0 || vol.totalSets > 0) && (
+        <div className="mt-3 pt-3 border-t border-iron-800/50 flex items-center justify-between text-xs text-iron-500">
+          <span>{vol.totalSets} weighted sets</span>
+          {vol.totalVol > 0 && <span>~{vol.totalVol.toLocaleString()} lbs total volume</span>}
+        </div>
+      )}
     </div>
   )
 }
