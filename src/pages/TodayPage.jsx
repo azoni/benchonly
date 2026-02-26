@@ -492,12 +492,27 @@ export default function TodayPage() {
         const dailyActiveCounts = Object.entries(dailyActive)
           .map(([date, users]) => ({ date, count: users.size }))
           .sort((a, b) => a.date.localeCompare(b.date))
+        // Look up display names for recent event users
+        const recentEvents = events.slice(0, 10)
+        const recentUserIds = [...new Set(recentEvents.map(e => e.userId).filter(Boolean))]
+        const userMap = {}
+        const { getDoc, doc } = await import('firebase/firestore')
+        const { db } = await import('../services/firebase')
+        await Promise.all(recentUserIds.map(async uid => {
+          try {
+            const snap = await getDoc(doc(db, 'users', uid))
+            if (snap.exists()) {
+              const d = snap.data()
+              userMap[uid] = d.displayName || d.email || uid
+            } else { userMap[uid] = uid }
+          } catch { userMap[uid] = uid }
+        }))
         setAdminActivity({
           totalEvents: events.length,
           uniqueUsers: uniqueUsers.size,
           actionCounts,
           dailyActiveCounts,
-          recentEvents: events.slice(0, 10),
+          recentEvents: recentEvents.map(e => ({ ...e, userName: userMap[e.userId] || e.userId })),
           workoutsCreated: actionCounts.workout_created || 0,
         })
       } catch (e) {
@@ -1278,7 +1293,6 @@ export default function TodayPage() {
       })()}
 
       {/* Admin Activity Panel */}
-      {console.log('[DEBUG] Admin panel gate:', { isRealAdmin, email: user?.email, isGuest })}
       {isRealAdmin && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -1359,6 +1373,8 @@ export default function TodayPage() {
                           <div key={event.id} className="flex items-center gap-2 py-1.5 border-b border-iron-800/50 last:border-0">
                             <div className="flex-1 min-w-0">
                               <p className="text-xs text-iron-300 truncate">
+                                <span className="text-iron-100 font-medium">{event.userName}</span>
+                                {' '}
                                 <span className="text-flame-400">{event.action.replace(/_/g, ' ')}</span>
                                 {event.metadata?.page && <span className="text-iron-600"> {event.metadata.page}</span>}
                               </p>
