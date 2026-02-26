@@ -1278,6 +1278,7 @@ export default function TodayPage() {
       })()}
 
       {/* Admin Activity Panel */}
+      {console.log('[DEBUG] Admin panel gate:', { isRealAdmin, email: user?.email, isGuest })}
       {isRealAdmin && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
