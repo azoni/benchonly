@@ -270,20 +270,32 @@ export function AuthProvider({ children }) {
 
   const signInWithGoogle = async () => {
     try {
+      // Ensure Firebase Auth is fully initialized before attempting sign-in
+      await auth.authStateReady();
+
       if (isNative) {
         // Native: use redirect flow (popups blocked in WebView)
         await signInWithRedirect(auth, googleProvider);
         // onAuthStateChanged will pick up the user after redirect
         return { success: true };
       }
-      const result = await signInWithPopup(auth, googleProvider);
-      setIsGuest(false);
-      return { success: true, user: result.user };
+
+      try {
+        const result = await signInWithPopup(auth, googleProvider);
+        setIsGuest(false);
+        return { success: true, user: result.user };
+      } catch (popupError) {
+        // Popup can fail due to browser cookie/storage restrictions —
+        // fall back to redirect flow which is more reliable
+        if (popupError?.code === 'auth/popup-closed-by-user' || popupError?.code === 'auth/cancelled-popup-request') {
+          return { success: false, error: 'cancelled' };
+        }
+        console.warn('Popup sign-in failed, falling back to redirect:', popupError.code);
+        await signInWithRedirect(auth, googleProvider);
+        return { success: true };
+      }
     } catch (error) {
       console.error('Google sign in error:', error);
-      if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
-        return { success: false, error: 'cancelled' };
-      }
       return { success: false, error: error.message };
     }
   };

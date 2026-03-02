@@ -1,5 +1,5 @@
 import { tokenUsageService } from './firestore';
-import { getAuth } from 'firebase/auth';
+import { auth } from './firebase';
 
 import { API_BASE } from '../utils/platform';
 
@@ -8,7 +8,6 @@ import { API_BASE } from '../utils/platform';
  * Import this from any component that calls serverless functions directly.
  */
 export async function getAuthHeaders() {
-  const auth = getAuth();
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
   const token = await user.getIdToken();

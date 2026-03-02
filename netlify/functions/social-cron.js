@@ -294,7 +294,21 @@ export async function handler() {
       return { statusCode: 200, body: 'Social posting disabled' };
     }
 
-    // 2. Check if enough time has elapsed
+    // 2. Check daily tweet usage against Twitter API limits
+    const MAX_TWEETS_PER_DAY = 40; // Free tier ~50/day, leave buffer
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todaySnap = await db.collection('socialThreads')
+      .where('status', '==', 'posted')
+      .where('postedAt', '>=', todayStart)
+      .get();
+    const tweetsPostedToday = todaySnap.docs.reduce((sum, d) => sum + (d.data().tweetCount || 0), 0);
+    if (tweetsPostedToday >= MAX_TWEETS_PER_DAY) {
+      console.log(`[social-cron] Daily limit reached: ${tweetsPostedToday} tweets posted today (max ${MAX_TWEETS_PER_DAY})`);
+      return { statusCode: 200, body: `Daily limit reached (${tweetsPostedToday}/${MAX_TWEETS_PER_DAY})` };
+    }
+
+    // 3. Check if enough time has elapsed
     const lastPosted = settings.lastPostedAt?.toMillis() || 0;
     const hoursSince = (Date.now() - lastPosted) / (1000 * 60 * 60);
     const frequencyHours = settings.frequencyHours || 12;
@@ -304,7 +318,7 @@ export async function handler() {
       return { statusCode: 200, body: `Too soon (${hoursSince.toFixed(1)}h elapsed, need ${frequencyHours}h)` };
     }
 
-    // 3. Check if there's already a queued thread ready to post
+    // 4. Check if there's already a queued thread ready to post
     const queuedSnap = await db.collection('socialThreads')
       .where('status', '==', 'queued')
       .orderBy('createdAt', 'asc')
@@ -320,7 +334,7 @@ export async function handler() {
       return { statusCode: 200, body: `Posted: ${threadUrl}` };
     }
 
-    // 4. No queued thread — generate one now, post it next cycle
+    // 5. No queued thread — generate one now, post it next cycle
     //    This split keeps each cycle well within the 26s timeout
     console.log('[social-cron] No queued threads — generating for next cycle...');
     const threadId = await generateThread(settings);

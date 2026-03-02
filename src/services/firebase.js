@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { isNative } from '../utils/platform';
 
 // Firebase configuration - Replace with your actual config
 const firebaseConfig = {
@@ -15,11 +16,22 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Auth — use IndexedDB persistence first (faster & more reliable in WKWebView/Capacitor)
-// Falls back to localStorage for web browsers that don't support IndexedDB
-export const auth = initializeAuth(app, {
-  persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-});
+// Auth — native needs initializeAuth with IndexedDB for WKWebView/Capacitor
+// Web uses getAuth which handles persistence automatically
+let auth;
+if (isNative) {
+  try {
+    auth = initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+    });
+  } catch {
+    auth = getAuth(app);
+  }
+} else {
+  auth = getAuth(app);
+}
+export { auth };
+
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: 'select_account'

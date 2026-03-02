@@ -262,7 +262,7 @@ service cloud.firestore {
     // --- WORKOUT GENERATION JOBS ---
 
     match /workoutJobs/{jobId} {
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAppAdmin());
     }
 
     // --- SHARED WORKOUTS ---
