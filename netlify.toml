@@ -7,13 +7,6 @@
   NODE_VERSION = "20"
   NPM_FLAGS = "--include=dev"
 
-# Proxy Firebase auth handler through our domain to avoid cross-origin popup issues
-[[redirects]]
-  from = "/__/auth/*"
-  to = "https://benchonly-7d92a.firebaseapp.com/__/auth/:splat"
-  status = 200
-  force = true
-
 # SPA catch-all — Netlify serves existing files first, then falls back to index.html
 [[redirects]]
   from = "/*"

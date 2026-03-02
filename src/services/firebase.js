@@ -6,7 +6,7 @@ import { isNative } from '../utils/platform';
 // Firebase configuration - Replace with your actual config
 const firebaseConfig = {
   apiKey: "AIzaSyDV6I7Z6uGqgT8EPwTR3dr2w2xo6aoWqI4",
-  authDomain: "benchpressonly.com",
+  authDomain: "benchonly-7d92a.firebaseapp.com",
   projectId: "benchonly-7d92a",
   storageBucket: "benchonly-7d92a.firebasestorage.app",
   messagingSenderId: "461193748919",
