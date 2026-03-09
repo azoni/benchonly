@@ -7,28 +7,39 @@ import './index.css'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 
-// PWA auto-update: only run in browser, not inside Capacitor native app
+// PWA service worker: only run in browser, NEVER inside Capacitor native app.
+// Service workers intercept Capacitor's local file serving and can deadlock the app on launch.
 const isNativeApp = !!(window.Capacitor?.isNativePlatform?.())
-if ('serviceWorker' in navigator && !isNativeApp) {
-  // vite-plugin-pwa handles initial registration; we add update triggers
-  const checkForUpdate = () => {
-    navigator.serviceWorker.getRegistration().then(reg => {
-      if (reg) reg.update().catch(() => {})
+
+if ('serviceWorker' in navigator) {
+  if (isNativeApp) {
+    // Native: unregister any stale service workers left from previous builds
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      registrations.forEach(reg => reg.unregister())
+    })
+  } else {
+    // Web: register SW manually (injectRegister is disabled in vite config)
+    import('virtual:pwa-register').then(({ registerSW }) => {
+      registerSW({ immediate: true })
+    }).catch(() => {})
+
+    // Check for updates when user switches back to app
+    const checkForUpdate = () => {
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg) reg.update().catch(() => {})
+      })
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkForUpdate()
+    })
+
+    setInterval(checkForUpdate, 5 * 60 * 1000)
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload()
     })
   }
-
-  // Check when user switches back to app (from home screen, tab switch, etc.)
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') checkForUpdate()
-  })
-
-  // Also check every 5 minutes while active
-  setInterval(checkForUpdate, 5 * 60 * 1000)
-
-  // When a new SW takes over, reload to use updated code
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    window.location.reload()
-  })
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(

@@ -17,6 +17,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: null, // We handle registration manually in main.jsx (disabled on native/Capacitor)
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'BenchPressOnly — AI Workout Tracker',

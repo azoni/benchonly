@@ -184,12 +184,12 @@ export function AuthProvider({ children }) {
   useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
 
   useEffect(() => {
-    // Safety timeout: if Firebase auth doesn't resolve within 10 seconds on launch,
+    // Safety timeout: if Firebase auth doesn't resolve within 4 seconds on launch,
     // force loading=false so the app doesn't hang on the splash screen indefinitely.
     // This can happen on cold starts in Capacitor/WKWebView when Firebase is slow to initialize.
     const loadingTimeout = setTimeout(() => {
       setLoading(false);
-    }, 10000);
+    }, 4000);
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       clearTimeout(loadingTimeout);
