@@ -903,6 +903,13 @@ export const scheduleService = {
     return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   },
 
+  async getById(scheduleId) {
+    const docRef = doc(db, 'schedules', scheduleId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() };
+  },
+
   async update(scheduleId, updates) {
     const docRef = doc(db, 'schedules', scheduleId);
     await updateDoc(docRef, {

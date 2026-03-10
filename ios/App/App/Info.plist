@@ -53,5 +53,14 @@
 	<string>Bench Only accesses the microphone when recording video for form analysis.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.461193748919-ipjvrtv8dkjkm26bvjagftplcqs8ncak</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>461193748919-ipjvrtv8dkjkm26bvjagftplcqs8ncak.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.461193748919-ipjvrtv8dkjkm26bvjagftplcqs8ncak</string>
+	<key>API_KEY</key>
+	<string>AIzaSyAsq-MZQTu1PbV7A623S5aOpvjgt9E4coM</string>
+	<key>GCM_SENDER_ID</key>
+	<string>461193748919</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.benchonly.app</string>
+	<key>PROJECT_ID</key>
+	<string>benchonly-7d92a</string>
+	<key>STORAGE_BUCKET</key>
+	<string>benchonly-7d92a.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:461193748919:ios:89f5cf3d8443eba2374832</string>
+</dict>
+</plist>

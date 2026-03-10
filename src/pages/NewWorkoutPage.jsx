@@ -20,7 +20,7 @@ import {
   Pin,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { workoutService, trainerRequestService } from '../services/firestore';
+import { workoutService, trainerRequestService, scheduleService } from '../services/firestore';
 import CardioForm from '../components/CardioForm';
 import WodLibraryModal from '../components/WodLibraryModal';
 import { WOD_LIBRARY } from '../data/wodLibrary';
@@ -97,7 +97,8 @@ export default function NewWorkoutPage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!!editId);
   const [rpeModalOpen, setRpeModalOpen] = useState(false);
-  const [workoutType, setWorkoutType] = useState('strength'); // 'strength', 'cardio', or 'wod'
+  const [editScheduleData, setEditScheduleData] = useState(null);
+  const [workoutType, setWorkoutType] = useState(editScheduleId ? 'cardio' : 'strength'); // 'strength', 'cardio', or 'wod'
   const [wodFormat, setWodFormat] = useState('amrap'); // 'amrap', 'fortime', 'emom'
   const [wodTimeCap, setWodTimeCap] = useState('');
   const [wodMovements, setWodMovements] = useState([{ name: '', reps: '' }]);
@@ -113,6 +114,7 @@ export default function NewWorkoutPage() {
   const isAdminCreating = searchParams.get('userId') && searchParams.get('userId') !== user?.uid;
   const trainerRequestId = searchParams.get('requestId') || null;
   const paramDate = searchParams.get('date') || null;
+  const editScheduleId = searchParams.get('editSchedule') || null;
   const isEditMode = !!editId;
 
   // Merge default exercises with custom exercises from user profile
@@ -127,6 +129,14 @@ export default function NewWorkoutPage() {
     notes: '',
     exercises: [createEmptyExercise()],
   });
+
+  // Load schedule data if editing a recurring schedule
+  useEffect(() => {
+    if (!editScheduleId) return;
+    scheduleService.getById(editScheduleId).then((data) => {
+      if (data) setEditScheduleData(data);
+    });
+  }, [editScheduleId]);
 
   // Load existing workout if editing
   useEffect(() => {
@@ -388,7 +398,7 @@ export default function NewWorkoutPage() {
   // If cardio is selected, render the CardioForm instead
   // (placed after all hooks to avoid hooks ordering violation)
   if (workoutType === 'cardio') {
-    return <CardioForm onBack={() => setWorkoutType('strength')} />;
+    return <CardioForm onBack={() => editScheduleId ? navigate('/workouts') : setWorkoutType('strength')} editSchedule={editScheduleData} />;
   }
 
   const handleWodLibrarySelect = (wod, variantKey) => {

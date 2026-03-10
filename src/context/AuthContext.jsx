@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { 
-  onAuthStateChanged, 
+import {
+  onAuthStateChanged,
   signInWithPopup,
   signInWithRedirect,
+  signInWithCredential,
   getRedirectResult,
   signOut as firebaseSignOut,
   GoogleAuthProvider
@@ -258,9 +259,9 @@ export function AuthProvider({ children }) {
     };
   }, []); // Empty deps: register the listener once, use isGuestRef for current guest state
 
-  // Handle redirect result on native (catches errors from Google sign-in redirect)
+  // Handle redirect result on web (catches errors from Google sign-in redirect)
   useEffect(() => {
-    if (!isNative) return;
+    if (isNative) return; // Native uses the Capacitor plugin, not redirects
     getRedirectResult(auth).catch((err) => {
       if (err?.code !== 'auth/redirect-cancelled-by-user') {
         console.error('[Auth] Redirect result error:', err.message);
@@ -274,9 +275,15 @@ export function AuthProvider({ children }) {
       await auth.authStateReady();
 
       if (isNative) {
-        // Native: use redirect flow (popups blocked in WebView)
-        await signInWithRedirect(auth, googleProvider);
-        // onAuthStateChanged will pick up the user after redirect
+        // Native: use Capacitor Firebase Authentication plugin
+        // This opens the native Google Sign-In flow (ASWebAuthenticationSession on iOS)
+        const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+        const result = await FirebaseAuthentication.signInWithGoogle();
+
+        // Use the credential to sign in with Firebase JS SDK
+        const credential = GoogleAuthProvider.credential(result.credential?.idToken);
+        await signInWithCredential(auth, credential);
+        // onAuthStateChanged will pick up the user
         return { success: true };
       }
 

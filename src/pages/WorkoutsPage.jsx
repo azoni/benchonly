@@ -941,6 +941,19 @@ Rules:
                   )}
                 </CardWrapper>
 
+                {/* Edit button for recurring schedules */}
+                {isRecurring && workout.scheduleId && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
+                    <button
+                      onClick={() => navigate(`/workouts/new?editSchedule=${workout.scheduleId}`)}
+                      className="p-2 text-iron-500 hover:text-flame-400 hover:bg-iron-800 rounded-lg transition-colors"
+                      title="Edit schedule"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
                 {/* Actions Menu - not for recurring */}
                 {!isRecurring && (
                   <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10"

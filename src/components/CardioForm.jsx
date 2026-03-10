@@ -31,21 +31,22 @@ const DAYS_OF_WEEK = [
   { id: 'saturday', short: 'Sat', full: 'Saturday' },
 ]
 
-export default function CardioForm({ onBack }) {
+export default function CardioForm({ onBack, editSchedule }) {
   const navigate = useNavigate()
   const { user, userProfile } = useAuth()
   const [saving, setSaving] = useState(false)
   const [showActivityPicker, setShowActivityPicker] = useState(false)
-  const [showRecurring, setShowRecurring] = useState(false)
-  
+  const [showRecurring, setShowRecurring] = useState(!!editSchedule)
+  const isEditing = !!editSchedule
+
   const [cardio, setCardio] = useState({
     date: getTodayString(),
-    activityType: '',
-    duration: '',
-    distance: '',
-    notes: '',
-    recurring: false,
-    recurringDays: []
+    activityType: editSchedule?.activityType || '',
+    duration: editSchedule?.duration?.toString() || '',
+    distance: editSchedule?.distance?.toString() || '',
+    notes: editSchedule?.notes || '',
+    recurring: isEditing ? true : false,
+    recurringDays: editSchedule?.days || []
   })
 
   const activitiesByCategory = getActivitiesByCategory()
@@ -75,6 +76,19 @@ export default function CardioForm({ onBack }) {
 
     setSaving(true)
     try {
+      if (isEditing) {
+        // Update existing recurring schedule
+        await scheduleService.update(editSchedule.id, {
+          name: selectedActivity?.label || 'Cardio',
+          days: cardio.recurringDays,
+          activityType: cardio.activityType,
+          duration: parseInt(cardio.duration),
+          distance: cardio.distance ? parseFloat(cardio.distance) : null,
+        })
+        navigate('/workouts')
+        return
+      }
+
       // Create the cardio workout
       const workoutData = {
         workoutType: 'cardio',
@@ -86,7 +100,7 @@ export default function CardioForm({ onBack }) {
         estimatedCalories,
         notes: cardio.notes
       }
-      
+
       await workoutService.create(user.uid, workoutData)
 
       // Create recurring schedule if selected (uses scheduleService for calendar integration)
@@ -94,7 +108,7 @@ export default function CardioForm({ onBack }) {
         await scheduleService.create(user.uid, {
           type: 'recurring',
           name: selectedActivity?.label || 'Cardio',
-          days: cardio.recurringDays, // Array of day names like ['monday', 'wednesday']
+          days: cardio.recurringDays,
           activityType: cardio.activityType,
           duration: parseInt(cardio.duration),
           distance: cardio.distance ? parseFloat(cardio.distance) : null,
@@ -122,25 +136,27 @@ export default function CardioForm({ onBack }) {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="font-display text-2xl text-iron-50">Log Cardio</h1>
-          <p className="text-iron-400 text-sm">Track your cardio activity</p>
+          <h1 className="font-display text-2xl text-iron-50">{isEditing ? 'Edit Schedule' : 'Log Cardio'}</h1>
+          <p className="text-iron-400 text-sm">{isEditing ? 'Update your recurring activity' : 'Track your cardio activity'}</p>
         </div>
       </div>
 
       {/* Date & Activity */}
       <div className="card-steel p-5 mb-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-iron-300 mb-2">
-              Date
-            </label>
-            <input
-              type="date"
-              value={cardio.date}
-              onChange={(e) => setCardio(prev => ({ ...prev, date: e.target.value }))}
-              className="input-field w-full"
-            />
-          </div>
+        <div className={`grid ${isEditing ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
+          {!isEditing && (
+            <div>
+              <label className="block text-sm font-medium text-iron-300 mb-2">
+                Date
+              </label>
+              <input
+                type="date"
+                value={cardio.date}
+                onChange={(e) => setCardio(prev => ({ ...prev, date: e.target.value }))}
+                className="input-field w-full"
+              />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-iron-300 mb-2">
               Activity Type
@@ -281,7 +297,7 @@ export default function CardioForm({ onBack }) {
         ) : (
           <>
             <Save className="w-5 h-5" />
-            Save Activity
+            {isEditing ? 'Update Schedule' : 'Save Activity'}
           </>
         )}
       </button>
