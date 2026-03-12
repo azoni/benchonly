@@ -1,42 +1,29 @@
-const AZONI_BASE = 'https://azoni.ai/.netlify/functions';
+const MCP_URL = process.env.MCP_URL || 'https://azoni-mcp.onrender.com';
+const MCP_KEY = process.env.MCP_ADMIN_KEY;
 
 /**
- * Fire-and-forget activity logger — logs AI usage to azoni.ai portfolio
+ * Fire-and-forget activity logger — logs to MCP ecosystem feed.
  */
-export function logActivity({ type, title, description, reasoning, model, tokens, cost, metadata }) {
-  const secret = process.env.AGENT_WEBHOOK_SECRET;
-  if (!secret) return;
-  fetch(`${AZONI_BASE}/log-agent-activity`, {
+export function logActivity({ type, title, description, model, tokens, cost, metadata }) {
+  if (!MCP_KEY) return;
+  fetch(`${MCP_URL}/activity/log`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MCP_KEY}` },
     body: JSON.stringify({
-      type, title, description: description || '', reasoning: reasoning || '',
-      source: 'benchpressonly', model, tokens, cost, metadata: metadata || {}, secret,
+      type, title, source: 'benchpressonly',
+      description: description || '', model, tokens, cost, metadata,
     }),
   }).catch(e => console.error('[activity-log] Failed:', e.message));
 }
 
 /**
- * Fire-and-forget error logger — reports errors to azoni.ai orchestrator
- * 
- * @param {string}  fn        - Function name (e.g. 'generate-workout')
- * @param {Error}   error     - The caught error object
- * @param {string}  severity  - 'low' | 'medium' | 'high' | 'critical'
- * @param {object}  context   - Additional context (action, userId, etc.)
+ * Fire-and-forget error logger — reports errors to MCP ecosystem.
  */
 export function logError(fn, error, severity = 'high', context = {}) {
-  const secret = process.env.AGENT_WEBHOOK_SECRET;
-  if (!secret) return;
-  fetch(`${AZONI_BASE}/log-error`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      source: 'benchpressonly',
-      error: error?.message || String(error),
-      stack: error?.stack || '',
-      severity,
-      context: { function: fn, ...context },
-      secret,
-    }),
-  }).catch(e => console.error('[error-log] Failed:', e.message));
+  logActivity({
+    type: 'error_logged',
+    title: `[${fn}] ${error?.message || String(error)}`.slice(0, 120),
+    description: error?.stack || '',
+    metadata: { severity, function: fn, ...context },
+  });
 }
