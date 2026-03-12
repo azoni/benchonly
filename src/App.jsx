@@ -138,6 +138,13 @@ function GuestRoute() {
 }
 
 export default function App() {
+  useEffect(() => {
+    if (!sessionStorage.getItem('_av')) {
+      sessionStorage.setItem('_av', '1')
+      fetch('/.netlify/functions/log-visit', { method: 'POST' }).catch(() => {})
+    }
+  }, [])
+
   return (
     <Routes>
       <Route 
