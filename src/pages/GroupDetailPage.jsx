@@ -24,7 +24,8 @@ import {
   Sparkles,
   MessageSquare,
   ChevronUp,
-  FileText
+  FileText,
+  Zap
 } from 'lucide-react'
 import { groupService, workoutService, attendanceService, groupWorkoutService, userService, goalService } from '../services/firestore'
 import { useAuth } from '../context/AuthContext'
@@ -125,6 +126,8 @@ export default function GroupDetailPage() {
   
   // AI Generate modal state
   const [showAIGenerateModal, setShowAIGenerateModal] = useState(false)
+  // Superset state
+  const [nextSupersetGroup, setNextSupersetGroup] = useState(1)
 
   const isAdmin = group?.admins?.includes(user?.uid)
   // isAppAdmin comes from useAuth context
@@ -313,6 +316,7 @@ export default function GroupDetailPage() {
               id: Date.now() + Math.random(),
               name: ex.name,
               type: type,
+              supersetGroup: ex.supersetGroup ?? null,
               notes: ex.notes || '',
               sets: ex.sets?.map(s => {
                 if (type === 'time') {
@@ -335,6 +339,14 @@ export default function GroupDetailPage() {
     })
     
     setMemberPrescriptions(initialPrescriptions)
+    // Initialize nextSupersetGroup from max existing value
+    let maxGroup = 0
+    Object.values(initialPrescriptions).forEach(p => {
+      (p.exercises || []).forEach(ex => {
+        if (ex.supersetGroup != null && ex.supersetGroup > maxGroup) maxGroup = ex.supersetGroup
+      })
+    })
+    setNextSupersetGroup(maxGroup + 1)
     setActiveMemberTab(assignedMemberIds[0] || null)
     setEditingWorkoutIds(workoutIds) // Store workout IDs for updating
     setShowWorkoutModal(true)
@@ -371,13 +383,60 @@ export default function GroupDetailPage() {
   }
 
   const removeExerciseForMember = (memberId, exerciseId) => {
-    setMemberPrescriptions(prev => ({
-      ...prev,
-      [memberId]: {
-        ...prev[memberId],
-        exercises: prev[memberId].exercises.filter(e => e.id !== exerciseId)
+    setMemberPrescriptions(prev => {
+      const exercise = prev[memberId].exercises.find(e => e.id === exerciseId)
+      // If part of a superset, remove both partners
+      if (exercise?.supersetGroup != null) {
+        return {
+          ...prev,
+          [memberId]: {
+            ...prev[memberId],
+            exercises: prev[memberId].exercises.filter(e => e.supersetGroup !== exercise.supersetGroup)
+          }
+        }
       }
-    }))
+      return {
+        ...prev,
+        [memberId]: {
+          ...prev[memberId],
+          exercises: prev[memberId].exercises.filter(e => e.id !== exerciseId)
+        }
+      }
+    })
+  }
+
+  const convertToSupersetForMember = (memberId, exerciseId) => {
+    const group = nextSupersetGroup
+    setMemberPrescriptions(prev => {
+      const exercises = [...prev[memberId].exercises]
+      const sourceIndex = exercises.findIndex(e => e.id === exerciseId)
+      const sourceEx = exercises[sourceIndex]
+      const setCount = sourceEx.sets?.length || 1
+
+      exercises[sourceIndex] = { ...sourceEx, supersetGroup: group }
+
+      const newSets = sourceEx.type === 'time'
+        ? Array.from({ length: setCount }, () => ({ time: '' }))
+        : sourceEx.type === 'bodyweight'
+        ? Array.from({ length: setCount }, () => ({ reps: '' }))
+        : Array.from({ length: setCount }, () => ({ weight: '', reps: '' }))
+
+      const newExB = {
+        id: Date.now() + Math.random(),
+        name: '',
+        type: sourceEx.type || 'weight',
+        supersetGroup: group,
+        notes: '',
+        sets: newSets,
+      }
+
+      exercises.splice(sourceIndex + 1, 0, newExB)
+      return {
+        ...prev,
+        [memberId]: { ...prev[memberId], exercises }
+      }
+    })
+    setNextSupersetGroup(g => g + 1)
   }
 
   const updateExerciseForMember = (memberId, exerciseId, field, value) => {
@@ -507,6 +566,7 @@ export default function GroupDetailPage() {
             exercises: copied.map(e => ({
               ...e,
               id: Date.now() + Math.random(),
+              supersetGroup: e.supersetGroup ?? null,
               sets: e.sets.map(s => ({ ...s }))
             }))
           }
@@ -556,6 +616,7 @@ export default function GroupDetailPage() {
           .map(e => ({
             name: e.name,
             type: e.type || 'weight',
+            supersetGroup: e.supersetGroup ?? null,
             notes: e.notes || '',
             sets: e.sets.map((s, i) => {
               const baseSet = {
@@ -1417,11 +1478,17 @@ export default function GroupDetailPage() {
                         </button>
                       )}
                       {memberPrescriptions[activeMemberTab].exercises.map((exercise, exIndex) => (
-                        <div key={exercise.id} className="bg-iron-800/50 rounded-lg p-4">
+                        <div key={exercise.id} className={`rounded-lg p-4 ${exercise.supersetGroup != null ? 'bg-purple-500/5 border border-purple-500/20' : 'bg-iron-800/50'}`}>
                           <div className="flex items-center gap-2 mb-4">
-                            <span className="w-7 h-7 rounded-lg bg-flame-500/20 text-flame-400 flex items-center justify-center text-sm font-medium">
-                              {exIndex + 1}
-                            </span>
+                            {exercise.supersetGroup != null ? (
+                              <span className="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                                <Zap className="w-3.5 h-3.5" />
+                              </span>
+                            ) : (
+                              <span className="w-7 h-7 rounded-lg bg-flame-500/20 text-flame-400 flex items-center justify-center text-sm font-medium">
+                                {exIndex + 1}
+                              </span>
+                            )}
                             <select
                               value={exercise.name}
                               onChange={(e) => updateExerciseForMember(activeMemberTab, exercise.id, 'name', e.target.value)}
@@ -1448,6 +1515,15 @@ export default function GroupDetailPage() {
                                 ))}
                               </optgroup>
                             </select>
+                            {exercise.supersetGroup == null && (
+                              <button
+                                onClick={() => convertToSupersetForMember(activeMemberTab, exercise.id)}
+                                className="p-2 text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
+                                title="Convert to superset"
+                              >
+                                <Zap className="w-4 h-4" />
+                              </button>
+                            )}
                             {memberPrescriptions[activeMemberTab].exercises.length > 1 && (
                               <button
                                 onClick={() => removeExerciseForMember(activeMemberTab, exercise.id)}
