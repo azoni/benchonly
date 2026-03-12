@@ -15,6 +15,7 @@ export const CREDIT_COSTS = {
   'swap-exercise': 1,
   'analyze-progress': 3,
   'autofill-workout': 2,
+  'generate-exercise-notes': 1,
 };
 
 /**

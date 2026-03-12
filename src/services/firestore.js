@@ -1225,6 +1225,7 @@ export const CREDIT_COSTS = {
   'form-check': 15,
   'trainer-custom-workout': 100,
   'trainer-review': 50,
+  'generate-exercise-notes': 1,
 };
 
 export const PREMIUM_CREDIT_COST = 100;

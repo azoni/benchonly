@@ -150,6 +150,7 @@ export async function handler(event) {
           id: Date.now() + i,
           name: ex.substitution?.replacement || ex.name,
           type: ex.type || 'weight',
+          supersetGroup: ex.supersetGroup ?? null,
           howTo: ex.howTo || '',
           cues: Array.isArray(ex.cues) ? ex.cues : [],
           substitutions: Array.isArray(ex.substitutions) ? ex.substitutions : [],

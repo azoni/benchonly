@@ -22,7 +22,7 @@ export async function handler(event) {
   let creditCost = 0;
 
   try {
-    const { groupId, athletes, prompt, workoutDate, model, workoutCategory: rawCategory, workoutFocus, intensity, duration, exerciseCount, maxExercise, includeWarmup = false, includeStretches = false, jobId } = JSON.parse(event.body);
+    const { groupId, athletes, prompt, workoutDate, model, workoutCategory: rawCategory, workoutFocus, intensity, duration, exerciseCount, maxExercise, includeWarmup = false, includeStretches = false, includeSupersets = false, jobId } = JSON.parse(event.body);
     const category = rawCategory || 'strength';
     const coachId = auth.uid;
 
@@ -56,10 +56,13 @@ export async function handler(event) {
       }
     } catch (e) { console.error('Failed to fetch group:', e); }
 
-    const contextStr = buildGroupContext(athletes, { painThresholdMin: 3, painThresholdCount: 2 }, workoutFocus, intensity, duration, exerciseCount, maxExercise, includeWarmup, includeStretches, category);
+    const contextStr = buildGroupContext(athletes, { painThresholdMin: 3, painThresholdCount: 2 }, workoutFocus, intensity, duration, exerciseCount, maxExercise, includeWarmup, includeStretches, category, includeSupersets);
     let systemPrompt = buildSystemPrompt();
     if (category && category !== 'strength') {
       systemPrompt += `\n\n=== WORKOUT CATEGORY: ${category.toUpperCase()} ===\n` + getCategoryPromptAdditions(category);
+    }
+    if (includeSupersets) {
+      systemPrompt += `\n\n=== SUPERSET MODE ===\n` + getSupersetPromptAdditions();
     }
 
     // ─── Store job and invoke background function ───
@@ -70,7 +73,7 @@ export async function handler(event) {
       athletes, prompt: prompt || '', workoutDate: workoutDate || null,
       selectedModel, systemPrompt, contextStr,
       groupId, groupAdmins, groupMembers,
-      creditCost, isAdmin: auth.isAdmin || false,
+      creditCost, isAdmin: auth.isAdmin || false, includeSupersets,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -196,6 +199,7 @@ async function saveWorkouts(result, athletes, coachId, groupId, groupAdmins, gro
       coachingNotes: result.coachingNotes || '', personalNotes: aw.personalNotes || '',
       exercises: (aw.exercises || []).map((ex, i) => ({
         id: Date.now() + i, name: ex.substitution?.replacement || ex.name, type: ex.type || 'weight',
+        supersetGroup: ex.supersetGroup ?? null,
         howTo: ex.howTo || '', cues: Array.isArray(ex.cues) ? ex.cues : [], substitutions: Array.isArray(ex.substitutions) ? ex.substitutions : [],
         sets: (ex.sets || []).map((s, j) => {
           const base = { id: Date.now() + i * 100 + j, targetRpe: s.targetRpe || null, rpe: '', painLevel: 0, completed: false };
@@ -351,7 +355,7 @@ OUTPUT JSON only, no markdown:
   "description": "Brief description",
   "coachingNotes": "Programming explanation with warnings.",
   "baseExercises": [
-    { "name": "Bench Press", "type": "weight", "defaultSets": 4, "defaultReps": 8 }
+    { "name": "Bench Press", "type": "weight", "defaultSets": 4, "defaultReps": 8, "supersetGroup": null }
   ],
   "athleteWorkouts": {
     "ATHLETE_ID": {
@@ -359,7 +363,7 @@ OUTPUT JSON only, no markdown:
       "personalNotes": "Notes for this athlete.",
       "exercises": [
         {
-          "name": "Bench Press", "type": "weight",
+          "name": "Bench Press", "type": "weight", "supersetGroup": null,
           "howTo": "Lie flat on bench, grip bar slightly wider than shoulders, lower to mid-chest at ~45° elbow angle, press to lockout.",
           "cues": ["Shoulder blades squeezed", "Feet driving into floor", "Controlled descent"],
           "substitutions": ["DB Bench Press", "Floor Press", "Push-ups"],
@@ -378,7 +382,7 @@ IMPORTANT: Each exercise MUST have 3-5 separate set objects matching defaultSets
 For pain substitutions: "substitution": { "reason": "shoulder pain", "original": "Bench Press", "replacement": "Floor Press" }`;
 }
 
-function buildGroupContext(athletes, settings = {}, focus = 'auto', intensity = 'moderate', duration = null, exerciseCount = null, maxExercise = null, includeWarmup = false, includeStretches = false, category = 'strength') {
+function buildGroupContext(athletes, settings = {}, focus = 'auto', intensity = 'moderate', duration = null, exerciseCount = null, maxExercise = null, includeWarmup = false, includeStretches = false, category = 'strength', includeSupersets = false) {
   const painMin = settings.painThresholdMin || 3;
   const painCount = settings.painThresholdCount || 2;
   let s = `GROUP: ${athletes.length} athletes\n`;
@@ -388,6 +392,7 @@ function buildGroupContext(athletes, settings = {}, focus = 'auto', intensity = 
   }
   s += `INCLUDE_WARMUP: ${includeWarmup ? 'true' : 'false'}\n`;
   s += `INCLUDE_STRETCHES: ${includeStretches ? 'true' : 'false'}\n`;
+  s += `INCLUDE_SUPERSETS: ${includeSupersets ? 'true' : 'false'}\n`;
 
   const intRanges = { light: [0.60, 0.70], moderate: [0.70, 0.80], heavy: [0.80, 0.88], max: [0.85, 0.92] };
   const range = intRanges[intensity] || intRanges.moderate;
@@ -512,6 +517,21 @@ Rules:
 - If user has joint pain history (knees/ankles), use lower-impact alternatives\n`,
   };
   return instructions[category] || '';
+}
+
+function getSupersetPromptAdditions() {
+  return `When INCLUDE_SUPERSETS is true, pair 1-2 exercise pairs as supersets.
+SUPERSET RULES:
+- Use the "supersetGroup" field on exercises. Two exercises with the SAME "supersetGroup" integer form a superset pair.
+- Superset partners MUST have the SAME number of sets.
+- Pair exercises targeting opposing or complementary muscle groups (e.g., Bench Press + Barbell Rows, Bicep Curls + Tricep Pushdowns, Leg Press + Leg Curls).
+- Do NOT superset every exercise — leave the main compound lift(s) as singles. Typically superset 1-2 accessory pairs.
+- Exercises without a superset partner must have "supersetGroup": null.
+- supersetGroup values are positive integers (1, 2, 3...). Each pair shares the same number.
+- In "baseExercises", also set "supersetGroup" to show the intended pairing template.
+- Superset partners should be placed consecutively in the exercises array.
+Example: exercises[0] supersetGroup: null (main lift), exercises[1] supersetGroup: 1, exercises[2] supersetGroup: 1 (superset pair), exercises[3] supersetGroup: null (single).
+When INCLUDE_SUPERSETS is false, set ALL supersetGroup to null.`;
 }
 
 function getCategoryPromptAdditions(category) {

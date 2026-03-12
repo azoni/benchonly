@@ -235,6 +235,28 @@ export default function NewWorkoutPage() {
     setNextSupersetGroup(g => g + 1);
   };
 
+  const convertToSuperset = (exerciseId) => {
+    const group = nextSupersetGroup;
+    setWorkout(prev => {
+      const sourceExercise = prev.exercises.find(e => e.id === exerciseId);
+      const setCount = sourceExercise?.sets?.length || 1;
+      const exercises = prev.exercises.map(ex =>
+        ex.id === exerciseId ? { ...ex, supersetGroup: group } : ex
+      );
+      const newExB = {
+        ...createEmptyExercise(),
+        id: Date.now() + 1,
+        supersetGroup: group,
+        sets: Array.from({ length: setCount }, () => createEmptySet()),
+      };
+      const sourceIndex = exercises.findIndex(e => e.id === exerciseId);
+      const newExercises = [...exercises];
+      newExercises.splice(sourceIndex + 1, 0, newExB);
+      return { ...prev, exercises: newExercises };
+    });
+    setNextSupersetGroup(g => g + 1);
+  };
+
   const removeExercise = (exerciseId) => {
     setWorkout((prev) => {
       const ex = prev.exercises.find(e => e.id === exerciseId);
@@ -1154,6 +1176,14 @@ export default function NewWorkoutPage() {
                   </div>
 
                   <button
+                    onClick={() => convertToSuperset(exercise.id)}
+                    className="p-2 text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
+                    title="Convert to superset"
+                  >
+                    <Zap className="w-4 h-4" />
+                  </button>
+
+                  <button
                     onClick={() => updateExercise(exercise.id, { expanded: !exercise.expanded })}
                     className="p-2 text-iron-500 hover:text-iron-300 transition-colors"
                   >
@@ -1163,7 +1193,7 @@ export default function NewWorkoutPage() {
                       <ChevronDown className="w-5 h-5" />
                     )}
                   </button>
-                  
+
                   {workout.exercises.length > 1 && (
                     <button
                       onClick={() => removeExercise(exercise.id)}
@@ -1173,7 +1203,7 @@ export default function NewWorkoutPage() {
                     </button>
                   )}
                 </div>
-                
+
                 {/* Exercise Type Selector */}
                 <div className="flex gap-2">
                   {[

@@ -26,6 +26,7 @@ import { useAuth } from '../context/AuthContext';
 import { getAuthHeaders } from '../services/api';
 import { creditService, CREDIT_COSTS, PREMIUM_CREDIT_COST } from '../services/firestore';
 import { apiUrl } from '../utils/platform'
+import { groupExercisesForDisplay } from '../utils/workoutUtils'
 
 // Simulated thinking messages that rotate during AI generation
 const THINKING_MESSAGES = [
@@ -73,6 +74,7 @@ export default function GenerateGroupWorkoutModal({
   const [maxExercise, setMaxExercise] = useState('');
   const [includeWarmup, setIncludeWarmup] = useState(false);
   const [includeStretches, setIncludeStretches] = useState(false);
+  const [includeSupersets, setIncludeSupersets] = useState(false);
   
   // Analysis tracking
   const [analysisSteps, setAnalysisSteps] = useState([]);
@@ -343,7 +345,7 @@ export default function GenerateGroupWorkoutModal({
           duration: duration !== 'auto' ? parseInt(duration) : null,
           exerciseCount: exerciseCount !== 'auto' ? parseInt(exerciseCount) : null,
           maxExercise: workoutFocus === '1rm-test' ? maxExercise : null,
-          includeWarmup, includeStretches,
+          includeWarmup, includeStretches, includeSupersets,
           jobId,
         }),
       });
@@ -459,6 +461,7 @@ export default function GenerateGroupWorkoutModal({
     setWorkoutCategory('strength');
     setIncludeWarmup(true);
     setIncludeStretches(false);
+    setIncludeSupersets(false);
     setResult(null);
     setError(null);
     setAnalysisSteps([]);
@@ -926,6 +929,12 @@ export default function GenerateGroupWorkoutModal({
                           includeStretches ? 'border-flame-500/50 bg-flame-500/10 text-flame-400 font-semibold' : 'border-iron-700 text-iron-500 hover:border-iron-600'
                         }`}
                       >Stretches</button>
+                      <button
+                        onClick={() => setIncludeSupersets(!includeSupersets)}
+                        className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors text-center flex items-center justify-center gap-1 ${
+                          includeSupersets ? 'border-purple-500/50 bg-purple-500/10 text-purple-400 font-semibold' : 'border-iron-700 text-iron-500 hover:border-iron-600'
+                        }`}
+                      ><Zap className="w-3 h-3" />Supersets</button>
                     </div>
                     )}
 
@@ -1074,19 +1083,34 @@ export default function GenerateGroupWorkoutModal({
                     <div className="p-4 bg-iron-800/50 rounded-lg">
                       <h3 className="font-medium text-iron-100 mb-2">{result.workoutName}</h3>
                       <div className="space-y-1">
-                        {result.baseExercises?.map((ex, i) => (
-                          <div key={i} className="flex items-center gap-2 text-sm text-iron-400">
-                            <Dumbbell className="w-4 h-4" />
-                            <span>{ex.name}</span>
-                            <span className="text-iron-600">{ex.defaultSets}×{ex.defaultReps}</span>
-                            {ex.type && ex.type !== 'weight' && (
-                              <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                ex.type === 'time' ? 'bg-blue-500/20 text-blue-400' : 
-                                ex.type === 'bodyweight' ? 'bg-emerald-500/20 text-emerald-400' : ''
-                              }`}>{ex.type === 'time' ? 'Time' : 'BW'}</span>
-                            )}
-                          </div>
-                        ))}
+                        {groupExercisesForDisplay((result.baseExercises || []).map((ex, i) => ({ ...ex, id: i }))).map((group, i) => {
+                          if (group.type === 'superset') {
+                            return (
+                              <div key={i} className="flex items-center gap-2 text-sm text-iron-400">
+                                <Zap className="w-4 h-4 text-purple-400" />
+                                <span>{group.exerciseA.name}</span>
+                                <span className="text-iron-600">/</span>
+                                <span>{group.exerciseB.name}</span>
+                                <span className="text-iron-600">{group.exerciseA.defaultSets}×{group.exerciseA.defaultReps}</span>
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">Superset</span>
+                              </div>
+                            );
+                          }
+                          const ex = group.exercise;
+                          return (
+                            <div key={i} className="flex items-center gap-2 text-sm text-iron-400">
+                              <Dumbbell className="w-4 h-4" />
+                              <span>{ex.name}</span>
+                              <span className="text-iron-600">{ex.defaultSets}×{ex.defaultReps}</span>
+                              {ex.type && ex.type !== 'weight' && (
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                  ex.type === 'time' ? 'bg-blue-500/20 text-blue-400' :
+                                  ex.type === 'bodyweight' ? 'bg-emerald-500/20 text-emerald-400' : ''
+                                }`}>{ex.type === 'time' ? 'Time' : 'BW'}</span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 

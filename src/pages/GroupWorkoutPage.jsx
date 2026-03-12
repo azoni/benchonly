@@ -107,6 +107,8 @@ export default function GroupWorkoutPage() {
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [editExercises, setEditExercises] = useState([])
+  const [nextEditSupersetGroup, setNextEditSupersetGroup] = useState(1)
+  const [regeneratingNotesIdx, setRegeneratingNotesIdx] = useState(null)
 
   useEffect(() => {
     loadWorkout()
@@ -198,6 +200,9 @@ export default function GroupWorkoutPage() {
       type: getExerciseType(ex),
       sets: ex.sets?.map((s, j) => ({ ...s, _id: j })) || [],
     })))
+    const maxGroup = (workout.exercises || []).reduce((max, ex) =>
+      ex.supersetGroup != null ? Math.max(max, ex.supersetGroup) : max, 0) || 0
+    setNextEditSupersetGroup(maxGroup + 1)
     setIsEditing(true)
   }
 
@@ -210,6 +215,7 @@ export default function GroupWorkoutPage() {
     try {
       const cleanExercises = editExercises.map(({ _id, ...ex }) => ({
         ...ex,
+        supersetGroup: ex.supersetGroup ?? null,
         sets: ex.sets?.map(({ _id: _sid, ...s }) => s) || [],
       }))
       const updates = {
@@ -294,8 +300,77 @@ export default function GroupWorkoutPage() {
   const removeEditExercise = (exerciseIndex) => {
     setEditExercises(prev => {
       if (prev.length <= 1) return prev
+      const exercise = prev[exerciseIndex]
+      if (exercise?.supersetGroup != null) {
+        return prev.filter(ex => ex.supersetGroup !== exercise.supersetGroup)
+      }
       return prev.filter((_, i) => i !== exerciseIndex)
     })
+  }
+
+  const convertEditToSuperset = (exerciseIndex) => {
+    const group = nextEditSupersetGroup
+    setEditExercises(prev => {
+      const newExercises = [...prev]
+      const sourceEx = newExercises[exerciseIndex]
+      const setCount = sourceEx.sets?.length || 1
+
+      newExercises[exerciseIndex] = { ...sourceEx, supersetGroup: group }
+
+      const newExB = {
+        _id: Date.now(),
+        name: '',
+        type: 'weight',
+        supersetGroup: group,
+        notes: '',
+        sets: Array.from({ length: setCount }, (_, j) => ({
+          _id: Date.now() + 0.1 + j,
+          prescribedWeight: '',
+          prescribedReps: '',
+        })),
+      }
+
+      newExercises.splice(exerciseIndex + 1, 0, newExB)
+      return newExercises
+    })
+    setNextEditSupersetGroup(g => g + 1)
+  }
+
+  const regenerateNotes = async (exerciseIndex) => {
+    const exercise = editExercises[exerciseIndex]
+    const name = exercise?.name?.trim()
+    if (!name) return
+
+    setRegeneratingNotesIdx(exerciseIndex)
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch(apiUrl('generate-exercise-notes'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          exerciseName: name,
+          exerciseType: exercise.type || 'weight',
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to generate notes')
+      const data = await response.json()
+
+      setEditExercises(prev => {
+        const next = [...prev]
+        next[exerciseIndex] = {
+          ...next[exerciseIndex],
+          howTo: data.howTo || next[exerciseIndex].howTo || '',
+          cues: data.cues || next[exerciseIndex].cues || [],
+          substitutions: data.substitutions || next[exerciseIndex].substitutions || [],
+        }
+        return next
+      })
+    } catch (err) {
+      console.error('Notes regeneration error:', err)
+    } finally {
+      setRegeneratingNotesIdx(null)
+    }
   }
 
   const handleBack = () => {
@@ -725,6 +800,25 @@ export default function GroupWorkoutPage() {
                       placeholder="Exercise name"
                       className="flex-1 bg-transparent text-lg font-bold text-iron-50 border-none focus:outline-none placeholder:text-iron-600"
                     />
+                    <button
+                      onClick={() => regenerateNotes(exerciseIndex)}
+                      disabled={regeneratingNotesIdx === exerciseIndex}
+                      className="p-1.5 text-iron-500 hover:text-flame-400 transition-colors"
+                      title="Regenerate coaching notes"
+                    >
+                      {regeneratingNotesIdx === exerciseIndex
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <RefreshCw className="w-4 h-4" />}
+                    </button>
+                    {exercise.supersetGroup == null && (
+                      <button
+                        onClick={() => convertEditToSuperset(exerciseIndex)}
+                        className="p-1.5 text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
+                        title="Convert to superset"
+                      >
+                        <Zap className="w-4 h-4" />
+                      </button>
+                    )}
                     {editExercises.length > 1 && (
                       <button
                         onClick={() => removeEditExercise(exerciseIndex)}
