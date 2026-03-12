@@ -6,10 +6,11 @@ import {
   signInWithCredential,
   getRedirectResult,
   signOut as firebaseSignOut,
-  GoogleAuthProvider
+  GoogleAuthProvider,
+  OAuthProvider
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { auth, db, googleProvider } from '../services/firebase';
+import { auth, db, googleProvider, appleProvider } from '../services/firebase';
 import { isNative } from '../utils/platform';
 
 const AuthContext = createContext({});
@@ -307,6 +308,39 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const signInWithApple = async () => {
+    try {
+      await auth.authStateReady();
+
+      if (isNative) {
+        const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+        const result = await FirebaseAuthentication.signInWithApple();
+        const credential = OAuthProvider.credential('apple.com', {
+          idToken: result.credential?.idToken,
+          rawNonce: result.credential?.nonce,
+        });
+        await signInWithCredential(auth, credential);
+        return { success: true };
+      }
+
+      try {
+        const result = await signInWithPopup(auth, appleProvider);
+        setIsGuest(false);
+        return { success: true, user: result.user };
+      } catch (popupError) {
+        if (popupError?.code === 'auth/popup-closed-by-user' || popupError?.code === 'auth/cancelled-popup-request') {
+          return { success: false, error: 'cancelled' };
+        }
+        console.warn('Popup sign-in failed, falling back to redirect:', popupError.code);
+        await signInWithRedirect(auth, appleProvider);
+        return { success: true };
+      }
+    } catch (error) {
+      console.error('Apple sign in error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   const signInAsGuest = () => {
     setUser(GUEST_USER);
     setUserProfile(GUEST_PROFILE);
@@ -402,6 +436,7 @@ export function AuthProvider({ children }) {
     startImpersonating,
     stopImpersonating,
     signInWithGoogle,
+    signInWithApple,
     signInAsGuest,
     signOut,
     updateProfile,
