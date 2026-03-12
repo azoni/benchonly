@@ -102,7 +102,7 @@ function calcVolume(exercises, isCompleted) {
   return { totalSets, totalVol: Math.round(totalVol) }
 }
 
-export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = false, workoutNotes }) {
+export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = false, workoutNotes, onExerciseClick }) {
   if (!exercises || exercises.length === 0) return null
 
   const vol = detailed ? calcVolume(exercises, isCompleted) : null
@@ -141,7 +141,7 @@ export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = 
             const typeB = getExerciseType(exerciseB)
 
             return (
-              <div key={`ss-${group.supersetGroup}`} className="py-2 border-b border-iron-800/50 last:border-0">
+              <div key={`ss-${group.supersetGroup}`} className={`py-2 border-b border-iron-800/50 last:border-0 ${onExerciseClick ? 'cursor-pointer hover:bg-iron-800/30 rounded-lg -mx-1 px-1 transition-colors' : ''}`} onClick={onExerciseClick ? () => onExerciseClick(i) : undefined}>
                 <div className="flex items-center gap-1.5 mb-1">
                   <Zap className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
                   <span className="text-xs text-purple-400 font-semibold uppercase">Superset</span>
@@ -205,7 +205,7 @@ export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = 
 
           if (detailed) {
             return (
-              <div key={i} className="py-2.5 border-b border-iron-800/50 last:border-0">
+              <div key={i} className={`py-2.5 border-b border-iron-800/50 last:border-0 ${onExerciseClick ? 'cursor-pointer hover:bg-iron-800/30 rounded-lg -mx-1 px-1 transition-colors' : ''}`} onClick={onExerciseClick ? () => onExerciseClick(i) : undefined}>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-base font-semibold text-iron-200">{exercise.name}</span>
                   {type === 'time' && (
@@ -236,7 +236,7 @@ export default function WorkoutSummaryCard({ exercises, isCompleted, detailed = 
           }
 
           return (
-            <div key={i} className="flex items-center justify-between py-1.5 border-b border-iron-800/50 last:border-0">
+            <div key={i} className={`flex items-center justify-between py-1.5 border-b border-iron-800/50 last:border-0 ${onExerciseClick ? 'cursor-pointer hover:bg-iron-800/30 rounded-lg -mx-1 px-1 transition-colors' : ''}`} onClick={onExerciseClick ? () => onExerciseClick(i) : undefined}>
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <span className="text-base font-medium text-iron-200 truncate">{exercise.name}</span>
                 {type === 'time' && (

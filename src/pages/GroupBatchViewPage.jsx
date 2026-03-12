@@ -276,6 +276,14 @@ export default function GroupBatchViewPage() {
               isCompleted={isCompleted}
               detailed={true}
               workoutNotes={activeWorkout.notes}
+              onExerciseClick={(groupIndex) => {
+                const el = document.getElementById(`exercise-group-${groupIndex}`)
+                if (el) {
+                  const offset = barHeight + 16
+                  const top = el.getBoundingClientRect().top + window.scrollY - offset
+                  window.scrollTo({ top, behavior: 'smooth' })
+                }
+              }}
             />
           )}
 
@@ -331,7 +339,7 @@ export default function GroupBatchViewPage() {
                     : <span className="text-base font-bold text-iron-100">{set.prescribedWeight || '—'} lbs × {set.prescribedReps || '—'}</span>
                 }
                 return (
-                  <div key={`ss-${group.supersetGroup}`} className="card-steel overflow-hidden border border-purple-500/20">
+                  <div id={`exercise-group-${groupIndex}`} key={`ss-${group.supersetGroup}`} className="card-steel overflow-hidden border border-purple-500/20">
                     <div className="p-4 border-b border-iron-800">
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 text-xs font-semibold">
@@ -384,7 +392,7 @@ export default function GroupBatchViewPage() {
               const typeTag = getTypeTag(type)
 
               return (
-                <div key={exerciseIndex} className="card-steel overflow-hidden">
+                <div id={`exercise-group-${groupIndex}`} key={exerciseIndex} className="card-steel overflow-hidden">
                   <div className="p-4 border-b border-iron-800">
                     <div className="flex items-center gap-2">
                       <button
