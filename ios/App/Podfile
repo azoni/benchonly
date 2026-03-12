@@ -22,7 +22,6 @@ target 'App' do
   # Override with Google subspec (includes GoogleSignIn SDK + compile flag)
   # Placed here so `npx cap sync` doesn't overwrite it
   pod 'CapacitorFirebaseAuthentication/Google', :path => '../../node_modules/@capacitor-firebase/authentication'
-  pod 'CapacitorFirebaseAuthentication/Apple', :path => '../../node_modules/@capacitor-firebase/authentication'
 end
 
 post_install do |installer|
