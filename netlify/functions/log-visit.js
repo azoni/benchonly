@@ -2,6 +2,8 @@ import admin from 'firebase-admin';
 
 const MCP_URL = process.env.MCP_URL || "https://azoni-mcp.onrender.com";
 const MCP_KEY = process.env.MCP_ADMIN_KEY;
+const PORTFOLIO_URL = "https://azoni.netlify.app/.netlify/functions/log-agent-activity";
+const PORTFOLIO_SECRET = process.env.AGENT_WEBHOOK_SECRET;
 
 // Initialize Firebase Admin if not already done
 if (!admin.apps.length) {
@@ -42,28 +44,42 @@ exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers };
   if (event.httpMethod !== "POST") return { statusCode: 405, headers, body: '{"error":"POST only"}' };
 
+  const promises = [];
+
+  // Write to portfolio Firestore (primary — what the dashboard reads)
+  if (PORTFOLIO_SECRET) {
+    promises.push(
+      fetch(PORTFOLIO_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "site_visit", title: "Site visit", source: "benchpressonly", secret: PORTFOLIO_SECRET }),
+      }).catch(() => {})
+    );
+  }
+
+  // Also forward to MCP
   if (MCP_KEY) {
-    try {
-      // Log site visit
-      const visitPromise = fetch(`${MCP_URL}/activity/log`, {
+    promises.push(
+      fetch(`${MCP_URL}/activity/log`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${MCP_KEY}` },
         body: JSON.stringify({ type: "site_visit", title: "Site visit", source: "benchpressonly" }),
-      });
-
-      // Also send today's page view count
-      const pageViews = await getTodayPageViewCount();
-      const promises = [visitPromise];
-      if (pageViews > 0) {
-        promises.push(fetch(`${MCP_URL}/activity/log`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${MCP_KEY}` },
-          body: JSON.stringify({ type: "page_view_summary", title: `${pageViews} page views today`, source: "benchpressonly" }),
-        }));
-      }
-      await Promise.allSettled(promises);
-    } catch {}
+      }).catch(() => {})
+    );
   }
 
+  // Send page view summary
+  const pageViews = await getTodayPageViewCount();
+  if (pageViews > 0 && PORTFOLIO_SECRET) {
+    promises.push(
+      fetch(PORTFOLIO_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "page_view_summary", title: `${pageViews} page views today`, source: "benchpressonly", secret: PORTFOLIO_SECRET }),
+      }).catch(() => {})
+    );
+  }
+
+  await Promise.allSettled(promises);
   return { statusCode: 200, headers, body: '{"ok":true}' };
 };
