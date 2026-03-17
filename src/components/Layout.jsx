@@ -30,6 +30,7 @@ import ErrorBoundary from './ErrorBoundary';
 import { analyticsService } from '../services/analyticsService';
 import { groupWorkoutService, trainerService, sharedWorkoutService } from '../services/firestore';
 import { notificationService } from '../services/feedService';
+import { useHolidayTheme } from '../hooks/useHolidayTheme';
 
 const ADMIN_EMAILS = ['charltonuw@gmail.com'];
 
@@ -54,6 +55,7 @@ export default function Layout() {
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [pendingSharedCount, setPendingSharedCount] = useState(0);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const holiday = useHolidayTheme();
 
   // Load pending review count
   useEffect(() => {
@@ -120,10 +122,17 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-iron-950 flex overflow-x-clip">
+      {/* Holiday Banner */}
+      {holiday && (
+        <div className="holiday-banner fixed top-0 left-0 right-0 z-50 lg:z-[31]">
+          <span>{holiday.emoji} {holiday.greeting} {holiday.emoji}</span>
+        </div>
+      )}
+
       {/* Guest Mode Banner - positioned below mobile header */}
       {isGuest && (
-        <div className="fixed left-0 right-0 z-30 bg-gradient-to-r from-flame-600 to-flame-500 text-white py-2.5 px-4
-          top-14 lg:top-0">
+        <div className={`fixed left-0 right-0 z-30 bg-gradient-to-r from-flame-600 to-flame-500 text-white py-2.5 px-4
+          ${holiday ? 'top-[calc(2rem+3.5rem)] lg:top-8' : 'top-14 lg:top-0'}`}>
           <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm min-w-0">
               <Eye className="w-4 h-4 flex-shrink-0" />
@@ -150,8 +159,8 @@ export default function Layout() {
       {/* Desktop Sidebar */}
       <aside
         className={`hidden lg:flex flex-col fixed inset-y-0 left-0 z-30
-          ${sidebarOpen ? 'w-64' : 'w-20'} 
-          ${isGuest ? 'top-10' : 'top-0'}
+          ${sidebarOpen ? 'w-64' : 'w-20'}
+          ${holiday ? 'top-8' : isGuest ? 'top-10' : 'top-0'}
           bg-iron-900/80 backdrop-blur-sm border-r border-iron-800
           transition-all duration-300`}
       >
@@ -277,7 +286,7 @@ export default function Layout() {
       </aside>
 
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 inset-x-0 bg-iron-900 border-b border-iron-800 z-40"
+      <header className={`lg:hidden fixed inset-x-0 bg-iron-900 border-b border-iron-800 z-40 ${holiday ? 'top-8' : 'top-0'}`}
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <div className="h-14 flex items-center justify-between px-4">
           <Link to="/today" className="flex items-center gap-3">
@@ -469,7 +478,14 @@ export default function Layout() {
       {/* Main Content */}
       <main className={`flex-1 min-w-0 transition-all duration-300
         ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}
-        ${isGuest ? 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem+2.5rem)] lg:pt-16' : 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem)] lg:pt-0'}`}
+        ${holiday
+          ? isGuest
+            ? 'pt-[calc(env(safe-area-inset-top,0px)+2rem+3.5rem+2.5rem)] lg:pt-[calc(2rem+2.5rem)]'
+            : 'pt-[calc(env(safe-area-inset-top,0px)+2rem+3.5rem)] lg:pt-8'
+          : isGuest
+            ? 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem+2.5rem)] lg:pt-16'
+            : 'pt-[calc(env(safe-area-inset-top,0px)+3.5rem)] lg:pt-0'
+        }`}
       >
         <div className="min-h-screen p-4 lg:p-6 overflow-x-clip">
           {/* Impersonation Banner */}

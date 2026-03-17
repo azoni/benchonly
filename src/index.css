@@ -307,3 +307,490 @@
 .editing-dashboard .react-grid-item:hover > .react-resizable-handle {
   background: rgba(234, 88, 12, 0.5);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   HOLIDAY THEMES
+   Each block overrides the flame accent with a holiday color.
+   The class is applied to <html> by useHolidayTheme().
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── St. Patrick's Day ─── */
+.holiday-st-patricks ::selection {
+  background-color: #16a34a;
+}
+
+/* Background color overrides */
+.holiday-st-patricks .bg-flame-500 { background-color: #16a34a !important; }
+.holiday-st-patricks .bg-flame-600 { background-color: #15803d !important; }
+.holiday-st-patricks .bg-flame-400 { background-color: #22c55e !important; }
+.holiday-st-patricks .bg-flame-500\/10 { background-color: rgb(22 163 74 / 0.1) !important; }
+.holiday-st-patricks .bg-flame-500\/20 { background-color: rgb(22 163 74 / 0.2) !important; }
+.holiday-st-patricks .hover\:bg-flame-400:hover { background-color: #22c55e !important; }
+.holiday-st-patricks .hover\:bg-flame-600:hover { background-color: #15803d !important; }
+.holiday-st-patricks .hover\:bg-flame-700:hover { background-color: #166534 !important; }
+.holiday-st-patricks .active\:bg-flame-600:active { background-color: #15803d !important; }
+.holiday-st-patricks .active\:bg-flame-700:active { background-color: #166534 !important; }
+
+/* Text color overrides */
+.holiday-st-patricks .text-flame-500 { color: #22c55e !important; }
+.holiday-st-patricks .text-flame-400 { color: #4ade80 !important; }
+.holiday-st-patricks .text-flame-600 { color: #16a34a !important; }
+.holiday-st-patricks .from-flame-400 { --tw-gradient-from: #4ade80 !important; }
+.holiday-st-patricks .to-flame-500 { --tw-gradient-to: #22c55e !important; }
+.holiday-st-patricks .from-flame-600 { --tw-gradient-from: #16a34a !important; }
+.holiday-st-patricks .to-flame-500 { --tw-gradient-to: #22c55e !important; }
+
+/* Border overrides */
+.holiday-st-patricks .border-flame-500 { border-color: #22c55e !important; }
+.holiday-st-patricks .border-flame-500\/50 { border-color: rgb(34 197 94 / 0.5) !important; }
+.holiday-st-patricks .border-flame-500\/30 { border-color: rgb(34 197 94 / 0.3) !important; }
+.holiday-st-patricks .border-l-2.border-flame-500 { border-color: #22c55e !important; }
+
+/* Ring overrides */
+.holiday-st-patricks .ring-flame-500\/50 { --tw-ring-color: rgb(34 197 94 / 0.5) !important; }
+.holiday-st-patricks .ring-flame-500\/30 { --tw-ring-color: rgb(34 197 94 / 0.3) !important; }
+.holiday-st-patricks .focus\:border-flame-500\/50:focus { border-color: rgb(34 197 94 / 0.5) !important; }
+.holiday-st-patricks .focus\:ring-flame-500\/30:focus { --tw-ring-color: rgb(34 197 94 / 0.3) !important; }
+
+/* Shadow & glow overrides */
+.holiday-st-patricks .shadow-glow { box-shadow: 0 0 20px rgba(34, 197, 94, 0.3) !important; }
+.holiday-st-patricks .shadow-glow-lg { box-shadow: 0 0 40px rgba(34, 197, 94, 0.4) !important; }
+.holiday-st-patricks .shadow-flame-500\/30 { --tw-shadow-color: rgb(34 197 94 / 0.3) !important; }
+
+/* Component overrides */
+.holiday-st-patricks .border-glow {
+  border-color: rgb(34 197 94 / 0.3);
+  box-shadow: inset 0 1px 0 rgba(34, 197, 94, 0.1), 0 0 20px rgba(34, 197, 94, 0.1);
+}
+
+.holiday-st-patricks .text-gradient {
+  background-image: linear-gradient(to right, #4ade80, #22c55e) !important;
+}
+
+.holiday-st-patricks .btn-primary {
+  background-color: #16a34a;
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+}
+.holiday-st-patricks .btn-primary:hover {
+  background-color: #22c55e;
+  box-shadow: 0 0 40px rgba(34, 197, 94, 0.4);
+}
+
+.holiday-st-patricks .input-field:focus {
+  border-color: rgb(34 197 94 / 0.5);
+  --tw-ring-color: rgb(34 197 94 / 0.3);
+}
+
+.holiday-st-patricks .nav-item-active {
+  color: #22c55e;
+  background-color: rgb(34 197 94 / 0.1);
+  border-color: #22c55e;
+}
+
+.holiday-st-patricks .badge-flame {
+  background-color: rgb(34 197 94 / 0.2);
+  color: #4ade80;
+  border-color: rgb(34 197 94 / 0.3);
+}
+
+.holiday-st-patricks .calendar-day-today {
+  --tw-ring-color: rgb(34 197 94 / 0.5);
+}
+.holiday-st-patricks .calendar-day-workout {
+  background-color: rgb(34 197 94 / 0.2);
+  color: #4ade80;
+}
+
+/* Grid layout placeholder */
+.holiday-st-patricks .react-grid-item.react-grid-placeholder {
+  background: rgb(22, 163, 74);
+  border-color: rgb(22, 163, 74);
+}
+.holiday-st-patricks .editing-dashboard .react-grid-item > .react-resizable-handle {
+  background: rgba(22, 163, 74, 0.3);
+}
+.holiday-st-patricks .editing-dashboard .react-grid-item:hover > .react-resizable-handle {
+  background: rgba(22, 163, 74, 0.5);
+}
+.holiday-st-patricks .editing-dashboard .react-grid-item > .react-resizable-handle-se::after {
+  border-right-color: rgb(22, 163, 74);
+  border-bottom-color: rgb(22, 163, 74);
+}
+
+/* Scrollbar accent */
+.holiday-st-patricks ::-webkit-scrollbar-thumb:hover {
+  background-color: #16a34a;
+}
+
+/* Holiday banner — each holiday overrides the gradient */
+.holiday-banner {
+  @apply text-center py-2 px-4 text-sm font-medium;
+  color: white;
+}
+.holiday-st-patricks .holiday-banner {
+  background: linear-gradient(135deg, #15803d 0%, #16a34a 50%, #22c55e 100%);
+}
+
+/* ─── Valentine's Day — Pink & Rose ─── */
+.holiday-valentines .holiday-banner {
+  background: linear-gradient(135deg, #be185d 0%, #ec4899 50%, #f472b6 100%);
+}
+.holiday-valentines ::selection { background-color: #db2777; }
+.holiday-valentines .bg-flame-500 { background-color: #db2777 !important; }
+.holiday-valentines .bg-flame-600 { background-color: #be185d !important; }
+.holiday-valentines .bg-flame-400 { background-color: #ec4899 !important; }
+.holiday-valentines .bg-flame-500\/10 { background-color: rgb(219 39 119 / 0.1) !important; }
+.holiday-valentines .bg-flame-500\/20 { background-color: rgb(219 39 119 / 0.2) !important; }
+.holiday-valentines .hover\:bg-flame-400:hover { background-color: #ec4899 !important; }
+.holiday-valentines .hover\:bg-flame-600:hover { background-color: #be185d !important; }
+.holiday-valentines .active\:bg-flame-600:active { background-color: #be185d !important; }
+.holiday-valentines .text-flame-500 { color: #ec4899 !important; }
+.holiday-valentines .text-flame-400 { color: #f472b6 !important; }
+.holiday-valentines .from-flame-400 { --tw-gradient-from: #f472b6 !important; }
+.holiday-valentines .to-flame-500 { --tw-gradient-to: #ec4899 !important; }
+.holiday-valentines .from-flame-600 { --tw-gradient-from: #db2777 !important; }
+.holiday-valentines .border-flame-500 { border-color: #ec4899 !important; }
+.holiday-valentines .border-flame-500\/50 { border-color: rgb(236 72 153 / 0.5) !important; }
+.holiday-valentines .border-flame-500\/30 { border-color: rgb(236 72 153 / 0.3) !important; }
+.holiday-valentines .ring-flame-500\/50 { --tw-ring-color: rgb(236 72 153 / 0.5) !important; }
+.holiday-valentines .focus\:border-flame-500\/50:focus { border-color: rgb(236 72 153 / 0.5) !important; }
+.holiday-valentines .focus\:ring-flame-500\/30:focus { --tw-ring-color: rgb(236 72 153 / 0.3) !important; }
+.holiday-valentines .shadow-glow { box-shadow: 0 0 20px rgba(236, 72, 153, 0.3) !important; }
+.holiday-valentines .shadow-glow-lg { box-shadow: 0 0 40px rgba(236, 72, 153, 0.4) !important; }
+.holiday-valentines .text-gradient { background-image: linear-gradient(to right, #f472b6, #ec4899) !important; }
+.holiday-valentines .border-glow {
+  border-color: rgb(236 72 153 / 0.3);
+  box-shadow: inset 0 1px 0 rgba(236, 72, 153, 0.1), 0 0 20px rgba(236, 72, 153, 0.1);
+}
+.holiday-valentines .btn-primary { background-color: #db2777; box-shadow: 0 0 20px rgba(236, 72, 153, 0.3); }
+.holiday-valentines .btn-primary:hover { background-color: #ec4899; box-shadow: 0 0 40px rgba(236, 72, 153, 0.4); }
+.holiday-valentines .nav-item-active { color: #ec4899; background-color: rgb(236 72 153 / 0.1); border-color: #ec4899; }
+.holiday-valentines .badge-flame { background-color: rgb(236 72 153 / 0.2); color: #f472b6; border-color: rgb(236 72 153 / 0.3); }
+.holiday-valentines .calendar-day-today { --tw-ring-color: rgb(236 72 153 / 0.5); }
+.holiday-valentines .calendar-day-workout { background-color: rgb(236 72 153 / 0.2); color: #f472b6; }
+.holiday-valentines .input-field:focus { border-color: rgb(236 72 153 / 0.5); --tw-ring-color: rgb(236 72 153 / 0.3); }
+
+/* ─── April Fools' Day — Chaos Mode ─── */
+.holiday-april-fools .holiday-banner {
+  background: linear-gradient(135deg, #e11d48 0%, #a855f7 25%, #06b6d4 50%, #22c55e 75%, #eab308 100%);
+  animation: banner-rainbow 3s linear infinite;
+  background-size: 200% 200%;
+}
+@keyframes banner-rainbow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+/* Comic Sans override for the laughs */
+.holiday-april-fools .font-display { font-family: 'Comic Sans MS', 'Chalkboard SE', cursive !important; }
+.holiday-april-fools ::selection { background-color: #a855f7; }
+.holiday-april-fools .bg-flame-500 { background-color: #a855f7 !important; }
+.holiday-april-fools .bg-flame-600 { background-color: #7c3aed !important; }
+.holiday-april-fools .bg-flame-400 { background-color: #c084fc !important; }
+.holiday-april-fools .bg-flame-500\/10 { background-color: rgb(168 85 247 / 0.1) !important; }
+.holiday-april-fools .bg-flame-500\/20 { background-color: rgb(168 85 247 / 0.2) !important; }
+.holiday-april-fools .hover\:bg-flame-400:hover { background-color: #c084fc !important; }
+.holiday-april-fools .hover\:bg-flame-600:hover { background-color: #7c3aed !important; }
+.holiday-april-fools .active\:bg-flame-600:active { background-color: #7c3aed !important; }
+.holiday-april-fools .text-flame-500 { color: #a855f7 !important; }
+.holiday-april-fools .text-flame-400 { color: #c084fc !important; }
+.holiday-april-fools .from-flame-400 { --tw-gradient-from: #c084fc !important; }
+.holiday-april-fools .to-flame-500 { --tw-gradient-to: #a855f7 !important; }
+.holiday-april-fools .from-flame-600 { --tw-gradient-from: #7c3aed !important; }
+.holiday-april-fools .border-flame-500 { border-color: #a855f7 !important; }
+.holiday-april-fools .border-flame-500\/50 { border-color: rgb(168 85 247 / 0.5) !important; }
+.holiday-april-fools .border-flame-500\/30 { border-color: rgb(168 85 247 / 0.3) !important; }
+.holiday-april-fools .ring-flame-500\/50 { --tw-ring-color: rgb(168 85 247 / 0.5) !important; }
+.holiday-april-fools .focus\:border-flame-500\/50:focus { border-color: rgb(168 85 247 / 0.5) !important; }
+.holiday-april-fools .focus\:ring-flame-500\/30:focus { --tw-ring-color: rgb(168 85 247 / 0.3) !important; }
+.holiday-april-fools .shadow-glow { box-shadow: 0 0 20px rgba(168, 85, 247, 0.4) !important; }
+.holiday-april-fools .shadow-glow-lg { box-shadow: 0 0 40px rgba(168, 85, 247, 0.5) !important; }
+.holiday-april-fools .text-gradient { background-image: linear-gradient(to right, #e11d48, #a855f7, #06b6d4) !important; }
+.holiday-april-fools .border-glow {
+  border-color: rgb(168 85 247 / 0.3);
+  box-shadow: inset 0 1px 0 rgba(168, 85, 247, 0.1), 0 0 20px rgba(168, 85, 247, 0.1);
+}
+.holiday-april-fools .btn-primary { background-color: #a855f7; box-shadow: 0 0 20px rgba(168, 85, 247, 0.3); }
+.holiday-april-fools .btn-primary:hover { background-color: #c084fc; box-shadow: 0 0 40px rgba(168, 85, 247, 0.5); }
+.holiday-april-fools .nav-item-active { color: #a855f7; background-color: rgb(168 85 247 / 0.1); border-color: #a855f7; }
+.holiday-april-fools .badge-flame { background-color: rgb(168 85 247 / 0.2); color: #c084fc; border-color: rgb(168 85 247 / 0.3); }
+.holiday-april-fools .calendar-day-today { --tw-ring-color: rgb(168 85 247 / 0.5); }
+.holiday-april-fools .calendar-day-workout { background-color: rgb(168 85 247 / 0.2); color: #c084fc; }
+.holiday-april-fools .input-field:focus { border-color: rgb(168 85 247 / 0.5); --tw-ring-color: rgb(168 85 247 / 0.3); }
+/* The punchline: slightly tilt random cards */
+.holiday-april-fools .card-steel:nth-child(odd) { transform: rotate(-0.5deg); }
+.holiday-april-fools .card-steel:nth-child(even) { transform: rotate(0.4deg); }
+
+/* ─── Easter — Soft Pastels (Lavender) ─── */
+.holiday-easter .holiday-banner {
+  background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 40%, #c4b5fd 70%, #f0abfc 100%);
+}
+.holiday-easter ::selection { background-color: #8b5cf6; }
+.holiday-easter .bg-flame-500 { background-color: #8b5cf6 !important; }
+.holiday-easter .bg-flame-600 { background-color: #7c3aed !important; }
+.holiday-easter .bg-flame-400 { background-color: #a78bfa !important; }
+.holiday-easter .bg-flame-500\/10 { background-color: rgb(139 92 246 / 0.1) !important; }
+.holiday-easter .bg-flame-500\/20 { background-color: rgb(139 92 246 / 0.2) !important; }
+.holiday-easter .hover\:bg-flame-400:hover { background-color: #a78bfa !important; }
+.holiday-easter .hover\:bg-flame-600:hover { background-color: #7c3aed !important; }
+.holiday-easter .active\:bg-flame-600:active { background-color: #7c3aed !important; }
+.holiday-easter .text-flame-500 { color: #a78bfa !important; }
+.holiday-easter .text-flame-400 { color: #c4b5fd !important; }
+.holiday-easter .from-flame-400 { --tw-gradient-from: #c4b5fd !important; }
+.holiday-easter .to-flame-500 { --tw-gradient-to: #a78bfa !important; }
+.holiday-easter .from-flame-600 { --tw-gradient-from: #8b5cf6 !important; }
+.holiday-easter .border-flame-500 { border-color: #a78bfa !important; }
+.holiday-easter .border-flame-500\/50 { border-color: rgb(167 139 250 / 0.5) !important; }
+.holiday-easter .border-flame-500\/30 { border-color: rgb(167 139 250 / 0.3) !important; }
+.holiday-easter .ring-flame-500\/50 { --tw-ring-color: rgb(167 139 250 / 0.5) !important; }
+.holiday-easter .focus\:border-flame-500\/50:focus { border-color: rgb(167 139 250 / 0.5) !important; }
+.holiday-easter .focus\:ring-flame-500\/30:focus { --tw-ring-color: rgb(167 139 250 / 0.3) !important; }
+.holiday-easter .shadow-glow { box-shadow: 0 0 20px rgba(167, 139, 250, 0.3) !important; }
+.holiday-easter .shadow-glow-lg { box-shadow: 0 0 40px rgba(167, 139, 250, 0.4) !important; }
+.holiday-easter .text-gradient { background-image: linear-gradient(to right, #c4b5fd, #f0abfc) !important; }
+.holiday-easter .border-glow {
+  border-color: rgb(167 139 250 / 0.3);
+  box-shadow: inset 0 1px 0 rgba(167, 139, 250, 0.1), 0 0 20px rgba(167, 139, 250, 0.1);
+}
+.holiday-easter .btn-primary { background-color: #8b5cf6; box-shadow: 0 0 20px rgba(167, 139, 250, 0.3); }
+.holiday-easter .btn-primary:hover { background-color: #a78bfa; box-shadow: 0 0 40px rgba(167, 139, 250, 0.4); }
+.holiday-easter .nav-item-active { color: #a78bfa; background-color: rgb(167 139 250 / 0.1); border-color: #a78bfa; }
+.holiday-easter .badge-flame { background-color: rgb(167 139 250 / 0.2); color: #c4b5fd; border-color: rgb(167 139 250 / 0.3); }
+.holiday-easter .calendar-day-today { --tw-ring-color: rgb(167 139 250 / 0.5); }
+.holiday-easter .calendar-day-workout { background-color: rgb(167 139 250 / 0.2); color: #c4b5fd; }
+.holiday-easter .input-field:focus { border-color: rgb(167 139 250 / 0.5); --tw-ring-color: rgb(167 139 250 / 0.3); }
+
+/* ─── Cinco de Mayo — Fiesta Green & Red ─── */
+.holiday-cinco .holiday-banner {
+  background: linear-gradient(135deg, #15803d 0%, #ffffff 30%, #dc2626 60%, #15803d 100%);
+  color: #18181b;
+}
+.holiday-cinco ::selection { background-color: #15803d; }
+.holiday-cinco .bg-flame-500 { background-color: #15803d !important; }
+.holiday-cinco .bg-flame-600 { background-color: #166534 !important; }
+.holiday-cinco .bg-flame-400 { background-color: #22c55e !important; }
+.holiday-cinco .bg-flame-500\/10 { background-color: rgb(21 128 61 / 0.1) !important; }
+.holiday-cinco .bg-flame-500\/20 { background-color: rgb(21 128 61 / 0.2) !important; }
+.holiday-cinco .hover\:bg-flame-400:hover { background-color: #22c55e !important; }
+.holiday-cinco .hover\:bg-flame-600:hover { background-color: #166534 !important; }
+.holiday-cinco .active\:bg-flame-600:active { background-color: #166534 !important; }
+.holiday-cinco .text-flame-500 { color: #22c55e !important; }
+.holiday-cinco .text-flame-400 { color: #4ade80 !important; }
+.holiday-cinco .from-flame-400 { --tw-gradient-from: #4ade80 !important; }
+.holiday-cinco .to-flame-500 { --tw-gradient-to: #ef4444 !important; }
+.holiday-cinco .from-flame-600 { --tw-gradient-from: #15803d !important; }
+.holiday-cinco .border-flame-500 { border-color: #22c55e !important; }
+.holiday-cinco .border-flame-500\/50 { border-color: rgb(34 197 94 / 0.5) !important; }
+.holiday-cinco .border-flame-500\/30 { border-color: rgb(34 197 94 / 0.3) !important; }
+.holiday-cinco .ring-flame-500\/50 { --tw-ring-color: rgb(34 197 94 / 0.5) !important; }
+.holiday-cinco .focus\:border-flame-500\/50:focus { border-color: rgb(34 197 94 / 0.5) !important; }
+.holiday-cinco .focus\:ring-flame-500\/30:focus { --tw-ring-color: rgb(34 197 94 / 0.3) !important; }
+.holiday-cinco .shadow-glow { box-shadow: 0 0 20px rgba(34, 197, 94, 0.3) !important; }
+.holiday-cinco .shadow-glow-lg { box-shadow: 0 0 40px rgba(34, 197, 94, 0.4) !important; }
+.holiday-cinco .text-gradient { background-image: linear-gradient(to right, #22c55e, #ef4444) !important; }
+.holiday-cinco .border-glow {
+  border-color: rgb(34 197 94 / 0.3);
+  box-shadow: inset 0 1px 0 rgba(34, 197, 94, 0.1), 0 0 20px rgba(34, 197, 94, 0.1);
+}
+.holiday-cinco .btn-primary { background-color: #15803d; box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); }
+.holiday-cinco .btn-primary:hover { background-color: #22c55e; box-shadow: 0 0 40px rgba(34, 197, 94, 0.4); }
+.holiday-cinco .nav-item-active { color: #22c55e; background-color: rgb(34 197 94 / 0.1); border-color: #22c55e; }
+.holiday-cinco .badge-flame { background-color: rgb(34 197 94 / 0.2); color: #4ade80; border-color: rgb(34 197 94 / 0.3); }
+.holiday-cinco .calendar-day-today { --tw-ring-color: rgb(34 197 94 / 0.5); }
+.holiday-cinco .calendar-day-workout { background-color: rgb(34 197 94 / 0.2); color: #4ade80; }
+.holiday-cinco .input-field:focus { border-color: rgb(34 197 94 / 0.5); --tw-ring-color: rgb(34 197 94 / 0.3); }
+
+/* ─── 4th of July — Red, White & Blue ─── */
+.holiday-july4th .holiday-banner {
+  background: linear-gradient(135deg, #dc2626 0%, #1d4ed8 50%, #dc2626 100%);
+}
+.holiday-july4th ::selection { background-color: #1d4ed8; }
+.holiday-july4th .bg-flame-500 { background-color: #1d4ed8 !important; }
+.holiday-july4th .bg-flame-600 { background-color: #1e40af !important; }
+.holiday-july4th .bg-flame-400 { background-color: #3b82f6 !important; }
+.holiday-july4th .bg-flame-500\/10 { background-color: rgb(29 78 216 / 0.1) !important; }
+.holiday-july4th .bg-flame-500\/20 { background-color: rgb(29 78 216 / 0.2) !important; }
+.holiday-july4th .hover\:bg-flame-400:hover { background-color: #3b82f6 !important; }
+.holiday-july4th .hover\:bg-flame-600:hover { background-color: #1e40af !important; }
+.holiday-july4th .active\:bg-flame-600:active { background-color: #1e40af !important; }
+.holiday-july4th .text-flame-500 { color: #3b82f6 !important; }
+.holiday-july4th .text-flame-400 { color: #60a5fa !important; }
+.holiday-july4th .from-flame-400 { --tw-gradient-from: #60a5fa !important; }
+.holiday-july4th .to-flame-500 { --tw-gradient-to: #3b82f6 !important; }
+.holiday-july4th .from-flame-600 { --tw-gradient-from: #1d4ed8 !important; }
+.holiday-july4th .border-flame-500 { border-color: #3b82f6 !important; }
+.holiday-july4th .border-flame-500\/50 { border-color: rgb(59 130 246 / 0.5) !important; }
+.holiday-july4th .border-flame-500\/30 { border-color: rgb(59 130 246 / 0.3) !important; }
+.holiday-july4th .ring-flame-500\/50 { --tw-ring-color: rgb(59 130 246 / 0.5) !important; }
+.holiday-july4th .focus\:border-flame-500\/50:focus { border-color: rgb(59 130 246 / 0.5) !important; }
+.holiday-july4th .focus\:ring-flame-500\/30:focus { --tw-ring-color: rgb(59 130 246 / 0.3) !important; }
+.holiday-july4th .shadow-glow { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3) !important; }
+.holiday-july4th .shadow-glow-lg { box-shadow: 0 0 40px rgba(59, 130, 246, 0.4) !important; }
+.holiday-july4th .text-gradient { background-image: linear-gradient(to right, #ef4444, #3b82f6) !important; }
+.holiday-july4th .border-glow {
+  border-color: rgb(59 130 246 / 0.3);
+  box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.1), 0 0 20px rgba(59, 130, 246, 0.1);
+}
+.holiday-july4th .btn-primary { background-color: #1d4ed8; box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
+.holiday-july4th .btn-primary:hover { background-color: #3b82f6; box-shadow: 0 0 40px rgba(59, 130, 246, 0.4); }
+.holiday-july4th .nav-item-active { color: #3b82f6; background-color: rgb(59 130 246 / 0.1); border-color: #3b82f6; }
+.holiday-july4th .badge-flame { background-color: rgb(59 130 246 / 0.2); color: #60a5fa; border-color: rgb(59 130 246 / 0.3); }
+.holiday-july4th .calendar-day-today { --tw-ring-color: rgb(59 130 246 / 0.5); }
+.holiday-july4th .calendar-day-workout { background-color: rgb(59 130 246 / 0.2); color: #60a5fa; }
+.holiday-july4th .input-field:focus { border-color: rgb(59 130 246 / 0.5); --tw-ring-color: rgb(59 130 246 / 0.3); }
+
+/* ─── Halloween — Spooky Orange & Purple ─── */
+.holiday-halloween .holiday-banner {
+  background: linear-gradient(135deg, #7c2d12 0%, #c2410c 40%, #9333ea 100%);
+}
+.holiday-halloween ::selection { background-color: #9333ea; }
+.holiday-halloween .bg-flame-500 { background-color: #9333ea !important; }
+.holiday-halloween .bg-flame-600 { background-color: #7e22ce !important; }
+.holiday-halloween .bg-flame-400 { background-color: #a855f7 !important; }
+.holiday-halloween .bg-flame-500\/10 { background-color: rgb(147 51 234 / 0.1) !important; }
+.holiday-halloween .bg-flame-500\/20 { background-color: rgb(147 51 234 / 0.2) !important; }
+.holiday-halloween .hover\:bg-flame-400:hover { background-color: #a855f7 !important; }
+.holiday-halloween .hover\:bg-flame-600:hover { background-color: #7e22ce !important; }
+.holiday-halloween .active\:bg-flame-600:active { background-color: #7e22ce !important; }
+.holiday-halloween .text-flame-500 { color: #a855f7 !important; }
+.holiday-halloween .text-flame-400 { color: #c084fc !important; }
+.holiday-halloween .from-flame-400 { --tw-gradient-from: #c084fc !important; }
+.holiday-halloween .to-flame-500 { --tw-gradient-to: #a855f7 !important; }
+.holiday-halloween .from-flame-600 { --tw-gradient-from: #9333ea !important; }
+.holiday-halloween .border-flame-500 { border-color: #a855f7 !important; }
+.holiday-halloween .border-flame-500\/50 { border-color: rgb(168 85 247 / 0.5) !important; }
+.holiday-halloween .border-flame-500\/30 { border-color: rgb(168 85 247 / 0.3) !important; }
+.holiday-halloween .ring-flame-500\/50 { --tw-ring-color: rgb(168 85 247 / 0.5) !important; }
+.holiday-halloween .focus\:border-flame-500\/50:focus { border-color: rgb(168 85 247 / 0.5) !important; }
+.holiday-halloween .focus\:ring-flame-500\/30:focus { --tw-ring-color: rgb(168 85 247 / 0.3) !important; }
+.holiday-halloween .shadow-glow { box-shadow: 0 0 20px rgba(168, 85, 247, 0.3) !important; }
+.holiday-halloween .shadow-glow-lg { box-shadow: 0 0 40px rgba(168, 85, 247, 0.4) !important; }
+.holiday-halloween .text-gradient { background-image: linear-gradient(to right, #fb923c, #a855f7) !important; }
+.holiday-halloween .border-glow {
+  border-color: rgb(168 85 247 / 0.3);
+  box-shadow: inset 0 1px 0 rgba(168, 85, 247, 0.1), 0 0 20px rgba(168, 85, 247, 0.1);
+}
+.holiday-halloween .btn-primary { background-color: #9333ea; box-shadow: 0 0 20px rgba(168, 85, 247, 0.3); }
+.holiday-halloween .btn-primary:hover { background-color: #a855f7; box-shadow: 0 0 40px rgba(168, 85, 247, 0.4); }
+.holiday-halloween .nav-item-active { color: #a855f7; background-color: rgb(168 85 247 / 0.1); border-color: #a855f7; }
+.holiday-halloween .badge-flame { background-color: rgb(168 85 247 / 0.2); color: #c084fc; border-color: rgb(168 85 247 / 0.3); }
+.holiday-halloween .calendar-day-today { --tw-ring-color: rgb(168 85 247 / 0.5); }
+.holiday-halloween .calendar-day-workout { background-color: rgb(168 85 247 / 0.2); color: #c084fc; }
+.holiday-halloween .input-field:focus { border-color: rgb(168 85 247 / 0.5); --tw-ring-color: rgb(168 85 247 / 0.3); }
+
+/* ─── Thanksgiving — Warm Amber & Brown ─── */
+.holiday-thanksgiving .holiday-banner {
+  background: linear-gradient(135deg, #92400e 0%, #d97706 50%, #f59e0b 100%);
+}
+.holiday-thanksgiving ::selection { background-color: #d97706; }
+.holiday-thanksgiving .bg-flame-500 { background-color: #d97706 !important; }
+.holiday-thanksgiving .bg-flame-600 { background-color: #b45309 !important; }
+.holiday-thanksgiving .bg-flame-400 { background-color: #f59e0b !important; }
+.holiday-thanksgiving .bg-flame-500\/10 { background-color: rgb(217 119 6 / 0.1) !important; }
+.holiday-thanksgiving .bg-flame-500\/20 { background-color: rgb(217 119 6 / 0.2) !important; }
+.holiday-thanksgiving .hover\:bg-flame-400:hover { background-color: #f59e0b !important; }
+.holiday-thanksgiving .hover\:bg-flame-600:hover { background-color: #b45309 !important; }
+.holiday-thanksgiving .active\:bg-flame-600:active { background-color: #b45309 !important; }
+.holiday-thanksgiving .text-flame-500 { color: #f59e0b !important; }
+.holiday-thanksgiving .text-flame-400 { color: #fbbf24 !important; }
+.holiday-thanksgiving .from-flame-400 { --tw-gradient-from: #fbbf24 !important; }
+.holiday-thanksgiving .to-flame-500 { --tw-gradient-to: #f59e0b !important; }
+.holiday-thanksgiving .from-flame-600 { --tw-gradient-from: #d97706 !important; }
+.holiday-thanksgiving .border-flame-500 { border-color: #f59e0b !important; }
+.holiday-thanksgiving .border-flame-500\/50 { border-color: rgb(245 158 11 / 0.5) !important; }
+.holiday-thanksgiving .border-flame-500\/30 { border-color: rgb(245 158 11 / 0.3) !important; }
+.holiday-thanksgiving .ring-flame-500\/50 { --tw-ring-color: rgb(245 158 11 / 0.5) !important; }
+.holiday-thanksgiving .focus\:border-flame-500\/50:focus { border-color: rgb(245 158 11 / 0.5) !important; }
+.holiday-thanksgiving .focus\:ring-flame-500\/30:focus { --tw-ring-color: rgb(245 158 11 / 0.3) !important; }
+.holiday-thanksgiving .shadow-glow { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3) !important; }
+.holiday-thanksgiving .shadow-glow-lg { box-shadow: 0 0 40px rgba(245, 158, 11, 0.4) !important; }
+.holiday-thanksgiving .text-gradient { background-image: linear-gradient(to right, #fbbf24, #f59e0b) !important; }
+.holiday-thanksgiving .border-glow {
+  border-color: rgb(245 158 11 / 0.3);
+  box-shadow: inset 0 1px 0 rgba(245, 158, 11, 0.1), 0 0 20px rgba(245, 158, 11, 0.1);
+}
+.holiday-thanksgiving .btn-primary { background-color: #d97706; box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
+.holiday-thanksgiving .btn-primary:hover { background-color: #f59e0b; box-shadow: 0 0 40px rgba(245, 158, 11, 0.4); }
+.holiday-thanksgiving .nav-item-active { color: #f59e0b; background-color: rgb(245 158 11 / 0.1); border-color: #f59e0b; }
+.holiday-thanksgiving .badge-flame { background-color: rgb(245 158 11 / 0.2); color: #fbbf24; border-color: rgb(245 158 11 / 0.3); }
+.holiday-thanksgiving .calendar-day-today { --tw-ring-color: rgb(245 158 11 / 0.5); }
+.holiday-thanksgiving .calendar-day-workout { background-color: rgb(245 158 11 / 0.2); color: #fbbf24; }
+.holiday-thanksgiving .input-field:focus { border-color: rgb(245 158 11 / 0.5); --tw-ring-color: rgb(245 158 11 / 0.3); }
+
+/* ─── Christmas — Red & Green ─── */
+.holiday-christmas .holiday-banner {
+  background: linear-gradient(135deg, #dc2626 0%, #15803d 50%, #dc2626 100%);
+}
+.holiday-christmas ::selection { background-color: #dc2626; }
+.holiday-christmas .bg-flame-500 { background-color: #dc2626 !important; }
+.holiday-christmas .bg-flame-600 { background-color: #b91c1c !important; }
+.holiday-christmas .bg-flame-400 { background-color: #ef4444 !important; }
+.holiday-christmas .bg-flame-500\/10 { background-color: rgb(220 38 38 / 0.1) !important; }
+.holiday-christmas .bg-flame-500\/20 { background-color: rgb(220 38 38 / 0.2) !important; }
+.holiday-christmas .hover\:bg-flame-400:hover { background-color: #ef4444 !important; }
+.holiday-christmas .hover\:bg-flame-600:hover { background-color: #b91c1c !important; }
+.holiday-christmas .active\:bg-flame-600:active { background-color: #b91c1c !important; }
+.holiday-christmas .text-flame-500 { color: #ef4444 !important; }
+.holiday-christmas .text-flame-400 { color: #f87171 !important; }
+.holiday-christmas .from-flame-400 { --tw-gradient-from: #f87171 !important; }
+.holiday-christmas .to-flame-500 { --tw-gradient-to: #ef4444 !important; }
+.holiday-christmas .from-flame-600 { --tw-gradient-from: #dc2626 !important; }
+.holiday-christmas .border-flame-500 { border-color: #ef4444 !important; }
+.holiday-christmas .border-flame-500\/50 { border-color: rgb(239 68 68 / 0.5) !important; }
+.holiday-christmas .border-flame-500\/30 { border-color: rgb(239 68 68 / 0.3) !important; }
+.holiday-christmas .ring-flame-500\/50 { --tw-ring-color: rgb(239 68 68 / 0.5) !important; }
+.holiday-christmas .focus\:border-flame-500\/50:focus { border-color: rgb(239 68 68 / 0.5) !important; }
+.holiday-christmas .focus\:ring-flame-500\/30:focus { --tw-ring-color: rgb(239 68 68 / 0.3) !important; }
+.holiday-christmas .shadow-glow { box-shadow: 0 0 20px rgba(239, 68, 68, 0.3) !important; }
+.holiday-christmas .shadow-glow-lg { box-shadow: 0 0 40px rgba(239, 68, 68, 0.4) !important; }
+.holiday-christmas .text-gradient { background-image: linear-gradient(to right, #ef4444, #22c55e) !important; }
+.holiday-christmas .border-glow {
+  border-color: rgb(239 68 68 / 0.3);
+  box-shadow: inset 0 1px 0 rgba(239, 68, 68, 0.1), 0 0 20px rgba(239, 68, 68, 0.1);
+}
+.holiday-christmas .btn-primary { background-color: #dc2626; box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+.holiday-christmas .btn-primary:hover { background-color: #ef4444; box-shadow: 0 0 40px rgba(239, 68, 68, 0.4); }
+.holiday-christmas .nav-item-active { color: #ef4444; background-color: rgb(239 68 68 / 0.1); border-color: #ef4444; }
+.holiday-christmas .badge-flame { background-color: rgb(239 68 68 / 0.2); color: #f87171; border-color: rgb(239 68 68 / 0.3); }
+.holiday-christmas .calendar-day-today { --tw-ring-color: rgb(239 68 68 / 0.5); }
+.holiday-christmas .calendar-day-workout { background-color: rgb(239 68 68 / 0.2); color: #f87171; }
+.holiday-christmas .input-field:focus { border-color: rgb(239 68 68 / 0.5); --tw-ring-color: rgb(239 68 68 / 0.3); }
+
+/* ─── New Year's — Gold & Sparkle ─── */
+.holiday-new-years .holiday-banner {
+  background: linear-gradient(135deg, #854d0e 0%, #ca8a04 50%, #eab308 100%);
+}
+.holiday-new-years ::selection { background-color: #ca8a04; }
+.holiday-new-years .bg-flame-500 { background-color: #ca8a04 !important; }
+.holiday-new-years .bg-flame-600 { background-color: #a16207 !important; }
+.holiday-new-years .bg-flame-400 { background-color: #eab308 !important; }
+.holiday-new-years .bg-flame-500\/10 { background-color: rgb(202 138 4 / 0.1) !important; }
+.holiday-new-years .bg-flame-500\/20 { background-color: rgb(202 138 4 / 0.2) !important; }
+.holiday-new-years .hover\:bg-flame-400:hover { background-color: #eab308 !important; }
+.holiday-new-years .hover\:bg-flame-600:hover { background-color: #a16207 !important; }
+.holiday-new-years .active\:bg-flame-600:active { background-color: #a16207 !important; }
+.holiday-new-years .text-flame-500 { color: #eab308 !important; }
+.holiday-new-years .text-flame-400 { color: #facc15 !important; }
+.holiday-new-years .from-flame-400 { --tw-gradient-from: #facc15 !important; }
+.holiday-new-years .to-flame-500 { --tw-gradient-to: #eab308 !important; }
+.holiday-new-years .from-flame-600 { --tw-gradient-from: #ca8a04 !important; }
+.holiday-new-years .border-flame-500 { border-color: #eab308 !important; }
+.holiday-new-years .border-flame-500\/50 { border-color: rgb(234 179 8 / 0.5) !important; }
+.holiday-new-years .border-flame-500\/30 { border-color: rgb(234 179 8 / 0.3) !important; }
+.holiday-new-years .ring-flame-500\/50 { --tw-ring-color: rgb(234 179 8 / 0.5) !important; }
+.holiday-new-years .focus\:border-flame-500\/50:focus { border-color: rgb(234 179 8 / 0.5) !important; }
+.holiday-new-years .focus\:ring-flame-500\/30:focus { --tw-ring-color: rgb(234 179 8 / 0.3) !important; }
+.holiday-new-years .shadow-glow { box-shadow: 0 0 20px rgba(234, 179, 8, 0.3) !important; }
+.holiday-new-years .shadow-glow-lg { box-shadow: 0 0 40px rgba(234, 179, 8, 0.4) !important; }
+.holiday-new-years .text-gradient { background-image: linear-gradient(to right, #facc15, #eab308) !important; }
+.holiday-new-years .border-glow {
+  border-color: rgb(234 179 8 / 0.3);
+  box-shadow: inset 0 1px 0 rgba(234, 179, 8, 0.1), 0 0 20px rgba(234, 179, 8, 0.1);
+}
+.holiday-new-years .btn-primary { background-color: #ca8a04; box-shadow: 0 0 20px rgba(234, 179, 8, 0.3); }
+.holiday-new-years .btn-primary:hover { background-color: #eab308; box-shadow: 0 0 40px rgba(234, 179, 8, 0.4); }
+.holiday-new-years .nav-item-active { color: #eab308; background-color: rgb(234 179 8 / 0.1); border-color: #eab308; }
+.holiday-new-years .badge-flame { background-color: rgb(234 179 8 / 0.2); color: #facc15; border-color: rgb(234 179 8 / 0.3); }
+.holiday-new-years .calendar-day-today { --tw-ring-color: rgb(234 179 8 / 0.5); }
+.holiday-new-years .calendar-day-workout { background-color: rgb(234 179 8 / 0.2); color: #facc15; }
+.holiday-new-years .input-field:focus { border-color: rgb(234 179 8 / 0.5); --tw-ring-color: rgb(234 179 8 / 0.3); }
