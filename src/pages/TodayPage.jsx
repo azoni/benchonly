@@ -640,8 +640,8 @@ export default function TodayPage() {
                     <div className="text-[10px] text-iron-500 uppercase tracking-wide">Max Bench</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-display text-iron-50">{benchDetails.workoutCount > 0 ? `${(Math.round((benchDetails.totalLbs || 0) / benchDetails.workoutCount / 100) * 100).toLocaleString()}` : '0'}</div>
-                    <div className="text-[10px] text-iron-500 uppercase tracking-wide">Avg/Workout</div>
+                    <div className="text-lg font-display text-iron-50">{(benchDetails.maxSet || 0).toLocaleString()}</div>
+                    <div className="text-[10px] text-iron-500 uppercase tracking-wide">Best Set</div>
                   </div>
                   <div className="text-center">
                     <div className="text-lg font-display text-iron-50">{(benchDetails.totalSets || 0).toLocaleString()}</div>
