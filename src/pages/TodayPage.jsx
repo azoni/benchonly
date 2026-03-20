@@ -592,7 +592,7 @@ export default function TodayPage() {
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <Dumbbell size={16} className="text-flame-400" />
-                <span className="text-sm font-semibold text-flame-400">Billion Pound Challenge</span>
+                <span className="text-sm font-semibold text-flame-400">Bench a Billion</span>
               </div>
               <span className="text-xs text-iron-500">
                 {((globalVolume / 1_000_000_000) * 100).toFixed(4)}%
@@ -613,7 +613,7 @@ export default function TodayPage() {
               />
             </div>
             <p className="text-xs text-iron-500 mt-1">
-              {(1_000_000_000 - globalVolume).toLocaleString()} lbs to go — every rep counts
+              Community goal — {(1_000_000_000 - globalVolume).toLocaleString()} lbs to go. Every rep counts.
             </p>
           </div>
         </motion.div>
