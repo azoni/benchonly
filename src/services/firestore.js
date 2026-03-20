@@ -177,6 +177,23 @@ export const workoutService = {
     if (isComplete && workoutData.workoutType !== 'cardio') {
       await this.checkAndUpdateGoals(userId, workoutData);
     }
+
+    // Track global bench volume for the billion-pound challenge
+    if (isComplete && workoutData.exercises?.length > 0) {
+      try {
+        let volume = 0;
+        workoutData.exercises.forEach(ex => {
+          (ex.sets || []).forEach(s => {
+            const w = parseFloat(s.actualWeight || s.prescribedWeight || 0);
+            const r = parseInt(s.actualReps || s.prescribedReps || 0, 10);
+            if (w > 0 && r > 0 && s.completed !== false) volume += w * r;
+          });
+        });
+        if (volume > 0) {
+          await setDoc(doc(db, 'globalStats', 'volume'), { totalLbs: increment(volume) }, { merge: true });
+        }
+      } catch (e) { console.error('Volume tracking error:', e); }
+    }
     
     // Track analytics
     const actionType = workoutData.workoutType === 'cardio' ? ACTIONS.CARDIO_LOGGED : ACTIONS.WORKOUT_CREATED;
@@ -1949,5 +1966,18 @@ export const sharedWorkoutService = {
 
   async dismiss(sharedId) {
     await updateDoc(doc(db, 'sharedWorkouts', sharedId), { status: 'dismissed' });
+  },
+};
+
+// Global stats (billion-pound challenge)
+export const globalStatsService = {
+  async getVolume() {
+    try {
+      const snap = await getDoc(doc(db, 'globalStats', 'volume'));
+      return snap.exists() ? (snap.data().totalLbs || 0) : 0;
+    } catch (e) {
+      console.error('Error reading global stats:', e);
+      return 0;
+    }
   },
 };

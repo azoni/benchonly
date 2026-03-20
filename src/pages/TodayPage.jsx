@@ -35,6 +35,7 @@ import {
   goalService,
   userService,
   programService,
+  globalStatsService,
 } from '../services/firestore'
 import { feedService } from '../services/feedService'
 import { analyticsService } from '../services/analyticsService'
@@ -66,6 +67,7 @@ export default function TodayPage() {
   const [friendSet, setFriendSet] = useState(new Set())
   const [goals, setGoals] = useState([])
   const [todayProgramDay, setTodayProgramDay] = useState(null)
+  const [globalVolume, setGlobalVolume] = useState(0)
   const [nextProgramDay, setNextProgramDay] = useState(null)
   const [nextWorkout, setNextWorkout] = useState(null) // next upcoming personal or group workout
   const [hasActiveProgram, setHasActiveProgram] = useState(true) // default true to avoid flash
@@ -210,6 +212,7 @@ export default function TodayPage() {
 
   useEffect(() => {
     if (user) loadTodayData()
+    globalStatsService.getVolume().then(v => setGlobalVolume(v))
   }, [user])
 
   const loadTodayData = async () => {
@@ -577,6 +580,44 @@ export default function TodayPage() {
           {greeting}{firstName ? `, ${firstName}` : ''}
         </h1>
       </motion.div>
+
+      {/* Billion Pound Challenge */}
+      {globalVolume > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <div className="card-steel p-4 rounded-xl border border-flame-500/20 bg-gradient-to-r from-flame-500/5 to-amber-500/5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Dumbbell size={16} className="text-flame-400" />
+                <span className="text-sm font-semibold text-flame-400">Billion Pound Challenge</span>
+              </div>
+              <span className="text-xs text-iron-500">
+                {((globalVolume / 1_000_000_000) * 100).toFixed(4)}%
+              </span>
+            </div>
+            <div className="text-2xl font-display text-iron-50 mb-2">
+              {globalVolume >= 1_000_000
+                ? `${(globalVolume / 1_000_000).toFixed(1)}M`
+                : globalVolume >= 1_000
+                ? `${(globalVolume / 1_000).toFixed(0)}K`
+                : globalVolume.toLocaleString()
+              } lbs
+            </div>
+            <div className="w-full h-2 bg-iron-800 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-flame-500 to-amber-500 transition-all duration-500"
+                style={{ width: `${Math.max(Math.min((globalVolume / 1_000_000_000) * 100, 100), 0.5)}%` }}
+              />
+            </div>
+            <p className="text-xs text-iron-500 mt-1">
+              {(1_000_000_000 - globalVolume).toLocaleString()} lbs to go — every rep counts
+            </p>
+          </div>
+        </motion.div>
+      )}
 
       {/* Onboarding Checklist */}
       <OnboardingChecklist />
