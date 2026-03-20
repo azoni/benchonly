@@ -1982,4 +1982,13 @@ export const globalStatsService = {
       return 0;
     }
   },
+  async getDetails() {
+    try {
+      const snap = await getDoc(doc(db, 'globalStats', 'benchDetails'));
+      return snap.exists() ? snap.data() : null;
+    } catch (e) {
+      console.error('Error reading bench details:', e);
+      return null;
+    }
+  },
 };

@@ -68,6 +68,8 @@ export default function TodayPage() {
   const [goals, setGoals] = useState([])
   const [todayProgramDay, setTodayProgramDay] = useState(null)
   const [globalVolume, setGlobalVolume] = useState(0)
+  const [benchDetails, setBenchDetails] = useState(null)
+  const [benchExpanded, setBenchExpanded] = useState(false)
   const [nextProgramDay, setNextProgramDay] = useState(null)
   const [nextWorkout, setNextWorkout] = useState(null) // next upcoming personal or group workout
   const [hasActiveProgram, setHasActiveProgram] = useState(true) // default true to avoid flash
@@ -213,6 +215,7 @@ export default function TodayPage() {
   useEffect(() => {
     if (user) loadTodayData()
     globalStatsService.getVolume().then(v => setGlobalVolume(v))
+    globalStatsService.getDetails().then(d => d && setBenchDetails(d))
   }, [user])
 
   const loadTodayData = async () => {
@@ -581,22 +584,28 @@ export default function TodayPage() {
         </h1>
       </motion.div>
 
-      {/* Billion Pound Challenge */}
+      {/* Bench a Billion */}
       {globalVolume > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-6"
         >
-          <div className="card-steel p-4 rounded-xl border border-flame-500/20 bg-gradient-to-r from-flame-500/5 to-amber-500/5">
+          <div
+            className="card-steel p-4 rounded-xl border border-flame-500/20 bg-gradient-to-r from-flame-500/5 to-amber-500/5 cursor-pointer"
+            onClick={() => setBenchExpanded(!benchExpanded)}
+          >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <Dumbbell size={16} className="text-flame-400" />
                 <span className="text-sm font-semibold text-flame-400">Bench a Billion</span>
               </div>
-              <span className="text-xs text-iron-500">
-                {((globalVolume / 1_000_000_000) * 100).toFixed(4)}%
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-iron-500">
+                  {((globalVolume / 1_000_000_000) * 100).toFixed(4)}%
+                </span>
+                <ChevronDown size={14} className={`text-iron-500 transition-transform ${benchExpanded ? 'rotate-180' : ''}`} />
+              </div>
             </div>
             <div className="text-2xl font-display text-iron-50 mb-2">
               {globalVolume >= 1_000_000
@@ -615,6 +624,66 @@ export default function TodayPage() {
             <p className="text-xs text-iron-500 mt-1">
               Community goal — {(1_000_000_000 - globalVolume).toLocaleString()} lbs to go. Every rep counts.
             </p>
+
+            {/* Expanded Details */}
+            {benchExpanded && benchDetails && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="mt-3 pt-3 border-t border-iron-700/50"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Headline stats */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="text-center">
+                    <div className="text-lg font-display text-iron-50">{benchDetails.maxWeight || 0}</div>
+                    <div className="text-[10px] text-iron-500 uppercase tracking-wide">Max Bench</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-display text-iron-50">{(benchDetails.maxSet || 0).toLocaleString()}</div>
+                    <div className="text-[10px] text-iron-500 uppercase tracking-wide">Biggest Set</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-display text-iron-50">{(benchDetails.totalSets || 0).toLocaleString()}</div>
+                    <div className="text-[10px] text-iron-500 uppercase tracking-wide">Total Sets</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="text-center">
+                    <div className="text-lg font-display text-iron-50">{(benchDetails.totalReps || 0).toLocaleString()}</div>
+                    <div className="text-[10px] text-iron-500 uppercase tracking-wide">Total Reps</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-display text-iron-50">{benchDetails.workoutCount || 0}</div>
+                    <div className="text-[10px] text-iron-500 uppercase tracking-wide">Workouts</div>
+                  </div>
+                </div>
+
+                {/* By type breakdown */}
+                {benchDetails.byType?.length > 0 && (
+                  <div>
+                    <div className="text-[10px] text-iron-500 uppercase tracking-wide mb-2">By Variation</div>
+                    <div className="space-y-1.5">
+                      {benchDetails.byType.map((t, i) => {
+                        const pct = benchDetails.totalLbs > 0 ? (t.volume / benchDetails.totalLbs) * 100 : 0;
+                        return (
+                          <div key={i}>
+                            <div className="flex items-center justify-between text-xs mb-0.5">
+                              <span className="text-iron-300 truncate mr-2">{t.name}</span>
+                              <span className="text-iron-500 shrink-0">{t.volume >= 1000 ? `${(t.volume / 1000).toFixed(1)}K` : t.volume} lbs · {t.maxWeight}lb max</span>
+                            </div>
+                            <div className="w-full h-1 bg-iron-800 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-flame-500/60" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
           </div>
         </motion.div>
       )}
