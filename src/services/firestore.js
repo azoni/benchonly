@@ -178,11 +178,13 @@ export const workoutService = {
       await this.checkAndUpdateGoals(userId, workoutData);
     }
 
-    // Track global bench volume for the billion-pound challenge
+    // Track global bench volume for "Bench a Billion" challenge
     if (isComplete && workoutData.exercises?.length > 0) {
       try {
         let volume = 0;
         workoutData.exercises.forEach(ex => {
+          const name = (ex.name || '').toLowerCase();
+          if (!name.includes('bench')) return; // Only count bench variations
           (ex.sets || []).forEach(s => {
             const w = parseFloat(s.actualWeight || s.prescribedWeight || 0);
             const r = parseInt(s.actualReps || s.prescribedReps || 0, 10);
