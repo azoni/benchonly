@@ -98,9 +98,11 @@ export default function NewWorkoutPage() {
   const [loading, setLoading] = useState(!!editId);
   const [rpeModalOpen, setRpeModalOpen] = useState(false);
   const [editScheduleData, setEditScheduleData] = useState(null);
+  const editScheduleId = searchParams.get('editSchedule') || null;
   const [workoutType, setWorkoutType] = useState(editScheduleId ? 'cardio' : 'strength'); // 'strength', 'cardio', or 'wod'
   const [wodFormat, setWodFormat] = useState('amrap'); // 'amrap', 'fortime', 'emom'
   const [wodTimeCap, setWodTimeCap] = useState('');
+  const [wodRounds, setWodRounds] = useState('');
   const [wodMovements, setWodMovements] = useState([{ name: '', reps: '' }]);
   const [wodLibraryOpen, setWodLibraryOpen] = useState(false);
   const [benchmarkWodId, setBenchmarkWodId] = useState(null);
@@ -114,7 +116,6 @@ export default function NewWorkoutPage() {
   const isAdminCreating = searchParams.get('userId') && searchParams.get('userId') !== user?.uid;
   const trainerRequestId = searchParams.get('requestId') || null;
   const paramDate = searchParams.get('date') || null;
-  const editScheduleId = searchParams.get('editSchedule') || null;
   const isEditMode = !!editId;
 
   // Merge default exercises with custom exercises from user profile
@@ -428,6 +429,7 @@ export default function NewWorkoutPage() {
     setWorkout(prev => ({ ...prev, name: wod.name }));
     setWodFormat(wod.format);
     setWodTimeCap(wod.timeCap?.toString() || '');
+    setWodRounds(wod.rounds?.toString() || '');
     setWodMovements(variant.movements.map(m => ({ name: m.name, reps: m.reps })));
     setBenchmarkWodId(wod.id);
     setBenchmarkVariant(variantKey);
@@ -464,8 +466,10 @@ export default function NewWorkoutPage() {
       // Build WOD notes describing the format
       const formatLabel = wodFormat === 'amrap' ? 'AMRAP' : wodFormat === 'fortime' ? 'For Time' : 'EMOM';
       const timeStr = wodTimeCap ? ` ${wodTimeCap} min` : '';
+      const roundsStr = wodRounds && wodFormat === 'fortime' ? `${wodRounds} Rounds` : '';
       const movementLines = validMovements.map(m => `${m.reps ? m.reps + ' ' : ''}${m.name}`).join('\n');
-      const notes = `${formatLabel}${timeStr}\n${movementLines}`;
+      const header = roundsStr ? `${roundsStr} ${formatLabel}${timeStr}` : `${formatLabel}${timeStr}`;
+      const notes = `${header}\n${movementLines}`;
 
       // Build exercises array — each movement as a separate exercise with 1 set
       const exercises = validMovements.map((m, i) => ({
@@ -763,6 +767,20 @@ export default function NewWorkoutPage() {
                 </button>
               ))}
             </div>
+
+            {wodFormat === 'fortime' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-iron-300 mb-2">Rounds</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={wodRounds}
+                  onChange={(e) => setWodRounds(e.target.value)}
+                  placeholder="e.g. 5"
+                  className="input-field w-full"
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-iron-300 mb-2">
