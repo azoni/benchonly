@@ -466,7 +466,7 @@ export default function NewWorkoutPage() {
       // Build WOD notes describing the format
       const formatLabel = wodFormat === 'amrap' ? 'AMRAP' : wodFormat === 'fortime' ? 'For Time' : 'EMOM';
       const timeStr = wodTimeCap ? ` ${wodTimeCap} min` : '';
-      const roundsStr = wodRounds && wodFormat === 'fortime' ? `${wodRounds} Rounds` : '';
+      const roundsStr = wodRounds ? `${wodRounds} Rounds` : '';
       const movementLines = validMovements.map(m => `${m.reps ? m.reps + ' ' : ''}${m.name}`).join('\n');
       const header = roundsStr ? `${roundsStr} ${formatLabel}${timeStr}` : `${formatLabel}${timeStr}`;
       const notes = `${header}\n${movementLines}`;
@@ -768,19 +768,17 @@ export default function NewWorkoutPage() {
               ))}
             </div>
 
-            {wodFormat === 'fortime' && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-iron-300 mb-2">Rounds</label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  value={wodRounds}
-                  onChange={(e) => setWodRounds(e.target.value)}
-                  placeholder="e.g. 5"
-                  className="input-field w-full"
-                />
-              </div>
-            )}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-iron-300 mb-2">Rounds</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={wodRounds}
+                onChange={(e) => setWodRounds(e.target.value)}
+                placeholder="e.g. 5"
+                className="input-field w-full"
+              />
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-iron-300 mb-2">
