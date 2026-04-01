@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -30,6 +30,9 @@ import {
   FileText,
   RefreshCw,
   Zap,
+  Image,
+  Copy,
+  Download,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getAuthHeaders } from '../services/api'
@@ -41,6 +44,7 @@ import usePageTitle from '../utils/usePageTitle'
 import ExerciseInfoModal from '../components/ExerciseInfoModal'
 import WorkoutSummaryCard from '../components/WorkoutSummaryCard'
 import { groupExercisesForDisplay } from '../utils/workoutUtils'
+import { generateWorkoutImage } from '../utils/workoutImageGenerator'
 import { useUIStore } from '../store'
 
 // Calculate estimated 1RM using Epley formula
@@ -103,6 +107,11 @@ export default function GroupWorkoutPage() {
   const [shareMessage, setShareMessage] = useState('')
   const [sharing, setSharing] = useState(false)
   const [shared, setShared] = useState(false)
+  const [shareMode, setShareMode] = useState('friend')
+  const [imageBlob, setImageBlob] = useState(null)
+  const [imageUrl, setImageUrl] = useState(null)
+  const [generatingImage, setGeneratingImage] = useState(false)
+  const [imageCopied, setImageCopied] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
@@ -168,6 +177,57 @@ export default function GroupWorkoutPage() {
       console.error('Error loading friends:', err)
     }
   }
+
+  const handleGenerateImage = useCallback(async () => {
+    if (!workout || generatingImage) return
+    setGeneratingImage(true)
+    try {
+      const blob = await generateWorkoutImage(workout, { userName: user?.displayName })
+      const url = URL.createObjectURL(blob)
+      setImageBlob(blob)
+      setImageUrl(url)
+    } catch (err) {
+      console.error('Image generation error:', err)
+    } finally {
+      setGeneratingImage(false)
+    }
+  }, [workout, user?.displayName, generatingImage])
+
+  const handleCopyImage = async () => {
+    if (!imageBlob) return
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': imageBlob })
+      ])
+      setImageCopied(true)
+      setTimeout(() => setImageCopied(false), 2000)
+    } catch {
+      if (imageUrl) {
+        const a = document.createElement('a')
+        a.href = imageUrl
+        a.download = `${workout?.name || 'workout'}.png`
+        a.click()
+      }
+    }
+  }
+
+  const handleSaveImage = () => {
+    if (!imageUrl) return
+    const a = document.createElement('a')
+    a.href = imageUrl
+    a.download = `${workout?.name || 'workout'}.png`
+    a.click()
+  }
+
+  useEffect(() => {
+    if (!showShareModal) {
+      if (imageUrl) URL.revokeObjectURL(imageUrl)
+      setImageBlob(null)
+      setImageUrl(null)
+      setImageCopied(false)
+      setShareMode('friend')
+    }
+  }, [showShareModal])
 
   const handleShare = async () => {
     if (!selectedFriend || !workout || sharing) return
@@ -1548,81 +1608,144 @@ export default function GroupWorkoutPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="p-3 bg-iron-800/50 rounded-lg">
-                        <p className="text-sm text-iron-300 font-medium">{workout?.name || 'Workout'}</p>
-                        <p className="text-xs text-iron-500 mt-0.5">{workout?.exercises?.length || 0} exercises · {group?.name || 'Group'}</p>
+                      {/* Tab toggle */}
+                      <div className="flex gap-1 p-1 bg-iron-800/50 rounded-lg">
+                        <button
+                          onClick={() => setShareMode('friend')}
+                          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                            shareMode === 'friend'
+                              ? 'bg-iron-700 text-iron-100'
+                              : 'text-iron-400 hover:text-iron-200'
+                          }`}
+                        >
+                          <Send className="w-4 h-4" />
+                          Send to Friend
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShareMode('image')
+                            if (!imageBlob && !generatingImage) handleGenerateImage()
+                          }}
+                          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                            shareMode === 'image'
+                              ? 'bg-iron-700 text-iron-100'
+                              : 'text-iron-400 hover:text-iron-200'
+                          }`}
+                        >
+                          <Image className="w-4 h-4" />
+                          Copy as Image
+                        </button>
                       </div>
 
-                      {friends.length === 0 ? (
-                        <div className="text-center py-4">
-                          <p className="text-sm text-iron-500">No friends yet. Add friends to share workouts.</p>
-                          <Link to="/friends" className="text-sm text-flame-400 hover:underline mt-1 inline-block">Find Friends</Link>
-                        </div>
-                      ) : (
+                      {shareMode === 'friend' ? (
                         <>
-                          {friends.length > 5 && (
-                            <div className="relative">
-                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iron-500" />
-                              <input
-                                type="text"
-                                placeholder="Search friends..."
-                                value={shareSearch}
-                                onChange={(e) => setShareSearch(e.target.value)}
-                                className="input-field pl-9 py-2 text-sm w-full"
-                              />
-                            </div>
-                          )}
-
-                          <div className="max-h-48 overflow-y-auto space-y-1">
-                            {friends
-                              .filter(fid => {
-                                if (!shareSearch) return true
-                                const p = friendProfiles[fid]
-                                return p?.displayName?.toLowerCase().includes(shareSearch.toLowerCase())
-                              })
-                              .map(fid => {
-                                const p = friendProfiles[fid]
-                                return (
-                                  <button
-                                    key={fid}
-                                    onClick={() => setSelectedFriend(fid)}
-                                    className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-colors ${
-                                      selectedFriend === fid
-                                        ? 'bg-flame-500/15 border border-flame-500/30'
-                                        : 'hover:bg-iron-800'
-                                    }`}
-                                  >
-                                    {p?.photoURL ? (
-                                      <img src={p.photoURL} alt="" className="w-8 h-8 rounded-full" />
-                                    ) : (
-                                      <div className="w-8 h-8 rounded-full bg-iron-700 flex items-center justify-center text-xs font-medium text-iron-400">
-                                        {(p?.displayName || '?')[0]}
-                                      </div>
-                                    )}
-                                    <span className="text-sm text-iron-200 flex-1 text-left truncate">{p?.displayName || 'User'}</span>
-                                    {selectedFriend === fid && <Check className="w-4 h-4 text-flame-400" />}
-                                  </button>
-                                )
-                              })}
+                          <div className="p-3 bg-iron-800/50 rounded-lg">
+                            <p className="text-sm text-iron-300 font-medium">{workout?.name || 'Workout'}</p>
+                            <p className="text-xs text-iron-500 mt-0.5">{workout?.exercises?.length || 0} exercises · {group?.name || 'Group'}</p>
                           </div>
 
-                          <textarea
-                            placeholder="Add a message (optional)"
-                            value={shareMessage}
-                            onChange={(e) => setShareMessage(e.target.value)}
-                            rows={2}
-                            className="input-field w-full resize-none text-sm"
-                          />
+                          {friends.length === 0 ? (
+                            <div className="text-center py-4">
+                              <p className="text-sm text-iron-500">No friends yet. Add friends to share workouts.</p>
+                              <Link to="/friends" className="text-sm text-flame-400 hover:underline mt-1 inline-block">Find Friends</Link>
+                            </div>
+                          ) : (
+                            <>
+                              {friends.length > 5 && (
+                                <div className="relative">
+                                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iron-500" />
+                                  <input
+                                    type="text"
+                                    placeholder="Search friends..."
+                                    value={shareSearch}
+                                    onChange={(e) => setShareSearch(e.target.value)}
+                                    className="input-field pl-9 py-2 text-sm w-full"
+                                  />
+                                </div>
+                              )}
 
-                          <button
-                            onClick={handleShare}
-                            disabled={!selectedFriend || sharing}
-                            className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-                          >
-                            {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                            {sharing ? 'Sharing...' : 'Share Workout'}
-                          </button>
+                              <div className="max-h-48 overflow-y-auto space-y-1">
+                                {friends
+                                  .filter(fid => {
+                                    if (!shareSearch) return true
+                                    const p = friendProfiles[fid]
+                                    return p?.displayName?.toLowerCase().includes(shareSearch.toLowerCase())
+                                  })
+                                  .map(fid => {
+                                    const p = friendProfiles[fid]
+                                    return (
+                                      <button
+                                        key={fid}
+                                        onClick={() => setSelectedFriend(fid)}
+                                        className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-colors ${
+                                          selectedFriend === fid
+                                            ? 'bg-flame-500/15 border border-flame-500/30'
+                                            : 'hover:bg-iron-800'
+                                        }`}
+                                      >
+                                        {p?.photoURL ? (
+                                          <img src={p.photoURL} alt="" className="w-8 h-8 rounded-full" />
+                                        ) : (
+                                          <div className="w-8 h-8 rounded-full bg-iron-700 flex items-center justify-center text-xs font-medium text-iron-400">
+                                            {(p?.displayName || '?')[0]}
+                                          </div>
+                                        )}
+                                        <span className="text-sm text-iron-200 flex-1 text-left truncate">{p?.displayName || 'User'}</span>
+                                        {selectedFriend === fid && <Check className="w-4 h-4 text-flame-400" />}
+                                      </button>
+                                    )
+                                  })}
+                              </div>
+
+                              <textarea
+                                placeholder="Add a message (optional)"
+                                value={shareMessage}
+                                onChange={(e) => setShareMessage(e.target.value)}
+                                rows={2}
+                                className="input-field w-full resize-none text-sm"
+                              />
+
+                              <button
+                                onClick={handleShare}
+                                disabled={!selectedFriend || sharing}
+                                className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                              >
+                                {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                {sharing ? 'Sharing...' : 'Share Workout'}
+                              </button>
+                            </>
+                          )}
                         </>
+                      ) : (
+                        /* Image share mode */
+                        <div className="space-y-3">
+                          {generatingImage ? (
+                            <div className="flex items-center justify-center py-12">
+                              <Loader2 className="w-6 h-6 text-flame-500 animate-spin" />
+                            </div>
+                          ) : imageUrl ? (
+                            <>
+                              <div className="max-h-80 overflow-y-auto rounded-lg border border-iron-700">
+                                <img src={imageUrl} alt="Workout summary" className="w-full" />
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={handleCopyImage}
+                                  className="btn-primary flex-1 py-3 text-sm flex items-center justify-center gap-2"
+                                >
+                                  {imageCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                  {imageCopied ? 'Copied!' : 'Copy Image'}
+                                </button>
+                                <button
+                                  onClick={handleSaveImage}
+                                  className="btn-secondary py-3 px-4 text-sm flex items-center justify-center gap-2"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
                       )}
                     </>
                   )}
