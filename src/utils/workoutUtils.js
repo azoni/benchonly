@@ -121,6 +121,65 @@ export function groupExercisesForDisplay(exercises) {
 }
 
 /**
+ * Determine the exercise type from its data.
+ * Returns 'weight', 'bodyweight', or 'time'.
+ */
+export function getExerciseType(exercise) {
+  if (exercise.type) return exercise.type
+  const sets = exercise.sets || []
+  if (sets.some(s => s.prescribedTime || s.actualTime)) return 'time'
+  const hasWeight = sets.some(s => s.prescribedWeight || s.actualWeight)
+  if (!hasWeight && sets.some(s => s.prescribedReps || s.actualReps)) return 'bodyweight'
+  return 'weight'
+}
+
+/**
+ * Get a compact summary string for an exercise.
+ * e.g. "3×185×5", "3×30s", "3×10 reps", "3 sets (varied)"
+ */
+export function getSummaryText(exercise, isCompleted) {
+  const type = getExerciseType(exercise)
+  const sets = exercise.sets || []
+  if (sets.length === 0) return '—'
+
+  if (type === 'time') {
+    const field = isCompleted ? 'actualTime' : 'prescribedTime'
+    const first = sets[0]?.[field]
+    const allSame = sets.every(s => s[field] === first)
+    if (allSame && first) return `${sets.length}×${first}s`
+    return `${sets.length} sets (varied)`
+  }
+
+  if (type === 'bodyweight') {
+    const repsField = isCompleted ? 'actualReps' : 'prescribedReps'
+    const weightField = isCompleted ? 'actualWeight' : 'prescribedWeight'
+    const firstReps = sets[0]?.[repsField]
+    const firstWeight = sets[0]?.[weightField]
+    const allSame = sets.every(s => s[repsField] === firstReps && s[weightField] === firstWeight)
+    if (allSame && firstReps) {
+      if (firstWeight) return `${sets.length}×BW+${firstWeight}×${firstReps}`
+      return `${sets.length}×${firstReps} reps`
+    }
+    return `${sets.length} sets (varied)`
+  }
+
+  // Weight type
+  const weightField = isCompleted ? 'actualWeight' : 'prescribedWeight'
+  const repsField = isCompleted ? 'actualReps' : 'prescribedReps'
+  const firstWeight = sets[0]?.[weightField]
+  const firstReps = sets[0]?.[repsField]
+  const allSame = sets.every(s => s[weightField] === firstWeight && s[repsField] === firstReps)
+
+  if (allSame && firstWeight && firstReps) {
+    return `${sets.length}×${firstWeight}×${firstReps}`
+  }
+  if (sets.length > 0) {
+    return `${sets.length} sets (varied)`
+  }
+  return '—'
+}
+
+/**
  * Build a compact exercise summary array for feed items.
  * Returns: [{ name, sets, topWeight, topReps }, ...]
  * Also returns totalSets count.
