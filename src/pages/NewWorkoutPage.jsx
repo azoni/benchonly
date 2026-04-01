@@ -464,11 +464,15 @@ export default function NewWorkoutPage() {
     setSaving(true);
     try {
       // Build WOD notes describing the format
-      const formatLabel = wodFormat === 'amrap' ? 'AMRAP' : wodFormat === 'fortime' ? 'For Time' : 'EMOM';
-      const timeStr = wodTimeCap ? ` ${wodTimeCap} min` : '';
-      const roundsStr = wodRounds ? `${wodRounds} Rounds` : '';
       const movementLines = validMovements.map(m => `${m.reps ? m.reps + ' ' : ''}${m.name}`).join('\n');
-      const header = roundsStr ? `${roundsStr} ${formatLabel}${timeStr}` : `${formatLabel}${timeStr}`;
+      let header;
+      if (wodFormat === 'rounds') {
+        header = wodRounds ? `${wodRounds} Rounds` : 'Rounds';
+      } else {
+        const formatLabel = wodFormat === 'amrap' ? 'AMRAP' : wodFormat === 'fortime' ? 'For Time' : 'EMOM';
+        const timeStr = wodTimeCap ? ` ${wodTimeCap} min` : '';
+        header = `${formatLabel}${timeStr}`;
+      }
       const notes = `${header}\n${movementLines}`;
 
       // Build exercises array — each movement as a separate exercise with 1 set
@@ -747,11 +751,12 @@ export default function NewWorkoutPage() {
           {/* WOD Format */}
           <div className="card-steel rounded-xl p-5 mb-6">
             <label className="block text-sm font-medium text-iron-300 mb-3">Format</label>
-            <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className="grid grid-cols-2 gap-2 mb-4">
               {[
                 { value: 'amrap', label: 'AMRAP', desc: 'As Many Rounds As Possible' },
                 { value: 'fortime', label: 'For Time', desc: 'Complete as fast as you can' },
                 { value: 'emom', label: 'EMOM', desc: 'Every Minute On the Minute' },
+                { value: 'rounds', label: 'Rounds', desc: 'Fixed rounds, no time limit' },
               ].map(f => (
                 <button
                   key={f.value}
@@ -768,31 +773,33 @@ export default function NewWorkoutPage() {
               ))}
             </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-iron-300 mb-2">Rounds</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                value={wodRounds}
-                onChange={(e) => setWodRounds(e.target.value)}
-                placeholder="e.g. 5"
-                className="input-field w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-iron-300 mb-2">
-                {wodFormat === 'amrap' ? 'Time Cap (minutes)' : wodFormat === 'emom' ? 'Total Minutes' : 'Time Cap (minutes, optional)'}
-              </label>
-              <input
-                type="number"
-                inputMode="numeric"
-                value={wodTimeCap}
-                onChange={(e) => setWodTimeCap(e.target.value)}
-                placeholder={wodFormat === 'amrap' ? '20' : wodFormat === 'emom' ? '10' : '15'}
-                className="input-field w-full"
-              />
-            </div>
+            {wodFormat === 'rounds' ? (
+              <div>
+                <label className="block text-sm font-medium text-iron-300 mb-2">Number of Rounds</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={wodRounds}
+                  onChange={(e) => setWodRounds(e.target.value)}
+                  placeholder="e.g. 5"
+                  className="input-field w-full"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-iron-300 mb-2">
+                  {wodFormat === 'amrap' ? 'Time Cap (minutes)' : wodFormat === 'emom' ? 'Total Minutes' : 'Time Cap (minutes, optional)'}
+                </label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={wodTimeCap}
+                  onChange={(e) => setWodTimeCap(e.target.value)}
+                  placeholder={wodFormat === 'amrap' ? '20' : wodFormat === 'emom' ? '10' : '15'}
+                  className="input-field w-full"
+                />
+              </div>
+            )}
           </div>
 
           {/* WOD Movements */}
