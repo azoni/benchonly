@@ -7,6 +7,16 @@ import './index.css'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 
+// Portfolio traffic beacon — one visit per session to the shared leaderboard sink.
+if (typeof window !== 'undefined' && !sessionStorage.getItem('_av_lb')) {
+  sessionStorage.setItem('_av_lb', '1')
+  fetch('https://azoni.ai/.netlify/functions/log-visit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source: 'benchpressonly' }),
+  }).catch(() => {})
+}
+
 // PWA service worker: only run in browser, NEVER inside Capacitor native app.
 // Service workers intercept Capacitor's local file serving and can deadlock the app on launch.
 const isNativeApp = !!(window.Capacitor?.isNativePlatform?.())
